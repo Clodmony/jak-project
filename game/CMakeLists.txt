@@ -373,6 +373,7 @@ set(RUNTIME_SOURCE
         system/hid/devices/mouse.cpp
         system/hid/display_manager.cpp
         system/hid/input_bindings.cpp
+        system/hid/coop_slots.cpp
         system/hid/input_manager.cpp
         system/hid/sdl_util.cpp
         system/IOP_Kernel.cpp
