@@ -1177,7 +1177,7 @@
       (sound-play "fish-spawn" :vol 70)
       (fisher-spawn-ambient)
       (process-spawn fisher-fish gp-0 (-> self spawner) (* 1.85 (-> self params fish-vel)) :to self)))
-  (let ((f1-14 (analog-input (the-as int (-> *cpad-list* cpads 0 leftx)) 128.0 32.0 110.0 28.0)))
+  (let ((f1-14 (analog-input (the-as int (-> *cpad-list* cpads (target-cpad-idx) leftx)) 128.0 32.0 110.0 28.0))) ;; og:preserve-this coop: pad of the player using it
     (+! (-> self paddle-vel) (* f1-14 (seconds-per-frame))))
   (seek! (-> self paddle-vel) 0.0 (* 15.0 (seconds-per-frame)))
   (set! (-> self paddle-vel) (fmax -2.0 (fmin 2.0 (-> self paddle-vel))))

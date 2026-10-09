@@ -154,7 +154,7 @@
               (set-height! gp-0 80)
               (set! (-> gp-0 flags) (font-flags shadow kerning large))
               (print-game-text (lookup-text! *common-text* (text-id press-to-use) #f) gp-0 #f 128 22))
-            (if (and (cpad-pressed? 0 circle) (send-event *target* 'change-mode 'flut self))
+            (if (and (cpad-pressed? (target-cpad-idx) circle) (send-event *target* 'change-mode 'flut self)) ;; og:preserve-this coop: pad of the player using it
               (go-virtual pickup (method-of-object self wait-for-return)))))
         (flutflut-effect)
         (suspend)

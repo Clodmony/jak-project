@@ -652,7 +652,11 @@
 ;; session manager
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(define *coop-p2-missing-time* (the-as time-frame 0))
+(deftype coop-timers (structure)
+  ((p2-missing time-frame)))
+
+;; a time-frame is 64 bits, a symbol's value only 32, so the timer lives in a structure
+(define *coop-timers* (new 'static 'coop-timers))
 
 ;; bit per player hidden by coop-update for the length of a cinematic about the other player
 (define *coop-movie-hidden* 0)
@@ -726,13 +730,13 @@
        ;; player 2 is missing (not spawned yet, died, or killed by a player 1 restart).
        ;; respawn next to player 1 after a short delay, once player 1 is in control.
        (cond
-         ((zero? *coop-p2-missing-time*) (set! *coop-p2-missing-time* (current-time)))
-         ((and (coop-target-ready? p1) (time-elapsed? *coop-p2-missing-time* (-> *coop* respawn-delay)))
-          (set! *coop-p2-missing-time* 0)
+         ((zero? (-> *coop-timers* p2-missing)) (set! (-> *coop-timers* p2-missing) (current-time)))
+         ((and (coop-target-ready? p1) (time-elapsed? (-> *coop-timers* p2-missing) (-> *coop* respawn-delay)))
+          (set! (-> *coop-timers* p2-missing) 0)
           (coop-despawn-player2) ;; clean up a camera rig left behind
           (coop-spawn-player2 (coop-safe-position-near p1 (new 'stack-no-clear 'vector))))))
       (else
-       (set! *coop-p2-missing-time* 0)
+       (set! (-> *coop-timers* p2-missing) 0)
        ;; distance leash: level streaming follows player 1, so player 2 can't go far.
        (when (and (-> *coop* leash?)
                   (coop-target-ready? p1)
@@ -784,7 +788,7 @@
     (set! *coop-player* 0)
     (set! (-> *coop* sim-ticks) 0)
     (set! (-> *coop* render-passes) 0)
-    (set! *coop-p2-missing-time* 0)
+    (set! (-> *coop-timers* p2-missing) 0)
     (set! *player-context-for-process* coop-context-for-process)
     (set! *player-context-for-event* coop-context-for-event)
     (set! *player-context-restore* coop-context-restore)
