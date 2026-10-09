@@ -2,6 +2,24 @@
 
 > Written with AI assistance (AI-assisted). Newest first.
 
+## 2026-10-09: saves, in-game toggle, review fixes (compiles, not playtested)
+
+- Co-op saves in their own folder `saves/coop/`; auto-save stays off until a slot is picked.
+- In-game options (no debug build needed, so a launcher mod can use it): Misc Options >
+  "Local co-op", "Co-op split top/bottom", "Co-op assign devices".
+- From an adversarial code review (four reviewers: single-player regressions, context switching,
+  GOAL rendering, C++ rendering):
+  - grab/release pairs: releasing either player releases both (elevator started by player 2 no
+    longer leaves a player stuck);
+  - a world process touched/attacked by a player stays with that player (fuel-cell victory plays
+    on the collector);
+  - the manager also runs while paused, so menus are full screen instead of in player 1's half;
+  - player 2's first-person HUD belongs to player 2;
+  - target rumble goes to the right pad;
+  - stopping co-op while a player waits to respawn no longer leaves an invisible Jak;
+  - `*ACTOR-bank*` is restored by "Stop co-op";
+  - decompiler reference for the two new target states.
+
 ## 2026-10-09: first prototype (compiles, not playtested)
 
 Implemented:

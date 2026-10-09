@@ -40,7 +40,8 @@ cmake -B build --preset=Release-linux-clang && cmake --build build -j8
 ./build/game/gk -v --game jak1 -- -boot -fakeiso -debug    # task boot-game
 ```
 
-Start co-op either from the debug menu (debug builds: press R3 on player 1's pad, then
+Start co-op from the pause menu (any build): Options > Game Options > Misc Options > "Local co-op"
+on. Or from the debug menu (debug builds: press R3 on player 1's pad, then
 "Local Co-op" > "Start co-op"), or from the REPL: run `./build/goalc/goalc --game jak1`, `(lt)` to
 connect, then `(coop-start)`. Turn on "Local Co-op" > "Show co-op info" for the on-screen counters.
 
@@ -61,11 +62,16 @@ connect, then `(coop-start)`. Turn on "Local Co-op" > "Show co-op info" for the 
 | 13 | Press Start/Select on player 2's pad | The whole session pauses (single full-screen view while paused) |
 | 14 | Unplug player 2's controller during play | Session pauses; player 2 gets neutral input; plugging the same pad back in restores it |
 | 15 | Walk player 2 more than 60 m from player 1 | Player 2 is brought back next to player 1 |
-| 16 | Debug menu: "Top/bottom split" | Views stack vertically with correct aspect |
+| 16 | Debug menu: "Top/bottom split", or Misc Options > "Co-op split top/bottom" | Views stack vertically with correct aspect |
 | 17 | Talk to an NPC / collect a power cell | Single full-screen view during the cutscene, both players held, both views back afterwards |
 | 18 | "Stop co-op" | Player 2 disappears, single view, single-player input mapping back |
 | 19 | Save in co-op to a slot, stop co-op, open the load menu | The co-op save is in `<config>/OpenGOAL/jak1/saves/coop/`; the normal `saves/` files are unchanged (compare timestamps); the load menu shows single-player saves again |
 | 20 | Die as player 1 while player 2 is alive, then "Stop co-op" before player 1 respawns | Player 1 reappears through the normal checkpoint reload; the game doesn't stay stuck with an invisible Jak |
+| 21 | Start co-op from Misc Options > "Local co-op" in a non-debug boot (`gk -boot` without `-debug`) | Same as step 2; the menu shows the three co-op entries and fits on screen. With one controller, keyboard/mouse becomes player 1 and the controller player 2, so the menu is then navigated with the keyboard |
+| 22 | Player 2 presses an elevator button (jungle elevator) with both players on it | Both players are held during the ride and both get control back at the top |
+| 23 | Player 2 collects a power cell while player 1 stands a few metres away | The victory animation plays on player 2, not player 1 |
+| 24 | Pause (Start) while split | The pause menu is one full-screen view, not drawn in player 1's half |
+| 25 | Hit player 2 / let player 2 land a big fall | Player 2's controller rumbles, player 1's doesn't |
 
 ## Performance measurement (not done)
 

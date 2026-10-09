@@ -449,7 +449,7 @@ It type checks the arguments for the entry function.
                (-> (the process proc) event-hook))
       (let ((pp-backup pp)
             ;; og:preserve-this coop: handle the event in the context of the player involved.
-            (prev-context (if *player-context-for-event* (*player-context-for-event* (the process proc) (-> msg from)) -1)))
+            (prev-context (if *player-context-for-event* (*player-context-for-event* (the process proc) (-> msg from) (-> msg message)) -1)))
         (set! pp (the process proc))
         (let ((result ((-> (the process proc) event-hook) (-> msg from) (-> msg num-params) (-> msg message) msg)))
           (set! pp pp-backup)

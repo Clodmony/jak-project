@@ -211,11 +211,19 @@
   (let ((want (coop-player-for-process proc)))
     (if (= want *coop-player*) -1 (coop-switch-context want))))
 
-(defun coop-context-for-event ((proc process) (from process))
+(defun coop-context-for-event ((proc process) (from process) (message symbol))
   "Kernel hook: an event is handled in the context of the player that owns the receiver, otherwise
-   of the player that sent it, otherwise in the current context."
+   of the player that sent it, otherwise in the current context.
+   A world process that a player touches or attacks also stays with that player afterwards (until the
+   other player is near-hysteresis closer): a fuel cell's pickup, a button's elevator ride or an
+   enemy's reaction then use the player who caused it."
   (let ((want (coop-owner-player proc)))
-    (if (and (< want 0) from (type-type? (-> from type) process)) (set! want (coop-owner-player from)))
+    (when (and (< want 0) from (type-type? (-> from type) process))
+      (set! want (coop-owner-player from))
+      (when (or (= message 'touch) (= message 'attack))
+        (case want
+          ((1) (logior! (-> proc mask) (process-mask coop-p2-near)))
+          ((0) (logclear! (-> proc mask) (process-mask coop-p2-near))))))
     (if (or (< want 0) (= want *coop-player*)) -1 (coop-switch-context want))))
 
 (defun coop-context-restore ((idx int))
@@ -619,8 +627,8 @@
        (!= (-> tgt state name) 'target-coop-respawn)))
 
 (defun coop-update ()
-  "Once per simulation tick: player positions, player 2 respawn, distance leash, split decision."
-  (+! (-> *coop* sim-ticks) 1)
+  "Once per frame: split decision and listener. In game mode also player positions, player 2 respawn
+   and the distance leash."
   (set! (-> *coop* split?) (if (coop-want-split?) #t #f))
   ;; one listener for the session: player 1 (level streaming and ambients follow player 1 too)
   (let ((p1 (coop-player-target 0)))
@@ -633,6 +641,9 @@
         (if (and tgt (not (logtest? (-> tgt state-flags) (state-flags grabbed))))
           (coop-neutralize-pad (-> tgt control cpad))))))
   (pc-set-splitscreen-layout! (the-as int (-> *coop* layout)))
+  ;; the rest is gameplay: nothing moves while paused or in a menu
+  (if (!= *master-mode* 'game) (return #f))
+  (+! (-> *coop* sim-ticks) 1)
   ;; actors near player 2 must exist and run even when player 1's camera is far away or can't see
   ;; them. Same as the "force actors" PC option, without touching the saved setting.
   ;; (pc-settings update may lower these again after the frame; actor birth and pause happen
@@ -672,6 +683,8 @@
 (define-extern *coop-show-info* symbol)
 
 (defun coop-manager-loop ()
+  ;; runs while paused and in menus too: the split decision must see them (menus are full screen)
+  (with-pp (logclear! (-> pp mask) (process-mask pause menu progress)))
   (loop
     (when (coop-active?)
       (coop-update)
@@ -783,6 +796,7 @@
 (defun coop-toggle-layout ()
   (set! (-> *coop* layout)
         (if (= (-> *coop* layout) (coop-split-layout side-by-side)) (coop-split-layout top-bottom) (coop-split-layout side-by-side)))
+  (set! (-> *coop* top-bottom?) (= (-> *coop* layout) (coop-split-layout top-bottom)))
   (none))
 
 (defun coop-respawn-player2-near-player1 ()

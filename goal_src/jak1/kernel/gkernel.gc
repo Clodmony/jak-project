@@ -1546,11 +1546,11 @@
 ;; each process runs with the globals of the player it belongs to (its "player context"):
 ;; - *player-context-for-process* switches to the context of a process that is about to run and
 ;;   returns the previous context, or -1 if nothing changed.
-;; - *player-context-for-event* does the same for an event (receiver, sender).
+;; - *player-context-for-event* does the same for an event (receiver, sender, message).
 ;; - *player-context-restore* switches back to a context returned by the functions above.
 (define *player-context-for-process* (the-as (function process int) #f))
 
-(define *player-context-for-event* (the-as (function process process int) #f))
+(define *player-context-for-event* (the-as (function process process symbol int) #f))
 
 (define *player-context-restore* (the-as (function int none) #f))
 

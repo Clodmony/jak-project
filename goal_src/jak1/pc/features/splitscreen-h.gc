@@ -33,6 +33,7 @@
    (active?           symbol) ;; player contexts installed, player 2 may exist
    (split?            symbol) ;; rendering two views this frame
    (layout            coop-split-layout)
+   (top-bottom?       symbol) ;; menu toggle for layout (on-off options edit symbols)
    (nearest-world?    symbol) ;; world processes use the context of the closest player
    (leash?            symbol) ;; teleport a player that strays too far back to the other one
    (leash-distance    meters) ;; max distance between players before the catch-up teleport
@@ -51,6 +52,7 @@
        :active? #f
        :split? #f
        :layout (coop-split-layout side-by-side)
+       :top-bottom? #f
        :nearest-world? #t
        :leash? #t
        :leash-distance (meters 60)
@@ -82,6 +84,17 @@
 (defmacro coop-process-player (proc)
   "Index of the player that owns this process, 0 for player 1 and everything that isn't player 2's."
   `(if (process-mask? (-> ,proc mask) player2) 1 0))
+
+(defmacro coop-player-cpad ()
+  "The pad of the player whose context the code runs in (pad 0 without co-op)."
+  `(-> *cpad-list* cpads (if (zero? *coop-player*) 0 (-> *coop* p2-pad))))
+
+(defmacro coop-adopt (spawned owner)
+  "Co-op: a process that a player spawns into a shared pool (like *dproc*) belongs to that player.
+   Returns spawned (a (pointer process) or #f)."
+  `(let ((coop-adopt-pp ,spawned))
+     (if (and coop-adopt-pp (process-mask? (-> ,owner mask) player2)) (logior! (-> coop-adopt-pp 0 mask) (process-mask player2)))
+     coop-adopt-pp))
 
 (defmacro coop-camera-cpad ()
   "The pad that controls the camera of the current player context."
@@ -201,22 +214,32 @@
         (logior! (-> p1-pad button0-rel 0) pause-buttons))))
   (none))
 
-(define *coop-grabbed-partner* (the-as handle #f))
+;; the last grab that also held the other player: the player it was meant for, and the partner
+(define *coop-grab-main* (the-as handle #f))
+(define *coop-grab-partner* (the-as handle #f))
 
 (defun coop-grab-other-player ((proc process) (grab symbol))
   "Co-op: cutscenes, conversations and elevators that grab a player hold the other player too.
-   Only a partner grabbed this way is released this way (it may be held by something else)."
+   The grabber may later release either player (its *target* can be the other one by then), so a
+   release of either player of the pair releases both. A partner that was already held by something
+   else isn't part of a pair and isn't released here."
   (when (and (coop-active?) proc (= (-> proc type) target))
-    (let ((other (coop-other-player-target proc)))
-      (when other
-        (cond
-          (grab
-           (when (and (not (logtest? (-> other state-flags) (state-flags grabbed dying)))
-                      (send-event other 'change-mode 'grab))
-             (set! *coop-grabbed-partner* (process->handle other))))
-          ((= (handle->process *coop-grabbed-partner*) other)
-           (if (= (send-event other 'query 'mode) 'target-grab) (send-event other 'end-mode))
-           (set! *coop-grabbed-partner* (the-as handle #f)))))))
+    (cond
+      (grab
+       (let ((other (coop-other-player-target proc)))
+         (when (and other
+                    (not (logtest? (-> other state-flags) (state-flags grabbed dying)))
+                    (send-event other 'change-mode 'grab))
+           (set! *coop-grab-main* (process->handle proc))
+           (set! *coop-grab-partner* (process->handle other)))))
+      (else
+       (let ((main (handle->process *coop-grab-main*))
+             (partner (handle->process *coop-grab-partner*)))
+         (when (and partner (or (= proc main) (= proc partner)))
+           (let ((to-release (if (= proc partner) main partner)))
+             (if (and to-release (= (send-event to-release 'query 'mode) 'target-grab)) (send-event to-release 'end-mode)))
+           (set! *coop-grab-main* (the-as handle #f))
+           (set! *coop-grab-partner* (the-as handle #f)))))))
   (none))
 
 (defun coop-level-containing ((levels level-group) (pos vector) (skip level))

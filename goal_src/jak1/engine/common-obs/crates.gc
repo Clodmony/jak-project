@@ -647,7 +647,7 @@
         (case (-> self defense)
           (('darkeco)
            (let ((f0-0 (lerp-scale 1.0 0.0 (vector-vector-distance (-> self root trans) (target-pos 0)) 8192.0 40960.0)))
-             (cpad-set-buzz! (-> *cpad-list* cpads 0) 1 (the int (* 255.0 f0-0)) (seconds 0.3)))
+             (cpad-set-buzz! (coop-player-cpad) 1 (the int (* 255.0 f0-0)) (seconds 0.3)))
            (process-spawn touch-tracker
                           :init
                           touch-tracker-init

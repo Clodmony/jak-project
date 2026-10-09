@@ -24,7 +24,7 @@ active is decided:
 | When | Context | Where |
 | --- | --- | --- |
 | a process runs (trans, code, post, `run-logic?`) | the player that owns it; world processes use the closest player (4 m hysteresis) | `execute-process-tree`, `goal_src/jak1/kernel/gkernel.gc` |
-| an event is delivered | the receiver's owner, else the sender's owner, else unchanged | `send-event-function`, `goal_src/jak1/kernel/gstate.gc` |
+| an event is delivered | the receiver's owner, else the sender's owner, else unchanged. A `touch`/`attack` from a player also latches the world process to that player (until the other player is 4 m closer) | `send-event-function`, `goal_src/jak1/kernel/gstate.gc` |
 | a view is rendered | the view's player | `coop-draw-player2-view` |
 | `start` / `stop` | always player 1 (session operations) | `logic-target.gc` |
 
@@ -50,10 +50,17 @@ Consequences, by design:
   load state, the continue point and the camera).
 - Own full camera rig (`cam-start #f` in player 2's context). `cam-stop` only kills the current
   player's rig while co-op runs.
-- Manager process `coop-manager` (default pool, once per tick): player position cache, split decision,
-  player 2 respawn next to player 1 after `respawn-delay`, distance leash (`leash-distance`, 60 m).
+- Manager process `coop-manager` (default pool, once per frame, also while paused so menus get a
+  single full-screen view): split decision and listener; in game mode also the player position
+  cache, player 2 respawn next to player 1 after `respawn-delay`, distance leash
+  (`leash-distance`, 60 m).
+- In-game options (all builds, so it works for a launcher mod): Options > Game Options > Misc Options
+  > "Local co-op" (on/off), "Co-op split top/bottom", "Co-op assign devices"
+  (`goal_src/jak1/pc/progress-pc.gc`). Co-op is never saved as on: every session starts single player.
 - Debug menu "Local Co-op" (`goal_src/jak1/pc/debug/coop-menu.gc`, debug builds only): start/stop,
   layout, device join, respawn, leash, info overlay.
+- Processes a player spawns into shared pools (player 2's first-person HUD in `*dproc*`) are marked as
+  that player's (`coop-adopt`).
 
 ## Rendering
 
@@ -126,7 +133,10 @@ the same behaviour as the existing PC "force actors" option, without changing th
 - Friendly fire is off: a player's touch-tracker (red-eco or flut flop) never attacks the other
   player (`touch-tracker-idle`, `generic-obs.gc`). Player 2's attack ids start at `#x40000000`, so
   enemies that de-duplicate hits by id don't drop one player's hit.
-- `process-grab?`/`process-release?` (cutscenes, talks, elevators) hold and release both players.
+- `process-grab?`/`process-release?` (cutscenes, talks, elevators) hold and release both players. The
+  grab and the release can name different players (the grabber's `*target*` can change in between),
+  so the pair is recorded and releasing either player releases both. Only one pair is tracked.
+- Rumble from target code, eco and crates goes to the pad of the player involved (`coop-player-cpad`).
 - Moving platforms reserve at least two rider slots.
 - Pause: right before `determine-pause-mode`, player 2's Start/Select are merged into pad 0, and a
   player 2 controller loss injects a pause (`coop-merge-pause-buttons`).

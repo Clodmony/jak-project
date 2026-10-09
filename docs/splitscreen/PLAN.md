@@ -40,9 +40,10 @@ Open for B:
 
 ### C. Reliable local sessions
 
-1. Progress-menu entry for co-op (start/stop, layout, device assignment), stored in a separate
-   `coop-settings.gc` next to `pc-settings.gc` (never add keys to `pc-settings.gc`: other OpenGOAL
-   builds sharing the folder would reject the whole file).
+1. Done (compiles, not playtested): Misc Options entries for co-op on/off, layout and automatic
+   device assignment. Open: a join screen ("press a button on the pad for player 2") and remembering
+   the layout in a separate `coop-settings.gc` next to `pc-settings.gc` (never add keys to
+   `pc-settings.gc`: other OpenGOAL builds sharing the folder would reject the whole file).
 2. Done (compiles and unit tested, not playtested): separate co-op save folder `saves/coop/`
    (`mc_set_namespace` in `game/kernel/common/kmemcard.cpp`), switched in `coop-start`/`coop-stop`,
    auto-save off until a slot is chosen in the save menu.
@@ -64,7 +65,8 @@ OpenGOAL has no plugin loader: a launcher "mod" is a complete jak-project build 
 - The OpenGOAL Launcher runs a mod's `gk` with
   `--config-path <install>/features/jak1/mods/<source>/_settings/<mod>`, so the mod gets its own
   settings and saves without code changes, separate from vanilla OpenGOAL.
-- The launcher passes no custom arguments, so co-op must be enabled in game (menu or settings file).
+- The launcher passes no custom arguments, so co-op is enabled in game: Misc Options > "Local co-op"
+  (works without `-debug`).
 - Packaging: copy the release tooling from `OpenGOAL-Mods/OG-Mod-Base` (`cut-release.yaml`,
   `mod-release-pipeline.yml`, `.github/scripts/...`) with `binary_source=build_binaries`. Release
   assets `windows-*.zip`, `linux-*.tar.gz`, `macos-*.tar.gz` with the binaries at the archive root.
