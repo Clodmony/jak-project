@@ -11,7 +11,7 @@ has **not been run or playtested**. Everything below is compilation and automate
 | --- | --- | --- | --- |
 | C++ build (Linux, clang 18, Release) | `cmake -B build --preset=Release-linux-clang && cmake --build build -j4` | pass | pass, no new warnings |
 | All Jak 1 GOAL code | `./build/goalc/goalc --game jak1 --cmd '(make-group "all-code")'` | 519 targets | 522 targets |
-| Test suite | `./test.sh` | 1669 passed | 1687 passed |
+| Test suite | `./test.sh` | 1669 passed | 1688 passed |
 | Type consistency (Jak 1/2/3/X) | part of `./test.sh` | pass | pass |
 
 The test suite builds the engine and loads it into a real GOAL runtime (`WithGameTests`), which runs
@@ -19,9 +19,10 @@ the load-time code of every edited engine file (this caught a load-order crash d
 It also compiles all Jak 2/3/X code, which caught an edit to a file shared with Jak 2/3.
 
 New unit tests (`build/goalc-test --gtest_filter='CoopSlots*:SplitscreenLayout*:MemcardNamespace*'`):
-- `test/test_coop_slots.cpp` (12 tests): default assignment for 0/1/2 controllers, one device can't
+- `test/test_coop_slots.cpp` (13 tests): default assignment for 0/1/2 controllers, one device can't
   feed two players, identical controllers (same GUID) are separate players, disconnect keeps the
-  claim and never moves another player's device, reconnect of the same model, join flow.
+  claim and never moves another player's device, reconnect of the same model (an idle pad of
+  the same model can't take over), join flow.
 - `test/test_splitscreen_layout.cpp` (4 tests): view rects for both layouts, divider, bounds for
   odd and tiny framebuffers.
 - `test/test_memcard_namespace.cpp` (2 tests): the co-op save folder name is accepted, path-like
