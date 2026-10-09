@@ -107,6 +107,10 @@
   (projectile 22) ;; set on all projectiles
   (attackable 23) ;; set on all "attackables" that can be targeted by projectiles or similar
   (death 24) ;; set on misty-conveyor, appears unused.
+
+  ;; og:preserve-this coop: PC local co-op (split-screen)
+  (player2 25) ;; owned by player 2 (its target, daxter, cameras, hud). inherited by children.
+  (coop-p2-near 26) ;; a world process that currently runs in player 2's context (see splitscreen.gc)
   )
 
 ;; -961

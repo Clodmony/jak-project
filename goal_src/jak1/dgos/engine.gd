@@ -201,6 +201,7 @@
   "game-info.o"
   "game-save.o"
   "settings.o"
+  "splitscreen-h.o" ;; added (coop)
   "pc-anim-util.o" ;; added
   "autosplit-h.o" ;; added
   "autosplit.o" ;; added

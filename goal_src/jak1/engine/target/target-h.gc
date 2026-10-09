@@ -52,6 +52,7 @@
    target-billy-game
    (target-clone-anim handle)
    (target-continue continue-point)
+   (target-coop-spawn vector) ;; coop: player 2 spawn, see pc/features/splitscreen.gc
    (target-death symbol)
    target-demo
    (target-double-jump float float)

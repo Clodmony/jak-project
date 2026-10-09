@@ -1166,7 +1166,8 @@
   (set-setting! 'allow-progress #f 0.0 0)
   (apply-settings *setting-control*)
   (if (not arg0) (set! arg0 (get-or-create-continue! *game-info*)))
-  (set-continue! *game-info* arg0)
+  ;; og:preserve-this coop: the continue point is session state, player 2 doesn't set it.
+  (if (zero? (coop-process-player self)) (set-continue! *game-info* arg0))
   (stack-size-set! (-> self main-thread) 1024)
   (logior! (-> self mask) (process-mask target))
   (set! (-> self state-hook) (the-as (function none :behavior target) nothing))
@@ -1222,7 +1223,8 @@
   (set! (-> self game) *game-info*)
   (move-to-point! (-> self control) (-> arg0 trans))
   (set! (-> self control camera-pos quad) (-> arg0 trans quad))
-  (set! (-> self control cpad) (-> *cpad-list* cpads 0))
+  ;; og:preserve-this coop: player 2 reads its own pad
+  (set! (-> self control cpad) (-> *cpad-list* cpads (if (zero? (coop-process-player self)) 0 (-> *coop* p2-pad))))
   (set! (-> self control current-surface) (new 'process 'surface))
   (set! (-> self control current-surface name) 'current)
   (set! (-> self control current-surface active-hook) nothing)
@@ -1262,7 +1264,8 @@
   (set! (-> self event-hook) target-generic-event-handler)
   (set! (-> self current-level) #f)
   (level-setup)
-  (go target-continue arg0)
+  ;; og:preserve-this coop: player 2 uses a spawn state that leaves session state alone
+  (if (zero? (coop-process-player self)) (go target-continue arg0) (go target-coop-spawn (-> arg0 trans)))
   (none))
 
 (defmethod deactivate ((this target))
@@ -1270,17 +1273,21 @@
   (call-parent-method this)
   (none))
 
+;; og:preserve-this coop: start/stop are session operations that always act on player 1, whichever
+;; player's context triggered them. stop kills every target, co-op respawns player 2 afterwards.
 (defun stop ((arg0 symbol))
-  (when *target*
-    (kill-by-name 'target *active-pool*)
-    (set! *target* #f))
-  (set! (-> *game-info* mode) arg0)
+  (with-coop-player 0
+    (when *target*
+      (kill-by-name 'target *active-pool*)
+      (set! *target* #f))
+    (set! (-> *game-info* mode) arg0))
   0)
 
 (defun start ((arg0 symbol) (arg1 continue-point))
-  (set! (-> *level* border?) #f)
-  (set! (-> *setting-control* default border-mode) #f)
-  (stop arg0)
-  (let ((v1-3 (process-spawn target :init init-target arg1 :from *target-dead-pool* :to *target-pool* :stack *kernel-dram-stack*)))
-    (if v1-3 (set! *target* (the-as target (-> v1-3 0 self))) (set! *target* #f)))
-  *target*)
+  (with-coop-player 0
+    (set! (-> *level* border?) #f)
+    (set! (-> *setting-control* default border-mode) #f)
+    (stop arg0)
+    (let ((v1-3 (process-spawn target :init init-target arg1 :from *target-dead-pool* :to *target-pool* :stack *kernel-dram-stack*)))
+      (if v1-3 (set! *target* (the-as target (-> v1-3 0 self))) (set! *target* #f)))
+    *target*))

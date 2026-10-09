@@ -1,0 +1,437 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; Local split-screen co-op (PC port addition). See splitscreen-h.gc for the overview.
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; player contexts
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(deftype coop-player-context (structure)
+  "The values of the engine's single-player globals for one player.
+   Processes are stored as handles so a context never hands out a dead process."
+  ((target-handle           handle)
+   (camera-handle           handle)
+   (combiner-handle         handle)
+   (math-camera             math-camera)
+   (hud-parts               hud-parts)
+   (edge-grab-info          edge-grab-info)
+   (smush                   smush-control)
+   (save-camera-inv-rot     matrix)
+   (look-at-data            try-to-look-at-info)
+   (camera-base-mode        state)
+   (target-pool             process-tree)
+   (camera-pool             process-tree)
+   (target-dead-pool        dead-pool)
+   (camera-dead-pool        dead-pool)
+   (camera-master-dead-pool dead-pool)
+   (dead-pool-16k           dead-pool)))
+
+(define *coop-context-p1* (new 'global 'coop-player-context))
+
+(define *coop-context-p2* (new 'global 'coop-player-context))
+
+(defmacro coop-context (idx)
+  `(if (zero? ,idx) *coop-context-p1* *coop-context-p2*))
+
+;; player 2's copies of the player globals. Allocated once, at load.
+(define *coop-p2-math-camera* (new 'global 'math-camera))
+
+(define *coop-p2-hud-parts* (new 'global 'hud-parts))
+
+(define *coop-p2-edge-grab-info* (new 'global 'edge-grab-info))
+
+(define *coop-p2-smush* (set-zero! (new 'global 'smush-control)))
+
+(define *coop-p2-save-camera-inv-rot* (new 'global 'matrix))
+
+(define *coop-p2-look-at-data* (new 'global 'try-to-look-at-info))
+
+;; player 2's processes live in their own process-tree nodes. They are linked into *active-pool*
+;; right after the matching player 1 pool, so the order stays targets -> cameras -> display.
+;; Their masks carry the player2 bit, which every process spawned into them inherits.
+(define *coop-p2-target-pool* (new 'global 'process-tree 'coop-p2-target-pool))
+
+(define *coop-p2-camera-pool* (new 'global 'process-tree 'coop-p2-camera-pool))
+
+(set! (-> *coop-p2-target-pool* mask) (process-mask pause menu progress process-tree player2))
+
+(set! (-> *coop-p2-camera-pool* mask) (process-mask pause menu progress camera process-tree player2))
+
+;; and their own fixed size dead pools, so player 1's pools are unchanged.
+(define *coop-p2-target-dead-pool* (new 'global 'dead-pool 1 (* 48 1024) '*coop-p2-target-dead-pool*))
+
+(define *coop-p2-camera-dead-pool* (new 'global 'dead-pool 7 (* 4 1024) '*coop-p2-camera-dead-pool*))
+
+(define *coop-p2-camera-master-dead-pool* (new 'global 'dead-pool 1 (* 8 1024) '*coop-p2-camera-master-dead-pool*))
+
+(define *coop-p2-16k-dead-pool* (new 'global 'dead-pool 1 (* 16 1024) '*coop-p2-16k-dead-pool*))
+
+(defun coop-init-p2-context ()
+  "Reset player 2's context to a fresh player with no processes."
+  (let ((ctx *coop-context-p2*))
+    (set! (-> ctx target-handle) (the-as handle #f))
+    (set! (-> ctx camera-handle) (the-as handle #f))
+    (set! (-> ctx combiner-handle) (the-as handle #f))
+    ;; start from player 1's camera constants (video mode, fog, ...)
+    (mem-copy! (the-as pointer *coop-p2-math-camera*) (the-as pointer *math-camera*) (size-of math-camera))
+    (set! (-> *coop-p2-math-camera* reset) 1)
+    (set! (-> ctx math-camera) *coop-p2-math-camera*)
+    (dotimes (i 9)
+      (set! (-> *coop-p2-hud-parts* parts i) (the-as (pointer hud) #f)))
+    (set! (-> ctx hud-parts) *coop-p2-hud-parts*)
+    (set! (-> ctx edge-grab-info) *coop-p2-edge-grab-info*)
+    (set-zero! *coop-p2-smush*)
+    (set! (-> ctx smush) *coop-p2-smush*)
+    (matrix-identity! *coop-p2-save-camera-inv-rot*)
+    (set! (-> ctx save-camera-inv-rot) *coop-p2-save-camera-inv-rot*)
+    (set! (-> ctx look-at-data) *coop-p2-look-at-data*)
+    (set! (-> ctx camera-base-mode) cam-string)
+    (set! (-> ctx target-pool) *coop-p2-target-pool*)
+    (set! (-> ctx camera-pool) *coop-p2-camera-pool*)
+    (set! (-> ctx target-dead-pool) *coop-p2-target-dead-pool*)
+    (set! (-> ctx camera-dead-pool) *coop-p2-camera-dead-pool*)
+    (set! (-> ctx camera-master-dead-pool) *coop-p2-camera-master-dead-pool*)
+    (set! (-> ctx dead-pool-16k) *coop-p2-16k-dead-pool*))
+  (none))
+
+(defmacro coop-process-handle (proc)
+  `(let ((p ,proc))
+    (if p (process->handle p) (the-as handle #f))))
+
+(defun coop-save-context ((ctx coop-player-context))
+  "Store the current values of the player globals into ctx."
+  (set! (-> ctx target-handle) (coop-process-handle *target*))
+  (set! (-> ctx camera-handle) (coop-process-handle *camera*))
+  (set! (-> ctx combiner-handle) (coop-process-handle *camera-combiner*))
+  (set! (-> ctx math-camera) *math-camera*)
+  (set! (-> ctx hud-parts) *hud-parts*)
+  (set! (-> ctx edge-grab-info) *edge-grab-info*)
+  (set! (-> ctx smush) *camera-smush-control*)
+  (set! (-> ctx save-camera-inv-rot) *save-camera-inv-rot*)
+  (set! (-> ctx look-at-data) last-try-to-look-at-data)
+  (set! (-> ctx camera-base-mode) *camera-base-mode*)
+  (set! (-> ctx target-pool) *target-pool*)
+  (set! (-> ctx camera-pool) *camera-pool*)
+  (set! (-> ctx target-dead-pool) *target-dead-pool*)
+  (set! (-> ctx camera-dead-pool) *camera-dead-pool*)
+  (set! (-> ctx camera-master-dead-pool) *camera-master-dead-pool*)
+  (set! (-> ctx dead-pool-16k) *16k-dead-pool*)
+  (none))
+
+(defun coop-load-context ((ctx coop-player-context))
+  "Make the values in ctx the current player globals."
+  (set! *target* (the-as target (handle->process (-> ctx target-handle))))
+  (set! *camera* (the-as camera-master (handle->process (-> ctx camera-handle))))
+  (set! *camera-combiner* (the-as camera-combiner (handle->process (-> ctx combiner-handle))))
+  (set! *math-camera* (-> ctx math-camera))
+  (set! *hud-parts* (-> ctx hud-parts))
+  (set! *edge-grab-info* (-> ctx edge-grab-info))
+  (set! *camera-smush-control* (-> ctx smush))
+  (set! *save-camera-inv-rot* (-> ctx save-camera-inv-rot))
+  (set! last-try-to-look-at-data (-> ctx look-at-data))
+  (set! *camera-base-mode* (the-as (state camera-slave) (-> ctx camera-base-mode)))
+  (set! *target-pool* (-> ctx target-pool))
+  (set! *camera-pool* (-> ctx camera-pool))
+  (set! *target-dead-pool* (-> ctx target-dead-pool))
+  (set! *camera-dead-pool* (-> ctx camera-dead-pool))
+  (set! *camera-master-dead-pool* (-> ctx camera-master-dead-pool))
+  (set! *16k-dead-pool* (-> ctx dead-pool-16k))
+  (none))
+
+(defun coop-switch-context ((idx int))
+  "Switch the player globals to player idx. Returns the previous player index."
+  (let ((prev *coop-player*))
+    (when (!= idx prev)
+      (coop-save-context (coop-context prev))
+      (coop-load-context (coop-context idx))
+      (set! *coop-player* idx))
+    prev))
+
+(defun coop-player-target ((idx int))
+  "The target of player idx, or #f. Safe to call from any context."
+  (cond
+    ((= idx *coop-player*) *target*)
+    (else (the-as target (handle->process (-> (coop-context idx) target-handle))))))
+
+(defun coop-other-player-target ((proc process))
+  "The target of the player that does not own proc."
+  (coop-player-target (- 1 (coop-process-player proc))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; which player does a process belong to?
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; player positions, refreshed once per tick by the manager. A world process runs in the context of
+;; the closest player, with some hysteresis so it doesn't flip between players every frame.
+(deftype coop-player-cache (structure)
+  ((pos   vector 2 :inline)
+   (valid symbol 2)))
+
+(define *coop-players* (new 'global 'coop-player-cache))
+
+(defun coop-nearest-player-for ((proc process-drawable))
+  (let ((root (-> proc root)))
+    (cond
+      ((not (-> *coop-players* valid 1)) 0)
+      ((not (-> *coop-players* valid 0)) 1)
+      ((zero? root) 0)
+      (else
+       (let ((d1 (vector-vector-distance (-> root trans) (-> *coop-players* pos 0)))
+             (d2 (vector-vector-distance (-> root trans) (-> *coop-players* pos 1)))
+             (margin (-> *coop* near-hysteresis)))
+         (cond
+           ((process-mask? (-> proc mask) coop-p2-near)
+            (cond
+              ((< d1 (- d2 margin)) (logclear! (-> proc mask) (process-mask coop-p2-near)) 0)
+              (else 1)))
+           ((< d2 (- d1 margin)) (logior! (-> proc mask) (process-mask coop-p2-near)) 1)
+           (else 0)))))))
+
+(defun coop-owner-player ((proc process))
+  "0 or 1 for processes owned by a player (target, daxter, cameras), -1 for world processes."
+  (cond
+    ((process-mask? (-> proc mask) player2) 1)
+    ((logtest? (-> proc mask) (process-mask target sidekick camera)) 0)
+    (else -1)))
+
+(defun coop-player-for-process ((proc process))
+  (let ((owner (coop-owner-player proc)))
+    (cond
+      ((>= owner 0) owner)
+      ((and (-> *coop* nearest-world?) (type-type? (-> proc type) process-drawable)) (coop-nearest-player-for (the-as process-drawable proc)))
+      (else 0))))
+
+(defun coop-context-for-process ((proc process))
+  "Kernel hook: switch to the context proc should run in. Returns the previous context or -1."
+  (let ((want (coop-player-for-process proc)))
+    (if (= want *coop-player*) -1 (coop-switch-context want))))
+
+(defun coop-context-for-event ((proc process) (from process))
+  "Kernel hook: an event is handled in the context of the player that owns the receiver, otherwise
+   of the player that sent it, otherwise in the current context."
+  (let ((want (coop-owner-player proc)))
+    (if (and (< want 0) from (type-type? (-> from type) process)) (set! want (coop-owner-player from)))
+    (if (or (< want 0) (= want *coop-player*)) -1 (coop-switch-context want))))
+
+(defun coop-context-restore ((idx int))
+  "Kernel hook: switch back to a context returned by the hooks above."
+  (coop-switch-context idx)
+  (none))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; process tree helpers
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defun coop-link-tree-after ((node process-tree) (sibling process-tree))
+  "Insert node into sibling's parent, right after sibling (so it runs after it)."
+  (when (not (-> node parent))
+    (set! (-> node parent) (-> sibling parent))
+    (set! (-> node brother) (-> sibling brother))
+    (set! (-> sibling brother) (the-as (pointer process-tree) (-> node ppointer))))
+  (none))
+
+(define *coop-search-player* 0)
+
+(defun coop-kill-by-name-in-current-player ((name symbol))
+  "Like kill-by-name on *active-pool*, but only for processes of the current player context."
+  (set! *global-search-name* name)
+  (set! *coop-search-player* *coop-player*)
+  (let ((proc (the-as process #f)))
+    (while (set! proc
+                 (search-process-tree *active-pool*
+                                      (lambda ((var process))
+                                        (and (name= (-> var name) *global-search-name*)
+                                             (= (coop-process-player var) *coop-search-player*)))))
+      (deactivate proc)))
+  (none))
+
+(defun coop-kill-camera-processes ()
+  "cam-stop helper: kill the camera rig of the current player context only."
+  (coop-kill-by-name-in-current-player 'camera-master)
+  (coop-kill-by-name-in-current-player 'camera-slave)
+  (coop-kill-by-name-in-current-player 'camera-combiner)
+  (none))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; player 2 spawn / respawn
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(define *coop-p2-continue* (new 'global 'continue-point))
+
+(defun coop-target-ready? ((tgt target))
+  "Is this player in normal control, standing on safe ground?"
+  (and tgt
+       (not (logtest? (-> tgt state-flags) (state-flags grabbed dying)))
+       (-> tgt state)
+       (not (or (= (-> tgt state name) 'target-continue) (= (-> tgt state name) 'target-coop-spawn)))
+       (logtest? (-> tgt control status) (cshape-moving-flags onground))))
+
+(defun coop-safe-position-near ((tgt target) (result vector))
+  "A validated safe position next to tgt: its last known safe ground, or its position."
+  (let ((safe (-> tgt control last-known-safe-ground)))
+    (if (and (= (-> safe x) 0.0) (= (-> safe y) 0.0) (= (-> safe z) 0.0))
+      (set! (-> result quad) (-> tgt control trans quad))
+      (set! (-> result quad) (-> safe quad))))
+  (+! (-> result y) (meters 0.5))
+  result)
+
+(defun coop-spawn-player2 ((pos vector))
+  "Spawn player 2's target at pos, in player 2's context."
+  (let ((prev (coop-switch-context 1)))
+    (set! (-> *coop-p2-continue* trans quad) (-> pos quad))
+    (let ((p1 (coop-player-target 0)))
+      (if p1
+        (quaternion-copy! (-> *coop-p2-continue* quat) (-> p1 control quat-for-control))
+        (quaternion-identity! (-> *coop-p2-continue* quat))))
+    (let ((proc (process-spawn target
+                               :init init-target
+                               *coop-p2-continue*
+                               :from *target-dead-pool*
+                               :to *target-pool*
+                               :stack *kernel-dram-stack*)))
+      (set! *target* (if proc (the-as target (-> proc 0 self)) (the-as target #f))))
+    (format 0 "[coop] player 2 spawned: ~A~%" *target*)
+    (coop-switch-context prev))
+  (none))
+
+(defun coop-despawn-player2 ()
+  "Kill player 2's target and camera rig."
+  (let ((prev (coop-switch-context 1)))
+    (when *target*
+      (deactivate *target*)
+      (set! *target* #f))
+    (coop-kill-camera-processes)
+    (set! *camera* #f)
+    (set! *camera-combiner* #f)
+    (coop-switch-context prev))
+  (none))
+
+;; player 2's spawn: a light version of target-continue that doesn't touch session state
+;; (load state, continue point, settings, player 1's camera).
+(defstate target-coop-spawn (target)
+  :event target-generic-event-handler
+  :exit
+    (behavior ()
+      ;; set by init-target, target-continue's exit normally removes them
+      (remove-setting! 'allow-pause)
+      (remove-setting! 'allow-progress))
+  :code
+    (behavior ((arg0 vector))
+      (set-time! (-> self state-time))
+      (reset-target-state #t)
+      (target-exit)
+      (ja-channel-set! 0)
+      (quaternion-copy! (-> self control quat-for-control) (-> *coop-p2-continue* quat))
+      (move-to-point! (-> self control) arg0)
+      (rot->dir-targ! (-> self control))
+      (set! (-> self control camera-pos quad) (-> self control trans quad))
+      ;; our own camera rig. We are a player 2 process, so this runs in player 2's context.
+      (cam-start #f)
+      (suspend)
+      (suspend)
+      ;; start the camera where player 1's camera is relative to player 1
+      (let ((p1 (coop-player-target 0))
+            (p1-cam (the-as camera-combiner (handle->process (-> *coop-context-p1* combiner-handle)))))
+        (when (and *camera-combiner* p1 p1-cam)
+          (vector+! (-> *camera-combiner* trans) (-> self control trans) (vector-! (new 'stack-no-clear 'vector) (-> p1-cam trans) (-> p1 control trans)))
+          (matrix-copy! (-> *camera-combiner* inv-camera-rot) (-> p1-cam inv-camera-rot))))
+      (send-event *camera* 'change-target self)
+      (send-event *camera* 'no-intro)
+      (send-event *camera* 'clear-entity)
+      (send-event *camera* 'force-blend 0)
+      (send-event *camera* 'change-state cam-fixed 0)
+      (send-event *camera* 'change-state cam-string 0)
+      (ja-channel-set! 1)
+      (ja :group! eichar-stance-loop-ja)
+      (suspend)
+      (logior! (-> self control status) (cshape-moving-flags onsurf onground tsurf))
+      (go target-stance)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; session manager
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(define *coop-p2-missing-time* (the-as time-frame 0))
+
+(defun coop-update ()
+  "Once per simulation tick: player positions, player 2 respawn, distance leash."
+  (+! (-> *coop* sim-ticks) 1)
+  (let ((p1 (coop-player-target 0))
+        (p2 (coop-player-target 1)))
+    (set! (-> *coop-players* valid 0) (if p1 #t #f))
+    (set! (-> *coop-players* valid 1) (if p2 #t #f))
+    (if p1 (set! (-> *coop-players* pos 0 quad) (-> p1 control trans quad)))
+    (if p2 (set! (-> *coop-players* pos 1 quad) (-> p2 control trans quad)))
+    (cond
+      ((not p2)
+       ;; player 2 is missing (not spawned yet, died, or killed by a player 1 restart).
+       ;; respawn next to player 1 after a short delay, once player 1 is in control.
+       (cond
+         ((zero? *coop-p2-missing-time*) (set! *coop-p2-missing-time* (current-time)))
+         ((and (coop-target-ready? p1) (time-elapsed? *coop-p2-missing-time* (-> *coop* respawn-delay)))
+          (set! *coop-p2-missing-time* 0)
+          (coop-despawn-player2) ;; clean up a camera rig left behind
+          (coop-spawn-player2 (coop-safe-position-near p1 (new 'stack-no-clear 'vector))))))
+      (else
+       (set! *coop-p2-missing-time* 0)
+       ;; distance leash: level streaming follows player 1, so player 2 can't go far.
+       (when (and (-> *coop* leash?)
+                  (coop-target-ready? p1)
+                  (< (-> *coop* leash-distance) (vector-vector-distance (-> p1 control trans) (-> p2 control trans))))
+         (format 0 "[coop] player 2 is too far from player 1, bringing them back~%")
+         (coop-despawn-player2)
+         (coop-spawn-player2 (coop-safe-position-near p1 (new 'stack-no-clear 'vector))))))))
+
+(defun coop-manager-loop ()
+  (loop
+    (if (coop-active?) (coop-update))
+    (suspend))
+  (none))
+
+(define *coop-manager* (the-as (pointer process) #f))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; start / stop
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defun coop-start ()
+  "Start local co-op: install the player contexts, enable per-slot input, spawn player 2."
+  (when (not (coop-active?))
+    (coop-init-p2-context)
+    (coop-link-tree-after *coop-p2-target-pool* *target-pool*)
+    (coop-link-tree-after *coop-p2-camera-pool* *camera-pool*)
+    (set! *coop-player* 0)
+    (set! (-> *coop* sim-ticks) 0)
+    (set! (-> *coop* render-passes) 0)
+    (set! *coop-p2-missing-time* 0)
+    (set! *player-context-for-process* coop-context-for-process)
+    (set! *player-context-for-event* coop-context-for-event)
+    (set! *player-context-restore* coop-context-restore)
+    (set! (-> *coop* active?) #t)
+    (set! (-> *coop* enabled?) #t)
+    ;; player 2's pad buzzes like player 1's
+    (set! (-> *cpad-list* cpads (-> *coop* p2-pad) buzz) (-> *cpad-list* cpads 0 buzz))
+    (pc-coop-set-input-enabled! #t)
+    (when (not *coop-manager*)
+      (set! *coop-manager* (process-spawn-function process coop-manager-loop :name 'coop-manager :to *default-pool*)))
+    (format 0 "[coop] local co-op started~%"))
+  (coop-active?))
+
+(defun coop-stop ()
+  "Stop local co-op and go back to the single player game."
+  (when (coop-active?)
+    (coop-switch-context 0)
+    (coop-despawn-player2)
+    (set! *player-context-for-process* #f)
+    (set! *player-context-for-event* #f)
+    (set! *player-context-restore* #f)
+    (set! (-> *coop* active?) #f)
+    (set! (-> *coop* enabled?) #f)
+    (set! (-> *coop* split?) #f)
+    (pc-coop-set-input-enabled! #f)
+    (when *coop-manager*
+      (deactivate (-> *coop-manager* 0))
+      (set! *coop-manager* #f))
+    (format 0 "[coop] local co-op stopped~%"))
+  (none))

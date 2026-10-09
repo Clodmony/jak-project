@@ -197,6 +197,7 @@
   "game-info.o"
   "game-save.o"
   "settings.o"
+  "splitscreen-h.o" ;; added (coop)
   "pc-anim-util.o" ;; added
   "autosplit-h.o" ;; added
   "autosplit.o" ;; added
@@ -346,4 +347,5 @@
   "ropebridge.o"
   "ticky.o"
   "hud-classes-pc.o" ;; added
+  "splitscreen.o" ;; added (coop)
  ))

@@ -6,9 +6,13 @@
 ;; DECOMP BEGINS
 
 (defun cam-stop ()
-  (kill-by-name 'camera-master *active-pool*)
-  (kill-by-name 'camera-slave *active-pool*)
-  (kill-by-name 'camera-combiner *active-pool*)
+  (cond
+    ;; og:preserve-this coop: only stop the camera rig of the current player
+    ((coop-active?) (coop-kill-camera-processes))
+    (else
+     (kill-by-name 'camera-master *active-pool*)
+     (kill-by-name 'camera-slave *active-pool*)
+     (kill-by-name 'camera-combiner *active-pool*)))
   (set! *camera* #f)
   (set! *camera-combiner* #f)
   (set! *camera-base-mode* cam-string)

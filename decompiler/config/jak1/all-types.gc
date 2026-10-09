@@ -181,6 +181,9 @@
     (projectile     22) ;; 4194304
     (attackable     23) ;; 8388608
     (death          24) ;; 16777216
+    ;; og:preserve-this coop: PC local co-op (split-screen)
+    (player2        25)
+    (coop-p2-near   26)
     )
 
 (defenum timer-clock-selection
@@ -13085,6 +13088,7 @@
     target-slide-down
     (target-falling symbol)
     (target-continue continue-point)
+    (target-coop-spawn vector) ;; coop: PC local co-op
     (target-warp-out vector vector)
     target-tube
     (target-tube-death symbol)
