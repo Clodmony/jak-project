@@ -96,7 +96,13 @@ C++ (`OpenGLRenderer::dispatch_buckets`, Jak 1 path only):
 Per-view details: `was-drawn` is cleared only in view 0 (so it means "visible in any view"), light
 interpolation ramps once per frame, each player's HUD models draw only in their view,
 `level-distance`/vis/wind/look-through countdown are updated in view 0 only, and fog is copied from
-player 1's camera after `update-time-of-day`.
+player 1's camera after `update-time-of-day`. Things that would otherwise run once per view: the
+death-dissolve timer (`draw-bones`, skipped when view 0 already drew the object), the TIE wind
+springs in the C++ renderer (view 1 sends "paused"). Particle launchers aren't frustum culled while
+co-op runs (one camera can't decide for both views). The sprite distortion tables are copied into
+the chain instead of referenced, because the second camera regenerates them before the renderer
+reads the frame. Both views share one framebuffer (`m_view_fbo`), freed 600 frames after the last
+split frame.
 
 Menus, pause and cutscenes (`movie?`) use one full-screen view of player 1 (`coop-want-split?`).
 
@@ -105,8 +111,13 @@ Menus, pause and cutscenes (`movie?`) use one full-screen view of player 1 (`coo
 `coop::SlotAssigner` (`game/system/hid/coop_slots.h`, SDL-free, unit tested) maps devices to player
 slots (pad ports). Controllers are tracked by SDL instance id, not GUID (identical pads share a GUID).
 A device feeds at most one slot; assigning another player's device is rejected; a disconnected
-slot keeps its claim and reports a failed pad read (GOAL sees neutral input). `InputManager` applies
-changes on the graphics thread. GOAL API: `pc-coop-*` in `kernel-defs.gc`.
+slot keeps its claim, and only a newly connected pad of the same model refills it. A slot without a
+connected device reports a disconnected pad (`scePadGetState`), so GOAL marks it invalid: neutral
+input, and losing player 2's pad pauses. `InputManager` applies changes on the graphics thread; held
+keyboard/mouse inputs are released on the old port before the mapping changes, keyboard command
+binds (fullscreen, screenshot, ImGui) keep working when keyboard/mouse has no player, and the key
+used to join is ignored until released. Enabling co-op auto-assigns devices unless the player chose
+them. GOAL API: `pc-coop-*` in `kernel-defs.gc`.
 
 ## Streaming and world simulation
 

@@ -159,6 +159,8 @@ void InputManager::refresh_device_list() {
           lg::info("[coop] controller assignment changed after hotplug");
         }
         coop_apply_mapping();
+      } else {
+        m_coop_slots.note_controllers(m_coop_controllers);
       }
     }
   }
@@ -221,16 +223,21 @@ void InputManager::process_sdl_event(const SDL_Event& event) {
     }
     if (claimed) {
       lg::info("[coop] device claimed a player slot");
+      m_coop_explicit_assignment = true;
       coop_apply_mapping();
+      if (event.type == SDL_EVENT_KEY_DOWN) {
+        // keys are polled: ignore the joining key until it is released
+        m_keyboard.suppress_until_released(event.key.key);
+      }
       return;
     }
   }
 
-  if (m_data.find(m_keyboard_and_mouse_port) != m_data.end()) {
-    m_keyboard.process_event(event, m_command_binds, m_data.at(m_keyboard_and_mouse_port),
-                             m_waiting_for_bind);
-    m_mouse.process_event(event, m_command_binds, m_data.at(m_keyboard_and_mouse_port),
-                          m_waiting_for_bind);
+  {
+    const auto kbm_it = m_data.find(m_keyboard_and_mouse_port);
+    const auto kbm_data = kbm_it != m_data.end() ? kbm_it->second : m_unassigned_kbm_data;
+    m_keyboard.process_event(event, m_command_binds, kbm_data, m_waiting_for_bind);
+    m_mouse.process_event(event, m_command_binds, kbm_data, m_waiting_for_bind);
   }
 
   // Send event to active controller device
@@ -813,7 +820,7 @@ void InputManager::coop_set_enabled(const bool enabled) {
     return;
   }
   if (enabled) {
-    if (!m_coop_slots.any_assigned()) {
+    if (!m_coop_explicit_assignment || !m_coop_slots.any_assigned()) {
       m_coop_slots.auto_assign(m_coop_controllers);
     } else {
       m_coop_slots.on_controllers_changed(m_coop_controllers);
@@ -822,6 +829,7 @@ void InputManager::coop_set_enabled(const bool enabled) {
     m_coop_mapping_dirty = true;
     lg::info("[coop] local co-op input enabled");
   } else {
+    m_coop_slots.cancel_join();
     m_coop_enabled = false;
     m_coop_restore_legacy = true;
     lg::info("[coop] local co-op input disabled");
@@ -831,6 +839,7 @@ void InputManager::coop_set_enabled(const bool enabled) {
 bool InputManager::coop_assign_keyboard(const int slot) {
   const std::lock_guard<std::mutex> lock(m_coop_mtx);
   const bool ok = m_coop_slots.assign_keyboard(slot);
+  m_coop_explicit_assignment = true;
   m_coop_mapping_dirty = true;
   return ok;
 }
@@ -842,6 +851,7 @@ bool InputManager::coop_assign_controller(const int slot, const int controller_i
   }
   const auto& c = m_coop_controllers.at(controller_id);
   const bool ok = m_coop_slots.assign_controller(slot, c.instance_id, c.guid);
+  m_coop_explicit_assignment = true;
   m_coop_mapping_dirty = true;
   return ok;
 }
@@ -849,6 +859,7 @@ bool InputManager::coop_assign_controller(const int slot, const int controller_i
 void InputManager::coop_unassign(const int slot) {
   const std::lock_guard<std::mutex> lock(m_coop_mtx);
   m_coop_slots.unassign(slot);
+  m_coop_explicit_assignment = true;
   m_coop_mapping_dirty = true;
 }
 
@@ -865,6 +876,7 @@ void InputManager::coop_cancel_join() {
 void InputManager::coop_auto_assign() {
   const std::lock_guard<std::mutex> lock(m_coop_mtx);
   m_coop_slots.auto_assign(m_coop_controllers);
+  m_coop_explicit_assignment = false;
   m_coop_mapping_dirty = true;
 }
 
@@ -885,6 +897,7 @@ bool InputManager::coop_port_connected(const int port) {
 void InputManager::coop_update_pending() {
   if (m_coop_restore_legacy.exchange(false)) {
     // back to the single-player mapping (keyboard + saved controller ports)
+    coop_release_kbm_actions();
     m_keyboard_and_mouse_port = 0;
     clear_inputs();
     refresh_device_list();
@@ -895,8 +908,18 @@ void InputManager::coop_update_pending() {
   }
 }
 
+/// Release held keyboard/mouse actions on the port they were applied to. Keys that are still held
+/// are pressed again on the new port by the next poll.
+void InputManager::coop_release_kbm_actions() {
+  const auto kbm_it = m_data.find(m_keyboard_and_mouse_port);
+  const auto kbm_data = kbm_it != m_data.end() ? kbm_it->second : m_unassigned_kbm_data;
+  m_keyboard.clear_actions(kbm_data);
+  m_mouse.clear_actions(kbm_data);
+}
+
 /// Rebuild the port mapping from the co-op slots. Caller holds m_coop_mtx.
 void InputManager::coop_apply_mapping() {
+  coop_release_kbm_actions();
   m_controller_port_mapping.clear();
   for (int slot = 0; slot < coop::kMaxPlayers; slot++) {
     const auto& s = m_coop_slots.slot(slot);

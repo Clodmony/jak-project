@@ -19,6 +19,17 @@
   - stopping co-op while a player waits to respawn no longer leaves an invisible Jak;
   - `*ACTOR-bank*` is restored by "Stop co-op";
   - decompiler reference for the two new target states.
+- Second round from the same review (verified findings):
+  - input: an unassigned/disconnected slot reports a disconnected pad (it kept its last input
+    before), held keys are released when the mapping changes (stuck stick), keyboard hotkeys work
+    with two pads, the join key doesn't leak into gameplay, an idle identical pad can't take over a
+    disconnected slot, enabling co-op auto-assigns unless devices were chosen;
+  - rendering: death dissolve and TIE wind advance once per frame, particles aren't culled against
+    one player's camera, distortion tables per view, one shared view framebuffer that is freed after
+    split screen ends, small-profiler times add up both views;
+  - gameplay: cutscene input freeze only applies to player 2 (fixes a fisherman minigame soft-lock),
+    respawn spots use the player's position when the safe-ground point is stale (fixes a leash
+    respawn loop after boat/elevator rides), grabbers that end a grab directly free both players.
 
 ## 2026-10-09: first prototype (compiles, not playtested)
 

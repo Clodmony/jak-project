@@ -72,6 +72,14 @@ connect, then `(coop-start)`. Turn on "Local Co-op" > "Show co-op info" for the 
 | 23 | Player 2 collects a power cell while player 1 stands a few metres away | The victory animation plays on player 2, not player 1 |
 | 24 | Pause (Start) while split | The pause menu is one full-screen view, not drawn in player 1's half |
 | 25 | Hit player 2 / let player 2 land a big fall | Player 2's controller rumbles, player 1's doesn't |
+| 26 | Unplug player 2's pad while holding the stick forward | Player 2's Jak stops (neutral input) and the game pauses |
+| 27 | Two pads in co-op: press Alt+Enter / F2 | Fullscreen toggles / screenshot is taken (keyboard hotkeys still work) |
+| 28 | Keyboard player 1 holds W, plug player 2's pad out and back in | Player 1 keeps walking forward and stops when W is released (no stuck stick) |
+| 29 | Fisherman minigame: lose, then answer "play again?" | The question can be answered (pad 0 isn't frozen) |
+| 30 | Ride the fisherman's boat to Misty with both players | Both are released at the end; player 2 is brought to player 1 once, not every frame |
+| 31 | Kill an enemy visible in both views | Its death dissolve plays at normal speed |
+| 32 | Stand in foliage (jungle) with the split on and off | Plants sway at the same speed in both cases |
+| 33 | Player 2 hits a dark vine 40+ m from player 1 with player 1's camera turned away | The puff appears in player 2's view |
 
 ## Performance measurement (not done)
 

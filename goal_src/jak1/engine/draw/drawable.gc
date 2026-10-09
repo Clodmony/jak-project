@@ -609,6 +609,8 @@
                     (if (or (guard-band-cull s4-0) (< cam-dist (* 1.2 (-> *math-camera* d))))
                       (logior! (-> arg1 status) (draw-status needs-clip))
                       (logclear! (-> arg1 status) (draw-status needs-clip)))
+                    ;; og:preserve-this coop: drawn by the first view already -> don't advance the death timer again
+                    (set! *coop-death-timer-done* (and (nonzero? *coop-view*) (logtest? (-> arg1 status) (draw-status was-drawn))))
                     (logior! (-> arg1 status) (draw-status was-drawn))
                     (if (logtest? (-> arg1 status) (draw-status skip-bones)) (return #f))
                     (draw-bones arg1 arg3 cam-dist))

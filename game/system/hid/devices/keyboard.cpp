@@ -104,6 +104,13 @@ void KeyboardDevice::poll_state(std::shared_ptr<PadData> data) {
   }
 }
 
+void KeyboardDevice::suppress_until_released(const u32 sdl_keycode) {
+  if (!is_action_already_active(sdl_keycode)) {
+    m_active_actions.push_back(
+        {sdl_keycode, InputBinding(), [](std::shared_ptr<PadData>, InputBinding) {}});
+  }
+}
+
 void KeyboardDevice::clear_actions(std::shared_ptr<PadData> data) {
   for (auto it = m_active_actions.begin(); it != m_active_actions.end();) {
     it->revert_action(data, it->binding);

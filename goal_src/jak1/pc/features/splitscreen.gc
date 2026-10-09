@@ -283,9 +283,12 @@
        (logtest? (-> tgt control status) (cshape-moving-flags onground))))
 
 (defun coop-safe-position-near ((tgt target) (result vector))
-  "A validated safe position next to tgt: its last known safe ground, or its position."
+  "A safe position next to tgt: its last known safe ground, or its own position when that is unset or
+   stale (it isn't updated on platforms, elevators, boats or water, and can be far behind)."
   (let ((safe (-> tgt control last-known-safe-ground)))
-    (if (and (= (-> safe x) 0.0) (= (-> safe y) 0.0) (= (-> safe z) 0.0))
+    (if (or (and (= (-> safe x) 0.0) (= (-> safe y) 0.0) (= (-> safe z) 0.0))
+            (logtest? (-> tgt control status) (cshape-moving-flags t-act on-water))
+            (< (meters 8) (vector-vector-distance safe (-> tgt control trans))))
       (set! (-> result quad) (-> tgt control trans quad))
       (set! (-> result quad) (-> safe quad))))
   (+! (-> result y) (meters 0.5))
@@ -384,7 +387,12 @@
         (when (and (not safe-elsewhere) (= (coop-level-containing *level* pos (the-as level #f)) lev))
           (format 0 "[coop] level ~A goes away under player 2, bringing player 2 to player 1~%" (-> lev name))
           (coop-despawn-player2)
-          (if p1 (coop-spawn-player2 (coop-safe-position-near p1 (new 'stack-no-clear 'vector))))))))
+          ;; respawn now if player 1 is in control and the spot isn't in the leaving level too,
+          ;; otherwise the manager respawns player 2 once player 1 is ready
+          (when (coop-target-ready? p1)
+            (let ((dest (coop-safe-position-near p1 (new 'stack-no-clear 'vector))))
+              (if (= (coop-level-containing *level* dest (the-as level #f)) lev) (set! (-> dest quad) (-> p1 control trans quad)))
+              (coop-spawn-player2 dest)))))))
   (none))
 
 (defun coop-send-to-other-player ((msg symbol) (arg symbol))
@@ -634,12 +642,16 @@
   (let ((p1 (coop-player-target 0)))
     (set! (-> *coop-ear* quad) (-> (if p1 (-> p1 control trans) (camera-pos)) quad))
     (set! *ear-trans-override* *coop-ear*))
-  ;; during cinematics (some skip process-grab?), a player that isn't held by the cutscene stands still
-  (when (or (movie?) (nonzero? *camera-look-through-other*))
-    (dotimes (i COOP_MAX_PLAYERS)
-      (let ((tgt (coop-player-target i)))
-        (if (and tgt (not (logtest? (-> tgt state-flags) (state-flags grabbed))))
-          (coop-neutralize-pad (-> tgt control cpad))))))
+  ;; during a cinematic that holds player 1 but not player 2 (some skip process-grab?), player 2 stands
+  ;; still. Pad 0 is never touched: menus, the title screen and minigame prompts read it.
+  (when (and (= *master-mode* 'game) (or (movie?) (nonzero? *camera-look-through-other*)))
+    (let ((p1 (coop-player-target 0))
+          (p2 (coop-player-target 1)))
+      (if (and p1
+               p2
+               (logtest? (-> p1 state-flags) (state-flags grabbed))
+               (not (logtest? (-> p2 state-flags) (state-flags grabbed))))
+        (coop-neutralize-pad (-> p2 control cpad)))))
   (pc-set-splitscreen-layout! (the-as int (-> *coop* layout)))
   ;; the rest is gameplay: nothing moves while paused or in a menu
   (if (!= *master-mode* 'game) (return #f))
@@ -731,6 +743,7 @@
     (set! (-> *cpad-list* cpads (-> *coop* p2-pad) buzz) (-> *cpad-list* cpads 0 buzz))
     (pc-coop-set-input-enabled! #t)
     (coop-set-save-folder "coop")
+    (set! *sparticle-ignore-frustum?* #t)
     (set! (-> *coop-saved-actor-bank* birth-dist) (-> *ACTOR-bank* birth-dist))
     (set! (-> *coop-saved-actor-bank* pause-dist) (-> *ACTOR-bank* pause-dist))
     (set! (-> *coop-saved-actor-bank* birth-max) (-> *ACTOR-bank* birth-max))
@@ -753,6 +766,7 @@
     (set! *ear-trans-override* #f)
     (pc-coop-set-input-enabled! #f)
     (coop-set-save-folder "")
+    (set! *sparticle-ignore-frustum?* #f)
     ;; back to the single player actor distances (pc-settings re-applies "force actors" if it's on)
     (set! (-> *ACTOR-bank* birth-dist) (-> *coop-saved-actor-bank* birth-dist))
     (set! (-> *ACTOR-bank* pause-dist) (-> *coop-saved-actor-bank* pause-dist))
