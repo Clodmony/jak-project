@@ -291,6 +291,35 @@
             (< (meters 8) (vector-vector-distance safe (-> tgt control trans))))
       (set! (-> result quad) (-> tgt control trans quad))
       (set! (-> result quad) (-> safe quad))))
+  ;; step to the side so the two players don't overlap (players don't collide with each other).
+  ;; a spot is used only if the way there is clear and it has ground at about the same height.
+  (let ((side (vector-x-quaternion! (new 'stack-no-clear 'vector) (-> tgt control quat-for-control)))
+        (fwd (vector-z-quaternion! (new 'stack-no-clear 'vector) (-> tgt control quat-for-control)))
+        (from (new 'stack-no-clear 'vector))
+        (cand (new 'stack-no-clear 'vector))
+        (move (new 'stack-no-clear 'vector))
+        (tri (new 'stack-no-clear 'collide-tri-result))
+        (found #f))
+    (set! (-> side y) 0.0)
+    (vector-normalize! side (meters 1.5))
+    (set! (-> fwd y) 0.0)
+    (vector-normalize! fwd (meters -1.5))
+    (set! (-> from quad) (-> result quad))
+    (+! (-> from y) (meters 1))
+    (dotimes (i 3)
+      (when (not found)
+        (vector+! cand from (case i ((0) side) ((1) (vector-negate! move side)) (else fwd)))
+        (vector-! move cand from)
+        (when (< (fill-and-probe-using-line-sphere *collide-cache* from move (meters 0.4) (collide-kind background) tgt tri
+                                                   (new 'static 'pat-surface :noentity #x1))
+                 0.0)
+          (set-vector! move 0.0 (meters -3) 0.0 1.0)
+          (when (and (>= (fill-and-probe-using-line-sphere *collide-cache* cand move (meters 0.2) (collide-kind background) tgt tri
+                                                           (new 'static 'pat-surface :noentity #x1))
+                         0.0)
+                     (< (fabs (- (-> tri intersect y) (-> result y))) (meters 1)))
+            (set! (-> result quad) (-> tri intersect quad))
+            (set! found #t))))))
   (+! (-> result y) (meters 0.5))
   result)
 
@@ -625,6 +654,9 @@
 
 (define *coop-p2-missing-time* (the-as time-frame 0))
 
+;; bit per player hidden by coop-update for the length of a cinematic about the other player
+(define *coop-movie-hidden* 0)
+
 (define *coop-ear* (new 'global 'vector))
 
 (defun coop-player-in-play? ((tgt target))
@@ -652,6 +684,25 @@
                (logtest? (-> p1 state-flags) (state-flags grabbed))
                (not (logtest? (-> p2 state-flags) (state-flags grabbed))))
         (coop-neutralize-pad (-> p2 control cpad)))))
+  ;; a cinematic about one player (power cell victory, talking to an npc) shows only that player:
+  ;; the other one and their daxter are hidden until it ends, so they don't stand in the shot.
+  (dotimes (i 2)
+    (let ((me (coop-player-target i))
+          (other (coop-player-target (- 1 i)))
+          (bit (ash 1 i)))
+      (cond
+        ((and me
+              other
+              (movie?)
+              (coop-player-in-play? me)
+              (= (-> other state name) 'target-clone-anim)
+              (!= (-> me state name) 'target-clone-anim))
+         (when (zero? (logand *coop-movie-hidden* bit))
+           (coop-set-hidden me #t)
+           (logior! *coop-movie-hidden* bit)))
+        ((nonzero? (logand *coop-movie-hidden* bit))
+         (if me (coop-set-hidden me #f))
+         (logclear! *coop-movie-hidden* bit)))))
   (pc-set-splitscreen-layout! (the-as int (-> *coop* layout)))
   ;; the rest is gameplay: nothing moves while paused or in a menu
   (if (!= *master-mode* 'game) (return #f))
@@ -757,6 +808,10 @@
   (when (coop-active?)
     (coop-switch-context 0)
     (coop-despawn-player2)
+    ;; stopped during a cinematic about player 2: show player 1 again
+    (when (logtest? *coop-movie-hidden* 1)
+      (let ((p1 (coop-player-target 0))) (if p1 (coop-set-hidden p1 #f))))
+    (set! *coop-movie-hidden* 0)
     (set! *player-context-for-process* #f)
     (set! *player-context-for-event* #f)
     (set! *player-context-restore* #f)

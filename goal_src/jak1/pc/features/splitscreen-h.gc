@@ -40,7 +40,6 @@
    (near-hysteresis   meters) ;; a world process only switches player when the other is this much closer
    (respawn-delay     time-frame) ;; dead player waits this long before respawning next to the survivor
    (p2-pad            int32) ;; cpad index of player 2
-   (frame-views       int32) ;; views rendered in the last frame (for tests / stats)
    (sim-ticks         uint32) ;; simulation ticks since co-op started (for tests / stats)
    (render-passes     uint32) ;; view render passes since co-op started (for tests / stats)
    ))
@@ -195,20 +194,23 @@
               (!= (-> other state name) 'target-death)
               (!= (-> other state name) 'target-coop-respawn)))))
 
-(define *coop-p2-pad-was-valid* #f)
+(define *coop-p2-device-was-lost* #f)
 
 (defun coop-merge-pause-buttons ()
   "Called right before determine-pause-mode: either player can pause the shared session, and
    player 2's controller disconnecting pauses it like player 1's does. Pad 0 is overwritten by
-   service-cpads right after, so player 1's gameplay never sees the merged buttons."
+   service-cpads right after, so player 1's gameplay never sees the merged buttons.
+   A player 2 slot that never had a device (waiting to join) does not pause: only a device that
+   was assigned and then lost its connection does."
   (when (coop-active?)
     (let* ((p1-pad (-> *cpad-list* cpads 0))
            (p2-pad (-> *cpad-list* cpads (-> *coop* p2-pad)))
-           (p2-valid (zero? (logand (-> p2-pad valid) 128)))
+           (p2-status (pc-coop-slot-status 1))
+           (p2-lost (and (nonzero? (logand p2-status 3)) (zero? (logand p2-status 4))))
            (pause-buttons (logand (-> p2-pad button0-rel 0) (pad-buttons start select))))
-      (if (and (not p2-valid) *coop-p2-pad-was-valid* (= *master-mode* 'game))
+      (if (and p2-lost (not *coop-p2-device-was-lost*) (= *master-mode* 'game))
         (set! pause-buttons (logior pause-buttons (pad-buttons select))))
-      (set! *coop-p2-pad-was-valid* p2-valid)
+      (set! *coop-p2-device-was-lost* p2-lost)
       (when (nonzero? pause-buttons)
         (logior! (-> p1-pad button0-abs 0) pause-buttons)
         (logior! (-> p1-pad button0-rel 0) pause-buttons))))
