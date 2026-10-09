@@ -326,8 +326,9 @@
       (send-event *camera* 'no-intro)
       (camera-change-to (the-as string 'cam-eye) 60 #f)
       (let ((a0-5 (handle->process (-> self fp-hud)))) (if a0-5 (deactivate a0-5)))
+      ;; og:preserve-this coop: the hud belongs to this player (enables/disables this player's HUD)
       (set! (-> self fp-hud)
-            (ppointer->handle (process-spawn first-person-hud :to *dproc* :stack (&+ *fp-hud-stack* #x3800)))))
+            (ppointer->handle (coop-adopt (process-spawn first-person-hud :to *dproc* :stack (&+ *fp-hud-stack* #x3800)) self))))
   :exit
     (behavior ()
       (let ((a0-1 (handle->process (-> self fp-hud)))) (if a0-1 (send-event a0-1 'go-away)))
@@ -411,8 +412,9 @@
       (send-event *camera* 'no-intro)
       (camera-change-to (the-as string 'cam-billy) 0 #f)
       (let ((a0-6 (handle->process (-> self fp-hud)))) (if a0-6 (deactivate a0-6)))
+      ;; og:preserve-this coop: the hud belongs to this player (enables/disables this player's HUD)
       (set! (-> self fp-hud)
-            (ppointer->handle (process-spawn first-person-hud :to *dproc* :stack (&+ *fp-hud-stack* #x3800)))))
+            (ppointer->handle (coop-adopt (process-spawn first-person-hud :to *dproc* :stack (&+ *fp-hud-stack* #x3800)) self))))
   :exit
     (behavior ()
       (let ((a0-1 (handle->process (-> self fp-hud)))) (if a0-1 (send-event a0-1 'go-away)))
@@ -1614,7 +1616,7 @@
          (set! (-> self attack-info attacker) (the-as handle #f))
          (go target-death 'target-hit-ground-hard))
         (else
-         (cpad-set-buzz! (-> *cpad-list* cpads 0) 1 255 (seconds 0.1))
+         (cpad-set-buzz! (coop-player-cpad) 1 255 (seconds 0.1))
          (ja-channel-push! 1 1)
          (ja :group! eichar-painful-land-ja :num! min)
          (until (and (ja-done? 0) (= (-> self skel root-channel 0) (-> self skel channel)))
