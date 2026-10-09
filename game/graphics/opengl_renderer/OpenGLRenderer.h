@@ -158,9 +158,11 @@ class OpenGLRenderer {
     Fbo* render_fbo = nullptr;  // the selected fbo from the three above to use for rendering
   } m_fbo_state;
 
-  // Jak 1 local co-op: each view renders at the origin of its own framebuffer, then gets copied
-  // into its rect of render_fbo.
-  std::array<Fbo, 2> m_view_fbos;
+  // Jak 1 local co-op: each view renders at the origin of this framebuffer (both views have the
+  // same size), then gets copied into its rect of render_fbo. Freed a while after the last split
+  // frame, so single player doesn't keep the memory.
+  Fbo m_view_fbo;
+  int m_frames_since_split = 0;
 
   GLuint screen_vao = 0;  // vertex array object for a screen-space draw
   GLuint screen_vbo = 0;  // vertex buffer object for a screen-space draw

@@ -15,7 +15,8 @@
  * - when a slot's controller disconnects, the slot keeps its claim and reports "disconnected";
  *   another player's device is never moved into it
  * - a disconnected slot is refilled automatically only by a newly connected controller with the
- *   same GUID, otherwise by an unassigned controller pressing a button
+ *   same GUID (one that wasn't connected before), otherwise by an unassigned controller pressing a
+ *   button
  */
 
 #include <array>
@@ -69,6 +70,9 @@ class SlotAssigner {
   bool on_keyboard_key();
   /// The set of connected controllers changed. Returns true if any slot changed.
   bool on_controllers_changed(const std::vector<ConnectedController>& controllers);
+  /// Remember the connected controllers without changing slots (used while co-op is off), so they
+  /// don't count as newly connected later.
+  void note_controllers(const std::vector<ConnectedController>& controllers);
 
   /// Default assignment: two or more controllers -> controllers 0 and 1;
   /// otherwise keyboard/mouse is player 1 and the first controller (if any) is player 2.
@@ -86,6 +90,8 @@ class SlotAssigner {
 
   std::array<SlotState, kMaxPlayers> m_slots;
   int m_joining_slot = -1;
+  /// instance ids of the controllers connected at the last update
+  std::vector<int> m_known_ids;
 };
 
 }  // namespace coop

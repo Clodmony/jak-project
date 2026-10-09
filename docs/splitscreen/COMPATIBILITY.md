@@ -49,6 +49,8 @@ still run but player 2 behaviour there is undefined.
 | `ps2-lod-dist?` option | With the original LOD distances enabled, the two views may pick different LODs for the same actor | `engine/draw/drawable.gc` `dma-add-process-drawable` |
 | Occlusion culling | Off on split frames (one vis buffer per level) | `OpenGLRenderer::dispatch_jak1_split_views` |
 | Touching list | 32 overlap pairs per tick are now shared by two players; overflow drops touches | `engine/collide/collide-touch-h.gc` |
+| Interaction latch on shared objects | A platform both players stand on is latched to whichever touched it last, so its `*target*` can alternate between players | `coop-context-for-event` |
+| Input thread safety | Turning co-op off re-enumerates controllers on the graphics thread while the game thread reads them without a lock (same pattern as upstream hotplug; not observed to crash) | `game/system/hid/input_manager.cpp` |
 
 ## Unchanged by design
 

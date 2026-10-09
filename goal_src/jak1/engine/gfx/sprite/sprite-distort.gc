@@ -125,11 +125,22 @@
       (set-vector! aspect-vec (-> *sprite-distorter-sine-tables* aspx) (-> *sprite-distorter-sine-tables* aspy) 0.0 0.0)
       (&+! (-> dma-buff base) 16)))
   ;; send distorter sine tables
-  (dma-buffer-add-ref-vif2 dma-buff
-                           #x8b
-                           (-> *sprite-distorter-sine-tables* entry)
-                           (new 'static 'vif-tag :imm #x404 :cmd (vif-cmd stcycl))
-                           (new 'static 'vif-tag :imm #x160 :num #x8b :cmd (vif-cmd unpack-v4-32)))
+  ;; og:preserve-this pc port: copy the tables into the buffer instead of referencing them. The
+  ;; renderer reads the chain later, and with split screen the second view's camera regenerates the
+  ;; tables before then (local co-op).
+  (#if PC_PORT
+    (let ((pkt (the-as dma-packet (-> dma-buff base))))
+      (set! (-> pkt dma) (new 'static 'dma-tag :id (dma-tag-id cnt) :qwc #x8b))
+      (set! (-> pkt vif0) (new 'static 'vif-tag :imm #x404 :cmd (vif-cmd stcycl)))
+      (set! (-> pkt vif1) (new 'static 'vif-tag :imm #x160 :num #x8b :cmd (vif-cmd unpack-v4-32)))
+      (&+! (-> dma-buff base) 16)
+      (quad-copy! (-> dma-buff base) (the-as pointer (-> *sprite-distorter-sine-tables* entry)) #x8b)
+      (&+! (-> dma-buff base) (* 16 #x8b)))
+    (dma-buffer-add-ref-vif2 dma-buff
+                             #x8b
+                             (-> *sprite-distorter-sine-tables* entry)
+                             (new 'static 'vif-tag :imm #x404 :cmd (vif-cmd stcycl))
+                             (new 'static 'vif-tag :imm #x160 :num #x8b :cmd (vif-cmd unpack-v4-32))))
   ;; load VU1 code
   (dma-buffer-add-vu-function dma-buff sprite-distort-vu1-block 1)
   0

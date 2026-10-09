@@ -230,6 +230,9 @@
     (login (-> this data s5-0)))
   this)
 
+;; og:preserve-this coop: index of the view being drawn (defined in pc/features/splitscreen-h.gc)
+(define-extern *coop-view* int)
+
 (defun add-pc-wind-data ((dma-buf dma-buffer))
   ;; packet to send 84 qw's
   (let ((packet (the-as dma-packet (-> dma-buf base))))
@@ -238,7 +241,9 @@
     (set! (-> packet vif1) (new 'static 'vif-tag :cmd (vif-cmd pc-port)))
     (set! (-> dma-buf base) (the pointer (&+ packet 16))))
   (quad-copy! (-> dma-buf base) (the pointer (&- (the pointer *wind-work*) 4)) 84)
-  (set! (-> (the (pointer uint32) (-> dma-buf base)) 0) (if (paused?) 1 0))
+  ;; og:preserve-this coop: the renderer integrates the wind springs when not "paused". The second
+  ;; view of a split frame reuses them so foliage doesn't sway twice as fast.
+  (set! (-> (the (pointer uint32) (-> dma-buf base)) 0) (if (or (paused?) (nonzero? *coop-view*)) 1 0))
   (&+! (-> dma-buf base) (* 16 84)))
 
 (defun draw-drawable-tree-instance-tie ((arg0 drawable-tree-instance-tie) (arg1 level))

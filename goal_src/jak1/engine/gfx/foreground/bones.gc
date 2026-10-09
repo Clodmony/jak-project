@@ -1039,6 +1039,10 @@
 
 (define *ripple-force-generic* #f)
 
+;; og:preserve-this coop: set by dma-add-process-drawable when the second view draws an object the
+;; first view already drew this frame, so its death timer doesn't advance twice.
+(define *coop-death-timer-done* #f)
+
 (defun draw-bones ((arg0 draw-control) (dma-buf dma-buffer) (arg2 float))
   "Main draw function for all bone-related renderers. Will set up merc, generic and shadow.
    and also add the bones to the calculation list."
@@ -1387,7 +1391,8 @@
                   ))) ;; end geom processing
             ;; advance death timer.
             (when (nonzero? (-> arg0 death-timer))
-              (when (not (paused?))
+              ;; og:preserve-this coop: once per frame, not once per view
+              (when (not (or (paused?) *coop-death-timer-done*))
                 (+! (-> arg0 death-timer) -1)
                 (if (>= (the-as uint 1) (-> arg0 death-timer)) (send-event (-> arg0 process) 'death-end arg0)))))
           (let ((v1-164 (logand (the-as int s2-0) 48)))

@@ -1295,7 +1295,10 @@ void OpenGLRenderer::dispatch_buckets_jak1(DmaFollower& dma,
                                            bool primary_view) {
   // The first thing the DMA chain should be a call to a common default-registers chain.
   // this chain resets the state of the GS. After this is buckets
-  m_category_times.fill(0);
+  // (split screen: the second view adds to the first view's times)
+  if (primary_view) {
+    m_category_times.fill(0);
+  }
 
   m_render_state.buckets_base =
       dma.current_tag_offset() + 16;  // offset by 1 qw for the initial call
@@ -1398,13 +1401,17 @@ void OpenGLRenderer::dispatch_jak1_split_views(DmaFollower& dma,
   // Rely on frustum culling only while split.
   m_render_state.use_occlusion_culling = false;
 
+  // all views have the same size and are copied out before the next one clears, so they share
+  // one framebuffer
+  auto& fbo = m_view_fbo;
+  if (!fbo.matches(rects.at(0).w, rects.at(0).h, settings.msaa_samples)) {
+    fbo.clear();
+    fbo = make_fbo(rects.at(0).w, rects.at(0).h, settings.msaa_samples, true);
+  }
+  m_frames_since_split = 0;
+
   for (int view = 0; view < num_views; view++) {
     const auto& rect = rects.at(view);
-    auto& fbo = m_view_fbos.at(view);
-    if (!fbo.matches(rect.w, rect.h, settings.msaa_samples)) {
-      fbo.clear();
-      fbo = make_fbo(rect.w, rect.h, settings.msaa_samples, true);
-    }
 
     glBindFramebuffer(GL_FRAMEBUFFER, fbo.fbo_id);
     glViewport(0, 0, rect.w, rect.h);
@@ -1564,6 +1571,11 @@ void OpenGLRenderer::dispatch_buckets(DmaFollower dma,
       if (num_views > 1) {
         dispatch_jak1_split_views(dma, prof, settings, num_views);
       } else {
+        // free the split-screen framebuffer once split frames have stopped for a while (menus and
+        // cutscenes are short single-view stretches)
+        if (m_view_fbo.valid && ++m_frames_since_split > 600) {
+          m_view_fbo.clear();
+        }
         dispatch_buckets_jak1(dma, prof, sync_after_buckets);
       }
     } break;

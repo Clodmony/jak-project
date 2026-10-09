@@ -22,7 +22,13 @@ int scePadPortOpen(int port, int slot, void*) {
   return port + 1;
 }
 
-int scePadGetState(int /*port*/, int /*slot*/) {
+int scePadGetState(int port, int /*slot*/) {
+  // local co-op: a player slot without a connected device reports a disconnected pad, so the game
+  // marks it invalid (neutral input, controller-lost pause) instead of keeping the last read.
+  if (Display::GetMainDisplay() &&
+      !Display::GetMainDisplay()->get_input_manager()->coop_port_connected(port)) {
+    return scePadStateDiscon;
+  }
   // pretend we always have a controller connected
   return scePadStateStable;
 }
@@ -77,14 +83,6 @@ int scePadRead(int port, int /*slot*/, u8* rdata) {
     } else {
       pad_data = Display::GetMainDisplay()->get_input_manager()->get_current_data(port);
     }
-  }
-
-  // local co-op: a player slot without a connected device reports a failed read, so the game sees
-  // neutral input for that player instead of another player's device.
-  if (Display::GetMainDisplay() &&
-      !Display::GetMainDisplay()->get_input_manager()->coop_port_connected(port)) {
-    cpad->valid = 0xff;
-    return 32;
   }
 
   if (pad_data) {
