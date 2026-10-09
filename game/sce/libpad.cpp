@@ -79,6 +79,14 @@ int scePadRead(int port, int /*slot*/, u8* rdata) {
     }
   }
 
+  // local co-op: a player slot without a connected device reports a failed read, so the game sees
+  // neutral input for that player instead of another player's device.
+  if (Display::GetMainDisplay() &&
+      !Display::GetMainDisplay()->get_input_manager()->coop_port_connected(port)) {
+    cpad->valid = 0xff;
+    return 32;
+  }
+
   if (pad_data) {
     std::tie(cpad->rightx, cpad->righty) = pad_data.value()->analog_right();
     std::tie(cpad->leftx, cpad->lefty) = pad_data.value()->analog_left();

@@ -472,6 +472,16 @@
 
 (define-extern pc-set-keyboard-enabled! (function symbol none))
 
+;; local co-op (split-screen) device -> player slot assignment. See game/system/hid/coop_slots.h
+(define-extern pc-coop-set-input-enabled! (function symbol none))
+(define-extern pc-coop-input-enabled? (function symbol))
+(define-extern pc-coop-assign-keyboard! (function int symbol))
+(define-extern pc-coop-assign-controller! (function int int symbol))
+(define-extern pc-coop-unassign! (function int none))
+(define-extern pc-coop-begin-join! (function int none)) ;; -1 cancels
+(define-extern pc-coop-auto-assign! (function none))
+(define-extern pc-coop-slot-status (function int int)) ;; bits: 0-1 kind (1 kbm, 2 pad), 2 connected, 3 joining
+
 (define-extern pc-set-mouse-options! (function symbol symbol symbol none))
 
 (define-extern pc-set-mouse-camera-sens! (function float float none))

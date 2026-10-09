@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -7,6 +8,8 @@
 #include <string>
 #include <unordered_map>
 #include <variant>
+
+#include "coop_slots.h"
 
 #include "common/common_types.h"
 
@@ -135,7 +138,8 @@ class InputManager {
   bool auto_hiding_cursor() { return m_auto_hide_mouse || m_mouse.is_camera_being_controlled(); }
   void hide_cursor(const bool hide_cursor);
   bool is_keyboard_enabled() {
-    return m_settings->keyboard_enabled || m_settings->_keyboard_temp_enabled;
+    return m_settings->keyboard_enabled || m_settings->_keyboard_temp_enabled ||
+           (m_coop_enabled && m_keyboard_and_mouse_port >= 0);
   }
   bool is_pressure_sensitivity_enabled() { return m_settings->enable_pressure_sensitivity; }
   bool set_pressure_sensitivity_enabled(bool enabled) {
@@ -145,6 +149,22 @@ class InputManager {
   float axis_scale() { return m_settings->axis_scale; }
   float set_axis_scale(float value) { return m_settings->axis_scale = value; }
   float pressure_scale() { return m_settings->pressure_scale; }
+
+  // -- Local co-op (split-screen) device assignment --
+  // Called from the EE thread. Changes are applied to the port mapping on the graphics thread.
+  // While co-op is enabled, every port (player slot) is fed by exactly one explicitly assigned
+  // device, and the saved single-player port mapping is left untouched.
+  void coop_set_enabled(const bool enabled);
+  bool coop_enabled() const { return m_coop_enabled; }
+  bool coop_assign_keyboard(const int slot);
+  bool coop_assign_controller(const int slot, const int controller_id);
+  void coop_unassign(const int slot);
+  void coop_begin_join(const int slot);
+  void coop_cancel_join();
+  void coop_auto_assign();
+  u32 coop_slot_status(const int slot);
+  /// false if co-op is enabled and no connected device feeds this port
+  bool coop_port_connected(const int port);
 
  private:
   SDL_Window* m_window;
@@ -178,6 +198,18 @@ class InputManager {
   bool m_auto_hide_mouse = true;
   bool m_mouse_currently_hidden = false;
   bool m_ignore_background_controller_events = false;
+
+  /// Local co-op state. m_coop_slots and m_coop_controllers are guarded by m_coop_mtx because
+  /// the EE thread changes assignments while the graphics thread reads SDL events.
+  std::atomic<bool> m_coop_enabled = false;
+  std::atomic<bool> m_coop_mapping_dirty = false;
+  std::atomic<bool> m_coop_restore_legacy = false;
+  std::mutex m_coop_mtx;
+  coop::SlotAssigner m_coop_slots;
+  /// Connected controllers, in the same order as m_available_controllers.
+  std::vector<coop::ConnectedController> m_coop_controllers;
+  void coop_apply_mapping();
+  void coop_update_pending();
 
   /// No inputs will be processed while in this mode the first input detected from the relevant
   /// device type will be used to set the bind and clear the flag

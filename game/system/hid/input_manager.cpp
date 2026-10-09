@@ -146,6 +146,21 @@ void InputManager::refresh_device_list() {
       lg::info("Found {} controllers", m_available_controllers.size());
       m_settings->_keyboard_temp_enabled = false;
     }
+
+    // Local co-op: keep each player's claim across hotplug and override the legacy mapping.
+    {
+      const std::lock_guard<std::mutex> lock(m_coop_mtx);
+      m_coop_controllers.clear();
+      for (const auto& controller : m_available_controllers) {
+        m_coop_controllers.push_back({controller->get_sdl_instance_id(), controller->get_guid()});
+      }
+      if (m_coop_enabled) {
+        if (m_coop_slots.on_controllers_changed(m_coop_controllers)) {
+          lg::info("[coop] controller assignment changed after hotplug");
+        }
+        coop_apply_mapping();
+      }
+    }
   }
 }
 
@@ -178,12 +193,37 @@ void InputManager::hide_cursor(const bool hide_cursor) {
 }
 
 void InputManager::process_sdl_event(const SDL_Event& event) {
+  coop_update_pending();
   // TODO - perhaps should handle `SDL_CONTROLLERDEVICEREMAPPED`?
   // Detect controller connections and disconnects
   if (sdl_util::is_any_event_type(event.type,
                                   {SDL_EVENT_GAMEPAD_ADDED, SDL_EVENT_GAMEPAD_REMOVED})) {
     lg::info("Controller added or removed. refreshing controller device list");
     refresh_device_list();
+  }
+
+  // Local co-op: an unassigned device pressing a button may claim a free (or joining) slot.
+  // The claiming press is consumed so it doesn't leak into gameplay.
+  if (m_coop_enabled && !m_waiting_for_bind &&
+      (event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN || event.type == SDL_EVENT_KEY_DOWN)) {
+    const std::lock_guard<std::mutex> lock(m_coop_mtx);
+    bool claimed = false;
+    if (event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN) {
+      const int instance_id = (int)event.gbutton.which;
+      for (const auto& c : m_coop_controllers) {
+        if (c.instance_id == instance_id) {
+          claimed = m_coop_slots.on_controller_button(instance_id, c.guid);
+          break;
+        }
+      }
+    } else if (!event.key.repeat) {
+      claimed = m_coop_slots.on_keyboard_key();
+    }
+    if (claimed) {
+      lg::info("[coop] device claimed a player slot");
+      coop_apply_mapping();
+      return;
+    }
   }
 
   if (m_data.find(m_keyboard_and_mouse_port) != m_data.end()) {
@@ -261,6 +301,7 @@ void InputManager::finish_polling() {
 }
 
 void InputManager::process_ee_events() {
+  coop_update_pending();
   const std::lock_guard<std::mutex> lock(m_event_queue_mtx);
   // Fully process any events from the EE
   while (!ee_event_queue.empty()) {
@@ -402,6 +443,11 @@ int InputManager::get_controller_index(const int port) {
 }
 
 void InputManager::set_controller_for_port(const int controller_id, const int port) {
+  if (m_coop_enabled) {
+    // co-op owns the port mapping while enabled, don't touch the saved single-player mapping
+    coop_assign_controller(port, controller_id);
+    return;
+  }
   if (controller_id < (int)m_available_controllers.size()) {
     // Reset inputs as this device won't be able to be read from again!
     clear_inputs();
@@ -757,4 +803,114 @@ void InputManager::clear_inputs() {
   for (auto& [port, data] : m_data) {
     data->clear();
   }
+}
+
+// -- Local co-op (split-screen) device assignment --
+
+void InputManager::coop_set_enabled(const bool enabled) {
+  const std::lock_guard<std::mutex> lock(m_coop_mtx);
+  if (enabled == m_coop_enabled) {
+    return;
+  }
+  if (enabled) {
+    if (!m_coop_slots.any_assigned()) {
+      m_coop_slots.auto_assign(m_coop_controllers);
+    } else {
+      m_coop_slots.on_controllers_changed(m_coop_controllers);
+    }
+    m_coop_enabled = true;
+    m_coop_mapping_dirty = true;
+    lg::info("[coop] local co-op input enabled");
+  } else {
+    m_coop_enabled = false;
+    m_coop_restore_legacy = true;
+    lg::info("[coop] local co-op input disabled");
+  }
+}
+
+bool InputManager::coop_assign_keyboard(const int slot) {
+  const std::lock_guard<std::mutex> lock(m_coop_mtx);
+  const bool ok = m_coop_slots.assign_keyboard(slot);
+  m_coop_mapping_dirty = true;
+  return ok;
+}
+
+bool InputManager::coop_assign_controller(const int slot, const int controller_id) {
+  const std::lock_guard<std::mutex> lock(m_coop_mtx);
+  if (controller_id < 0 || controller_id >= (int)m_coop_controllers.size()) {
+    return false;
+  }
+  const auto& c = m_coop_controllers.at(controller_id);
+  const bool ok = m_coop_slots.assign_controller(slot, c.instance_id, c.guid);
+  m_coop_mapping_dirty = true;
+  return ok;
+}
+
+void InputManager::coop_unassign(const int slot) {
+  const std::lock_guard<std::mutex> lock(m_coop_mtx);
+  m_coop_slots.unassign(slot);
+  m_coop_mapping_dirty = true;
+}
+
+void InputManager::coop_begin_join(const int slot) {
+  const std::lock_guard<std::mutex> lock(m_coop_mtx);
+  m_coop_slots.begin_join(slot);
+}
+
+void InputManager::coop_cancel_join() {
+  const std::lock_guard<std::mutex> lock(m_coop_mtx);
+  m_coop_slots.cancel_join();
+}
+
+void InputManager::coop_auto_assign() {
+  const std::lock_guard<std::mutex> lock(m_coop_mtx);
+  m_coop_slots.auto_assign(m_coop_controllers);
+  m_coop_mapping_dirty = true;
+}
+
+u32 InputManager::coop_slot_status(const int slot) {
+  const std::lock_guard<std::mutex> lock(m_coop_mtx);
+  return m_coop_slots.status_bits(slot);
+}
+
+bool InputManager::coop_port_connected(const int port) {
+  if (!m_coop_enabled) {
+    return true;
+  }
+  const std::lock_guard<std::mutex> lock(m_coop_mtx);
+  return (m_coop_slots.status_bits(port) & coop::StatusBits::CONNECTED) != 0;
+}
+
+/// Graphics thread: apply pending co-op changes requested by the EE thread.
+void InputManager::coop_update_pending() {
+  if (m_coop_restore_legacy.exchange(false)) {
+    // back to the single-player mapping (keyboard + saved controller ports)
+    m_keyboard_and_mouse_port = 0;
+    clear_inputs();
+    refresh_device_list();
+  }
+  if (m_coop_mapping_dirty.exchange(false) && m_coop_enabled) {
+    const std::lock_guard<std::mutex> lock(m_coop_mtx);
+    coop_apply_mapping();
+  }
+}
+
+/// Rebuild the port mapping from the co-op slots. Caller holds m_coop_mtx.
+void InputManager::coop_apply_mapping() {
+  m_controller_port_mapping.clear();
+  for (int slot = 0; slot < coop::kMaxPlayers; slot++) {
+    const auto& s = m_coop_slots.slot(slot);
+    if (s.kind != coop::DeviceKind::CONTROLLER || !s.connected) {
+      continue;
+    }
+    for (size_t i = 0; i < m_available_controllers.size(); i++) {
+      if (m_available_controllers[i]->get_sdl_instance_id() == s.instance_id) {
+        m_controller_port_mapping[slot] = (int)i;
+        break;
+      }
+    }
+  }
+  m_keyboard_and_mouse_port = m_coop_slots.keyboard_slot();
+  // inputs held on a device that changed owner must not stay stuck on the old slot
+  clear_inputs();
 }

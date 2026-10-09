@@ -771,6 +771,66 @@ void pc_set_controller(u32 controller_id, u32 port) {
   }
 }
 
+// -- Local co-op (split-screen) device assignment --
+
+void pc_coop_set_input_enabled(u32 sym_val) {
+  if (Display::GetMainDisplay()) {
+    Display::GetMainDisplay()->get_input_manager()->coop_set_enabled(symbol_to_bool(sym_val));
+  }
+}
+
+u32 pc_coop_input_enabled() {
+  if (Display::GetMainDisplay()) {
+    return bool_to_symbol(Display::GetMainDisplay()->get_input_manager()->coop_enabled());
+  }
+  return bool_to_symbol(false);
+}
+
+u32 pc_coop_assign_keyboard(u32 slot) {
+  if (Display::GetMainDisplay()) {
+    return bool_to_symbol(
+        Display::GetMainDisplay()->get_input_manager()->coop_assign_keyboard((int)slot));
+  }
+  return bool_to_symbol(false);
+}
+
+u32 pc_coop_assign_controller(u32 slot, u32 controller_id) {
+  if (Display::GetMainDisplay()) {
+    return bool_to_symbol(Display::GetMainDisplay()->get_input_manager()->coop_assign_controller(
+        (int)slot, (int)controller_id));
+  }
+  return bool_to_symbol(false);
+}
+
+void pc_coop_unassign(u32 slot) {
+  if (Display::GetMainDisplay()) {
+    Display::GetMainDisplay()->get_input_manager()->coop_unassign((int)slot);
+  }
+}
+
+void pc_coop_begin_join(s32 slot) {
+  if (Display::GetMainDisplay()) {
+    if (slot < 0) {
+      Display::GetMainDisplay()->get_input_manager()->coop_cancel_join();
+    } else {
+      Display::GetMainDisplay()->get_input_manager()->coop_begin_join((int)slot);
+    }
+  }
+}
+
+void pc_coop_auto_assign() {
+  if (Display::GetMainDisplay()) {
+    Display::GetMainDisplay()->get_input_manager()->coop_auto_assign();
+  }
+}
+
+u64 pc_coop_slot_status(u32 slot) {
+  if (Display::GetMainDisplay()) {
+    return Display::GetMainDisplay()->get_input_manager()->coop_slot_status((int)slot);
+  }
+  return 0;
+}
+
 u32 pc_get_keyboard_enabled() {
   if (Display::GetMainDisplay()) {
     return bool_to_symbol(Display::GetMainDisplay()->get_input_manager()->is_keyboard_enabled());
@@ -1157,6 +1217,15 @@ void init_common_pc_port_functions(
   make_func_symbol_func("pc-get-controller-index", (void*)pc_get_controller_index);
   make_func_symbol_func("pc-set-controller!", (void*)pc_set_controller);
   make_func_symbol_func("pc-get-keyboard-enabled?", (void*)pc_get_keyboard_enabled);
+  // local co-op (split-screen) device -> player slot assignment
+  make_func_symbol_func("pc-coop-set-input-enabled!", (void*)pc_coop_set_input_enabled);
+  make_func_symbol_func("pc-coop-input-enabled?", (void*)pc_coop_input_enabled);
+  make_func_symbol_func("pc-coop-assign-keyboard!", (void*)pc_coop_assign_keyboard);
+  make_func_symbol_func("pc-coop-assign-controller!", (void*)pc_coop_assign_controller);
+  make_func_symbol_func("pc-coop-unassign!", (void*)pc_coop_unassign);
+  make_func_symbol_func("pc-coop-begin-join!", (void*)pc_coop_begin_join);
+  make_func_symbol_func("pc-coop-auto-assign!", (void*)pc_coop_auto_assign);
+  make_func_symbol_func("pc-coop-slot-status", (void*)pc_coop_slot_status);
   make_func_symbol_func("pc-set-keyboard-enabled!", (void*)pc_set_keyboard_enabled);
   make_func_symbol_func("pc-set-mouse-options!", (void*)pc_set_mouse_options);
   make_func_symbol_func("pc-set-mouse-camera-sens!", (void*)pc_set_mouse_camera_sens);
