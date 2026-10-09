@@ -671,6 +671,36 @@
        (new 'static 'game-option :option-type (game-option-type on-off) :name (text-id discord-rpc) :scale #t)
        (new 'static 'game-option :option-type (game-option-type on-off) :name (text-id cutscene-skips) :scale #t)
        (new 'static 'game-option :option-type (game-option-type on-off) :name (text-id speedrunner-mode) :scale #t)
+       ;; og:preserve-this coop: PC local co-op (not saved: co-op always starts off)
+       (new 'static
+            'game-option
+            :option-type (game-option-type on-off)
+            :name (text-id local-coop)
+            :scale #t
+            :on-confirm
+            (lambda ()
+              (if (-> *coop* enabled?) (coop-start) (coop-stop))
+              (set! (-> *coop* enabled?) (coop-active?))
+              (none)))
+       (new 'static
+            'game-option
+            :option-type (game-option-type on-off)
+            :name (text-id local-coop-top-bottom)
+            :scale #t
+            :on-confirm
+            (lambda ()
+              (set! (-> *coop* layout) (if (-> *coop* top-bottom?) (coop-split-layout top-bottom) (coop-split-layout side-by-side)))
+              (none)))
+       (new 'static
+            'game-option
+            :option-type (game-option-type confirmation)
+            :name (text-id local-coop-auto-assign)
+            :scale #t
+            :on-confirm
+            (lambda ()
+              ;; on-off-backup holds the yes/no answer
+              (if (-> *progress-state* on-off-backup) (pc-coop-auto-assign!))
+              (none)))
        (new 'static 'game-option :option-type (game-option-type button) :name (text-id back) :scale #t)))
 
 (define *gfx-ps2-options*
@@ -2142,6 +2172,8 @@
   (set! (-> *misc-options* 1 value-to-modify) (&-> *pc-settings* discord-rpc?))
   (set! (-> *misc-options* 2 value-to-modify) (&-> *pc-settings* skip-movies?))
   (set! (-> *misc-options* 3 value-to-modify) (&-> *pc-settings* speedrunner-mode?))
+  (set! (-> *misc-options* 4 value-to-modify) (&-> *coop* enabled?))
+  (set! (-> *misc-options* 5 value-to-modify) (&-> *coop* top-bottom?))
   (set! (-> *camera-options* 0 value-to-modify) (&-> *pc-settings* first-camera-h-inverted?))
   (set! (-> *camera-options* 1 value-to-modify) (&-> *pc-settings* first-camera-v-inverted?))
   (set! (-> *camera-options* 2 value-to-modify) (&-> *pc-settings* third-camera-h-inverted?))
@@ -3470,7 +3502,7 @@
              (hide-progress-icons)
              (draw-options self 115 25 0.82))
             (((progress-screen settings) (progress-screen settings-title)) (hide-progress-icons) (draw-options self 115 25 0.78))
-            (((progress-screen misc-options)) (hide-progress-icons) (draw-options self 115 25 0.79))
+            (((progress-screen misc-options)) (hide-progress-icons) (draw-options self 115 25 0.70)) ;; og:preserve-this coop: 0.79 -> 0.70, three more options
             (((progress-screen music-player)) (hide-progress-icons) (draw-options self 128 21 0.82))
             (((progress-screen flava-player)) (hide-progress-icons) (draw-options self 128 21 0.82))
             (((progress-screen speedrun-options)) (hide-progress-icons) (draw-notice-screen self) (draw-options self 155 25 0.65))
