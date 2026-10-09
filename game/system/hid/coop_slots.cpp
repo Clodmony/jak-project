@@ -138,12 +138,21 @@ void SlotAssigner::note_controllers(const std::vector<ConnectedController>& cont
   }
 }
 
-void SlotAssigner::auto_assign(const std::vector<ConnectedController>& controllers) {
+void SlotAssigner::auto_assign(const std::vector<ConnectedController>& controllers,
+                               int player1_instance_id) {
   note_controllers(controllers);
   unassign_all();
   if (controllers.size() >= 2) {
-    assign_controller(0, controllers[0].instance_id, controllers[0].guid);
-    assign_controller(1, controllers[1].instance_id, controllers[1].guid);
+    size_t first = 0;
+    for (size_t i = 0; i < controllers.size(); i++) {
+      if (player1_instance_id >= 0 && controllers[i].instance_id == player1_instance_id) {
+        first = i;
+        break;
+      }
+    }
+    const size_t second = first == 0 ? 1 : 0;
+    assign_controller(0, controllers[first].instance_id, controllers[first].guid);
+    assign_controller(1, controllers[second].instance_id, controllers[second].guid);
   } else {
     assign_keyboard(0);
     if (controllers.size() == 1) {
