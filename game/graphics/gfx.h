@@ -72,6 +72,9 @@ struct GfxGlobalSettings {
   // multi-sampled anti-aliasing sample count. 1 = disabled.
   int msaa_samples = 1;
 
+  // Jak 1 local co-op: split-screen layout (see SplitscreenLayout.h)
+  int splitscreen_layout = 0;
+
   // brightness and contrast values set from GOAL (see jak 3)
   int brightness_contrast_color = 0;
   int brightness_contrast_alpha = 128;

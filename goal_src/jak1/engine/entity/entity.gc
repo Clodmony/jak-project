@@ -1098,7 +1098,7 @@
                        (cond
                          ;; og:preserve-this check for actor culling setting
                          ((and (#if PC_PORT
-                                 (or (with-pc (not (-> *pc-settings* ps2-actor-vis?))) (is-object-visible? s4-2 (-> sv-32 vis-id)))
+                                 (or (with-pc (not (-> *pc-settings* ps2-actor-vis?))) (coop-active?) (is-object-visible? s4-2 (-> sv-32 vis-id)))
                                  (is-object-visible? s4-2 (-> sv-32 vis-id)))
                                (not (logtest? (-> sv-32 perm status) (entity-perm-status bit-9 bit-10))))
                           (when (not (or (-> sv-32 process) (logtest? (-> sv-32 perm status) (entity-perm-status bit-0 dead)) s0-1))

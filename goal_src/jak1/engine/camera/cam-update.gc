@@ -237,7 +237,8 @@
   (when (not *start-timer*)
     (set! *timer-value* 0)
     0)
-  (dotimes (gp-1 2)
+  ;; og:preserve-this coop: level-distance drives level/mood decisions, they follow player 1's view
+  (dotimes (gp-1 (if (zero? *coop-view*) 2 0))
     (let ((s5-1 (-> *level* level gp-1)))
       (when (!= (-> s5-1 status) 'inactive)
         (let ((a0-14 (new-stack-vector0)))
@@ -259,6 +260,7 @@
   (update! *camera-smush-control*)
   (cond
     ((or (= *master-mode* 'pause) (= *master-mode* 'progress) *progress-process*))
+    ((nonzero? *coop-view*)) ;; og:preserve-this coop: count down once per frame, not per view
     ((>= *camera-look-through-other* 2) (set! *camera-look-through-other* 1))
     ((and (= *camera-look-through-other* 1) (!= *master-mode* 'menu)) (set! *camera-look-through-other* 0) 0))
   (cond
@@ -404,6 +406,9 @@
   (set! (-> *instance-tie-work* guard-plane 1 quad) (-> *math-camera* guard-plane 1 quad))
   (set! (-> *instance-tie-work* guard-plane 2 quad) (-> *math-camera* guard-plane 2 quad))
   (set! (-> *instance-tie-work* guard-plane 3 quad) (-> *math-camera* guard-plane 3 quad))
-  (update-visible *math-camera*)
-  (if (not (paused?)) (update-wind *wind-work* *wind-scales*))
+  ;; og:preserve-this coop: vis-bits are shared per level and wind is simulation, both follow view 0.
+  ;; (the renderer ignores occlusion vis on split-screen frames)
+  (when (zero? *coop-view*)
+    (update-visible *math-camera*)
+    (if (not (paused?)) (update-wind *wind-work* *wind-scales*)))
   #f)

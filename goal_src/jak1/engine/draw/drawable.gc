@@ -444,7 +444,8 @@
          (vf5 :class vf))
     (init-vf0-vector)
     (let ((sv-16 arg0))
-      (logclear! (-> arg1 status) (draw-status was-drawn))
+      ;; og:preserve-this coop: was-drawn means "drawn in any view", so only the first view clears it
+      (if (zero? *coop-view*) (logclear! (-> arg1 status) (draw-status was-drawn)))
       (when (not (logtest? (-> arg1 status) (draw-status hidden no-anim no-skeleton-update)))
         ;; og:preserve-this scratchpad
         (let ((s4-0 (-> (scratchpad-object terrain-context) work foreground joint-work temp-mtx vector 2))
@@ -505,7 +506,8 @@
                                  (set! (-> lgt dir0 levels x) 0.0)
                                  (- 1.0 lgt-interp))))))))
                  (if *teleport* (set! cur-interp interp))
-                 (when (not (or (paused?) (= interp cur-interp)))
+                 ;; og:preserve-this coop: ramp once per frame, not once per view
+                 (when (not (or (paused?) (= interp cur-interp) (nonzero? *coop-view*)))
                    (let ((f0-15 (- cur-interp interp)))
                      (set! cur-interp
                            (cond
@@ -635,6 +637,8 @@
 (set-vector! (-> *hud-lights* ambient) 0.5 0.5 0.5 1.0)
 
 (defun dma-add-process-drawable-hud ((arg0 process-drawable) (arg1 draw-control) (arg2 symbol) (arg3 dma-buffer))
+  ;; og:preserve-this coop: a player's hud is only drawn in that player's view
+  (if (and (coop-split-frame?) (!= (coop-process-player arg0) *coop-view*)) (return #f))
   (logclear! (-> arg1 status) (draw-status was-drawn))
   (when (not (logtest? (-> arg1 status) (draw-status hidden no-anim no-skeleton-update)))
     (let ((v1-6 (the-as vu-lights (+ 64 (scratchpad-object int))))
@@ -654,6 +658,8 @@
 
 ;; og:preserve-this added
 (defun dma-add-process-drawable-hud-merc ((pd process-drawable) (dc draw-control) (arg2 symbol) (buf dma-buffer))
+  ;; og:preserve-this coop: a player's hud is only drawn in that player's view
+  (if (and (coop-split-frame?) (!= (coop-process-player pd) *coop-view*)) (return #f))
   (logclear! (-> dc status) (draw-status was-drawn))
   (when (not (logtest? (-> dc status) (draw-status hidden no-anim no-skeleton-update)))
     (let ((vu-lights (scratchpad-object vu-lights :offset 64))
@@ -1077,6 +1083,8 @@
   (debug-init-buffer (bucket-id debug-no-zbuf)
                      (new 'static 'gs-zbuf :zbp #x1c0 :psm (gs-psm ct24) :zmsk #x1)
                      (new 'static 'gs-test :zte #x1 :ztst (gs-ztest always)))
+  ;; og:preserve-this coop: split-screen frames get a second group of buckets for player 2's view
+  (coop-frame-start (-> disp frames new-frame-idx frame))
   ;; setup our drawing offset for even/odd offset
   (set-draw-env-offset (-> disp frames new-frame-idx draw) 2048 2048 odd-even)
   ;; read controllers
@@ -1116,6 +1124,8 @@
                                  (the-as bucket-id bucket-idx)
                                  a2-0
                                  (the-as (pointer dma-tag) a3-4)))))
+    ;; og:preserve-this coop: finish player 2's group of buckets on split-screen frames
+    (coop-frame-finish this-frame)
     ;; append a FLUSHE and IRQ to end the calc-buf
     (let* ((v1-14 this-calc-buf)
            (a0-10 (the-as object (-> v1-14 base))))

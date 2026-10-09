@@ -571,6 +571,7 @@
 (define-extern pc-renderer-tree-set-lod (function pc-renderer-tree-type int none))
 
 (define-extern pc-set-letterbox (function int int none))
+(define-extern pc-set-splitscreen-layout! (function int none)) ;; coop: 0 side-by-side, 1 top-bottom
 
 (define-extern pc-set-collision (function symbol none))
 
