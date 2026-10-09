@@ -42,6 +42,8 @@
     target-billy-game
     (target-clone-anim handle)
     (target-continue continue-point)
+    target-coop-respawn
+    (target-coop-spawn vector)
     (target-death symbol)
     target-demo
     (target-double-jump float float)

@@ -427,9 +427,15 @@
       (suspend-for (-> *coop* respawn-delay))
       ;; wait for the other player to stand somewhere safe
       (let ((other (coop-other-player-target self)))
-        (until (coop-target-ready? other)
+        (until (or (not (coop-active?)) (coop-target-ready? other))
           (suspend)
           (set! other (coop-other-player-target self)))
+        ;; co-op was stopped while we waited: finish the original single player death
+        (when (not (coop-active?))
+          (coop-set-hidden self #f)
+          (initialize! (-> self game) 'dead (the-as game-save #f) (the-as string #f))
+          (set-time! (-> self state-time))
+          (anim-loop))
         (let ((pos (coop-safe-position-near other (new 'stack-no-clear 'vector))))
           (format 0 "[coop] player ~D respawns next to player ~D~%" (+ 1 (coop-process-player self)) (- 2 (coop-process-player self)))
           (reset! (-> self fact) 'health)
@@ -675,9 +681,23 @@
 
 (define *coop-manager* (the-as (pointer process) #f))
 
+;; *ACTOR-bank* values before co-op raised them, restored by coop-stop
+(define *coop-saved-actor-bank* (new 'static 'actor-bank))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; start / stop
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defun coop-set-save-folder ((name string))
+  "Co-op saves go to their own folder (saves/coop), so single-player saves are never overwritten.
+  A running auto-save is stopped first so it can't write into the other folder, and auto-save stays
+  off until the player picks a slot in the save menu (the remembered slot belongs to the other folder)."
+  (let ((save-proc (handle->process (-> *game-info* auto-save-proc))))
+    (if save-proc (send-event save-proc 'die)))
+  (pc-set-memcard-namespace! name)
+  (set! (-> *game-info* auto-save-which) -1)
+  (set! (-> *setting-control* default auto-save) #f)
+  (none))
 
 (defun coop-start ()
   "Start local co-op: install the player contexts, enable per-slot input, spawn player 2."
@@ -697,6 +717,10 @@
     ;; player 2's pad buzzes like player 1's
     (set! (-> *cpad-list* cpads (-> *coop* p2-pad) buzz) (-> *cpad-list* cpads 0 buzz))
     (pc-coop-set-input-enabled! #t)
+    (coop-set-save-folder "coop")
+    (set! (-> *coop-saved-actor-bank* birth-dist) (-> *ACTOR-bank* birth-dist))
+    (set! (-> *coop-saved-actor-bank* pause-dist) (-> *ACTOR-bank* pause-dist))
+    (set! (-> *coop-saved-actor-bank* birth-max) (-> *ACTOR-bank* birth-max))
     (when (not *coop-manager*)
       (set! *coop-manager* (process-spawn-function process coop-manager-loop :name 'coop-manager :to *default-pool*)))
     (format 0 "[coop] local co-op started~%"))
@@ -715,6 +739,11 @@
     (set! (-> *coop* split?) #f)
     (set! *ear-trans-override* #f)
     (pc-coop-set-input-enabled! #f)
+    (coop-set-save-folder "")
+    ;; back to the single player actor distances (pc-settings re-applies "force actors" if it's on)
+    (set! (-> *ACTOR-bank* birth-dist) (-> *coop-saved-actor-bank* birth-dist))
+    (set! (-> *ACTOR-bank* pause-dist) (-> *coop-saved-actor-bank* pause-dist))
+    (set! (-> *ACTOR-bank* birth-max) (-> *coop-saved-actor-bank* birth-max))
     (when *coop-manager*
       (deactivate (-> *coop-manager* 0))
       (set! *coop-manager* #f))
