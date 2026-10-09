@@ -579,7 +579,10 @@
 (defbehavior level-setup target ()
   (let ((gp-0 (-> self current-level)))
     (set! (-> self current-level) (level-get-target-inside *level*))
-    (if (and (-> self current-level) (>= (-> *level-task-data-remap* length) (-> self current-level info index)))
+    ;; og:preserve-this coop: the per-level play time is session state, count it once
+    (if (and (-> self current-level)
+             (zero? (coop-process-player self))
+             (>= (-> *level-task-data-remap* length) (-> self current-level info index)))
       (+! (-> *game-info* in-level-time (-> *level-task-data-remap* (+ (-> self current-level info index) -1)))
           (- (current-time) (-> *display* old-base-frame-counter))))
     (if (and (or (not gp-0) (!= (-> gp-0 name) (-> self current-level name))) (-> self current-level))
@@ -1223,8 +1226,10 @@
   (set! (-> self game) *game-info*)
   (move-to-point! (-> self control) (-> arg0 trans))
   (set! (-> self control camera-pos quad) (-> arg0 trans quad))
-  ;; og:preserve-this coop: player 2 reads its own pad
+  ;; og:preserve-this coop: player 2 reads its own pad, and numbers its attacks in its own range
+  ;; (some enemies keep attack ids as int32, so the range starts well inside it)
   (set! (-> self control cpad) (-> *cpad-list* cpads (if (zero? (coop-process-player self)) 0 (-> *coop* p2-pad))))
+  (if (nonzero? (coop-process-player self)) (set! (-> self control target-attack-id) #x40000000))
   (set! (-> self control current-surface) (new 'process 'surface))
   (set! (-> self control current-surface name) 'current)
   (set! (-> self control current-surface active-hook) nothing)

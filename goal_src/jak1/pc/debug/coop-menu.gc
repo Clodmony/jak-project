@@ -1,0 +1,26 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; Local split-screen co-op (PC port addition): debug menu. Debug builds only.
+;; Appended after default-menu-pc.gc, which looks up root menu items by position.
+
+(declare-file (debug))
+
+(when (-> *debug-menu-context* root-menu)
+  (debug-menu-append-item
+    (-> *debug-menu-context* root-menu)
+    (debug-menu-make-from-template
+      *debug-menu-context*
+      '(menu "Local Co-op"
+            (function "Start co-op" #f ,(lambda () (coop-start)))
+            (function "Stop co-op" #f ,(lambda () (coop-stop)))
+            (flag "Top/bottom split" #f ,(lambda (arg (msg debug-menu-msg))
+                                          (if (= msg (debug-menu-msg press)) (coop-toggle-layout))
+                                          (= (-> *coop* layout) (coop-split-layout top-bottom))))
+            (function "Player 2: join with next button" #f ,(lambda () (pc-coop-begin-join! 1)))
+            (function "Player 1: join with next button" #f ,(lambda () (pc-coop-begin-join! 0)))
+            (function "Auto-assign devices" #f ,(lambda () (pc-coop-auto-assign!)))
+            (function "Respawn player 2 near player 1" #f ,(lambda () (coop-respawn-player2-near-player1)))
+            (flag "World follows nearest player" #f ,(dm-lambda-boolean-flag (-> *coop* nearest-world?)))
+            (flag "Distance leash" #f ,(dm-lambda-boolean-flag (-> *coop* leash?)))
+            (flag "Show co-op info" #f ,(dm-lambda-boolean-flag *coop-show-info*))))))
