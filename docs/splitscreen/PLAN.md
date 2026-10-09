@@ -32,11 +32,11 @@ credit the toucher; orbs/cells/flies go to the shared `*game-info*`), per-player
 player's HUD in their own view), no friendly fire, distance leash (60 m) plus residency guard,
 debug-menu toggle, per-player death/respawn, either player can pause.
 
-Open for B:
-1. Playtest in Geyser Rock / Sandover (needs the user's game assets). Suggested area: Geyser Rock
-   (training level: small, no vehicles, one level loaded). Then Sandover village and beach.
-2. HUD text/particles in narrow views (aspect, ownership of HUD particles, see COMPATIBILITY.md).
-3. Water volumes for the second player (deep water, dark eco, lava).
+Done for B (2026-10-10, tested in game, see TESTING.md): playtest in Sandover/beach/jungle with two
+virtual pads, HUD and 2d proportions in split views, water volumes for the second player, player 2
+in menus and NPC conversations.
+
+Open for B: HUD particle callbacks (player 1's context), keyboard steps of the test plan.
 
 ### C. Reliable local sessions
 
