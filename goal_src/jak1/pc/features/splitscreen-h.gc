@@ -216,6 +216,18 @@
         (logior! (-> p1-pad button0-rel 0) pause-buttons))))
   (none))
 
+(defun coop-merge-menu-buttons ()
+  "Called right after service-cpads: in menus and while paused, player 2's buttons count as player 1's,
+   so either player can use the shared pause/progress menus (they read pad 0). Gameplay only runs
+   in 'game mode, so it never sees the merged buttons."
+  (when (and (coop-active?) (!= *master-mode* 'game))
+    (let ((p1-pad (-> *cpad-list* cpads 0))
+          (p2-pad (-> *cpad-list* cpads (-> *coop* p2-pad))))
+      (when (zero? (logand (-> p2-pad valid) 128))
+        (logior! (-> p1-pad button0-abs 0) (-> p2-pad button0-abs 0))
+        (logior! (-> p1-pad button0-rel 0) (-> p2-pad button0-rel 0)))))
+  (none))
+
 ;; the last grab that also held the other player: the player it was meant for, and the partner
 (define *coop-grab-main* (the-as handle #f))
 (define *coop-grab-partner* (the-as handle #f))

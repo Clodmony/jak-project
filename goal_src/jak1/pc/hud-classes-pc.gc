@@ -64,7 +64,7 @@
 (defmacro hud-pc-make-icon (obj max &key skel &key x &key y &key z &key scale-x &key scale-y &key (entity #f))
   `(when (< (-> ,obj nb-of-icons) ,max)
     (let ((icon-idx (-> ,obj nb-of-icons)))
-      (set! (-> ,obj icons icon-idx) (new 'static 'hud-icon))
+      (set! (-> ,obj icons icon-idx) (new 'process 'hud-icon)) ;; coop: per hud, not shared between players' huds
       (let ((new-manipy (manipy-spawn (new 'static 'vector :w 1.0) ,entity ,skel #f :to ,obj)))
         (when new-manipy
           (set! (-> (-> new-manipy) draw dma-add-func) dma-add-process-drawable-hud-with-hud-lights)

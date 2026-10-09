@@ -1091,6 +1091,8 @@
   (set-draw-env-offset (-> disp frames new-frame-idx draw) 2048 2048 odd-even)
   ;; read controllers
   (service-cpads)
+  ;; og:preserve-this coop: either player can use the shared menus
+  (coop-merge-menu-buttons)
   ;; now we are ready to run a frame!
   (none))
 

@@ -6,8 +6,18 @@
 ;; DECOMP BEGINS
 
 (defmethod relocate ((this hud) (arg0 int))
-  (dotimes (v1-0 (-> this nb-of-particles))
-    (if (nonzero? (-> this particles v1-0 part)) (&+! (-> this particles v1-0 part) arg0)))
+  ;; og:preserve-this coop: particles and icons are allocated on the hud's own heap (they were static,
+  ;; and two players' huds overwrote each other's), so they move with the hud. Same range test as
+  ;; process relocate. The memory is copied after this, so the old addresses are still valid here.
+  (let ((lo (the-as int (&-> this type)))
+        (hi (the-as int (+ (+ (-> this allocated-length) -4 (-> process size)) (the-as int this)))))
+    (dotimes (v1-0 (-> this nb-of-particles))
+      (if (nonzero? (-> this particles v1-0 part)) (&+! (-> this particles v1-0 part) arg0))
+      (let ((a0-1 (the-as int (-> this particles v1-0))))
+        (if (and (>= a0-1 lo) (< a0-1 hi)) (&+! (-> this particles v1-0) arg0))))
+    (dotimes (v1-1 (-> this nb-of-icons))
+      (let ((a0-2 (the-as int (-> this icons v1-1))))
+        (if (and (>= a0-2 lo) (< a0-2 hi)) (&+! (-> this icons v1-1) arg0)))))
   (the-as hud ((method-of-type process relocate) this arg0)))
 
 (defmethod deactivate ((this hud))
