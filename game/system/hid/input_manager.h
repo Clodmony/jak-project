@@ -208,6 +208,12 @@ class InputManager {
   coop::SlotAssigner m_coop_slots;
   /// Connected controllers, in the same order as m_available_controllers.
   std::vector<coop::ConnectedController> m_coop_controllers;
+  /// The player chose devices (assign/unassign/join). Otherwise enabling co-op auto-assigns.
+  bool m_coop_explicit_assignment = false;
+  /// Keyboard/mouse writes go here when co-op leaves keyboard/mouse without a player, so its
+  /// command binds (fullscreen, screenshot, imgui) still run.
+  std::shared_ptr<PadData> m_unassigned_kbm_data = std::make_shared<PadData>();
+  void coop_release_kbm_actions();
   void coop_apply_mapping();
   void coop_update_pending();
 

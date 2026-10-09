@@ -102,8 +102,19 @@ bool SlotAssigner::on_controllers_changed(const std::vector<ConnectedController>
     }
   }
   // 2. a newly connected, unassigned controller of the same model refills a disconnected slot
+  // (an idle pad of the same model that was already connected doesn't take it over)
   for (const auto& c : controllers) {
     if (slot_for_controller(c.instance_id) >= 0) {
+      continue;
+    }
+    bool known = false;
+    for (int id : m_known_ids) {
+      if (id == c.instance_id) {
+        known = true;
+        break;
+      }
+    }
+    if (known) {
       continue;
     }
     for (int i = 0; i < kMaxPlayers; i++) {
@@ -116,10 +127,19 @@ bool SlotAssigner::on_controllers_changed(const std::vector<ConnectedController>
       }
     }
   }
+  note_controllers(controllers);
   return changed;
 }
 
+void SlotAssigner::note_controllers(const std::vector<ConnectedController>& controllers) {
+  m_known_ids.clear();
+  for (const auto& c : controllers) {
+    m_known_ids.push_back(c.instance_id);
+  }
+}
+
 void SlotAssigner::auto_assign(const std::vector<ConnectedController>& controllers) {
+  note_controllers(controllers);
   unassign_all();
   if (controllers.size() >= 2) {
     assign_controller(0, controllers[0].instance_id, controllers[0].guid);

@@ -676,11 +676,14 @@
              (sphere-in-view-frustum? (the-as sphere gp-1))
              (sphere-in-view-frustum? (the-as sphere (begin (*! (-> gp-1 w) 8.0) gp-1))))))))))
 
+(define *sparticle-ignore-frustum?* #f)
+
 (defmethod spawn ((this sparticle-launch-control) (arg0 vector))
   (set! (-> this center quad) (-> arg0 quad))
   ;; og:preserve-this
   ;; check if we are visible (remove this check to force particles to be drawn.)
-  (if (not (or (is-visible? this arg0) (logtest? (-> this group flags) (sp-group-flag always-draw screen-space))))
+  ;; coop: with two views a launcher can't be culled against one camera (*sparticle-ignore-frustum?*)
+  (if (not (or *sparticle-ignore-frustum?* (is-visible? this arg0) (logtest? (-> this group flags) (sp-group-flag always-draw screen-space))))
     (return (the-as object 0)))
   (let ((s4-0 *particle-300hz-timer*)
         (s5-0 (-> this last-spawn-time)))

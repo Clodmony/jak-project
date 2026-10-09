@@ -104,6 +104,19 @@ TEST(CoopSlots, IdenticalModelReconnectOnlyFillsDisconnectedSlot) {
   EXPECT_EQ(a.slot_for_controller(11), 1);
 }
 
+TEST(CoopSlots, IdlePadOfSameModelDoesNotTakeOverDisconnectedSlot) {
+  SlotAssigner a;
+  a.auto_assign({{10, kXbox}});                          // keyboard = P1, pad 10 = P2
+  a.on_controllers_changed({{10, kXbox}, {12, kXbox}});  // a second identical pad, unassigned
+  EXPECT_EQ(a.slot_for_controller(12), -1);
+  a.on_controllers_changed({{12, kXbox}});  // P2's pad drops
+  EXPECT_FALSE(a.status_bits(1) & StatusBits::CONNECTED);
+  EXPECT_EQ(a.slot_for_controller(12), -1);
+  // P2's pad comes back with a new instance id
+  EXPECT_TRUE(a.on_controllers_changed({{12, kXbox}, {13, kXbox}}));
+  EXPECT_EQ(a.slot_for_controller(13), 1);
+}
+
 TEST(CoopSlots, JoinFlow) {
   SlotAssigner a;
   a.assign_keyboard(0);

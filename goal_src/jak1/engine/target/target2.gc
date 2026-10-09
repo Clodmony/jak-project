@@ -477,7 +477,8 @@
         ((and (= message 'query) (= (-> block param 0) 'mode)) (-> self state name))
         (else
          (case message
-           (('end-mode) (go target-stance))
+           ;; og:preserve-this coop: a grabber that ends the mode directly also frees the other player
+           (('end-mode) (coop-grab-other-player self #f) (go target-stance))
            (('play-anim)
             (let ((v0-0 (the-as object (-> block param 0)))) (set! (-> self control unknown-uint20) (the-as uint v0-0)) v0-0))
            (('clone-anim) (go target-clone-anim (process->handle (the-as process (-> block param 0)))))
