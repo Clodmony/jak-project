@@ -43,8 +43,9 @@ Open for B:
 1. Progress-menu entry for co-op (start/stop, layout, device assignment), stored in a separate
    `coop-settings.gc` next to `pc-settings.gc` (never add keys to `pc-settings.gc`: other OpenGOAL
    builds sharing the folder would reject the whole file).
-2. Separate co-op save namespace in `game/kernel/common/kmemcard.cpp` (e.g. `saves/coop/`), switched
-   in `coop-start`/`coop-stop`, auto-save disabled until a co-op slot is chosen.
+2. Done (compiles and unit tested, not playtested): separate co-op save folder `saves/coop/`
+   (`mc_set_namespace` in `game/kernel/common/kmemcard.cpp`), switched in `coop-start`/`coop-stop`,
+   auto-save off until a slot is chosen in the save menu.
 3. Device disconnection UI (the slot status already reports "disconnected").
 4. Cutscene entry/exit validation per cutscene type (pov-camera, process-taskable, fuel cell).
 5. Level transitions (warp gates, elevators) with both players.

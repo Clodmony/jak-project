@@ -1734,6 +1734,7 @@ s32 InitHeapAndSymbol() {
   make_function_symbol_from_c("mc-get-slot-info", (void*)MC_get_status);
   make_function_symbol_from_c("mc-makefile", (void*)MC_makefile);
   make_function_symbol_from_c("kset-language", (void*)MC_set_language);
+  make_function_symbol_from_c("pc-set-memcard-namespace!", (void*)MC_set_namespace);
 
   // set *debug-segment*
   auto ds_symbol = intern_from_c("*debug-segment*");

@@ -121,7 +121,8 @@ the same behaviour as the existing PC "force actors" option, without changing th
 - `target-death`: if the other player is in play, skip the world freeze, the streamed death movie and
   `initialize! 'dead`; go to `target-coop-respawn` (hidden, no collision, waits `respawn-delay`, then
   respawns at the other player's last safe ground with full health). If both are down, the original
-  single checkpoint reload runs once.
+  single checkpoint reload runs once. If co-op is stopped while a player waits to respawn, that
+  player finishes the original death (checkpoint reload).
 - Friendly fire is off: a player's touch-tracker (red-eco or flut flop) never attacks the other
   player (`touch-tracker-idle`, `generic-obs.gc`). Player 2's attack ids start at `#x40000000`, so
   enemies that de-duplicate hits by id don't drop one player's hit.
@@ -131,6 +132,17 @@ the same behaviour as the existing PC "force actors" option, without changing th
   player 2 controller loss injects a pause (`coop-merge-pause-buttons`).
 - Pad 1 debug/cheat binds (Billy skip, plant boss skip, lightning mole, balloon lurker steering,
   retail debug cheats) are disabled while co-op runs, since pad 1 is player 2.
+
+## Saves and settings
+
+- Co-op saves live in their own folder, `saves/coop/` (`mc_set_namespace`, `kmemcard.cpp`;
+  GOAL `pc-set-memcard-namespace!`). `coop-start` switches to it and `coop-stop` back. A save or load
+  that is running at the switch finishes in the old folder first. Any auto-save process is stopped
+  and auto-save stays off until the player picks a slot, because the remembered slot belongs to the
+  other folder.
+- `coop-start` saves `*ACTOR-bank*` and `coop-stop` restores it, so single player doesn't keep the
+  co-op actor distances.
+- Nothing is added to `pc-settings.gc` (other builds sharing the folder would reject unknown keys).
 
 ## Source map (verified)
 

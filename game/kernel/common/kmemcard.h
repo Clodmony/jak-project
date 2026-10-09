@@ -5,6 +5,8 @@
  * Memory card interface. Very messy code.
  */
 
+#include <string>
+
 #include "common/common_types.h"
 
 #include "game/kernel/common/Ptr.h"
@@ -146,3 +148,7 @@ u64 MC_load(s32 card_idx, s32 file_idx, Ptr<u8> data);
 void MC_makefile(s32 port, s32 size);
 void MC_get_status(s32 slot, Ptr<mc_slot_info> info);
 u32 MC_check_result();
+
+// PC port: per-mode save folder (Jak 1 local co-op).
+s32 mc_set_namespace(const std::string& name);
+s32 MC_set_namespace(u32 name);

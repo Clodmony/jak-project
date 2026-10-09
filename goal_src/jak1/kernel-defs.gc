@@ -215,6 +215,8 @@
 
 ;; mc-makefile
 (define-extern kset-language (function language-enum int))
+;; PC port: save subfolder ("" = normal saves). Returns 1 applied, 0 deferred until the running save/load ends, -1 bad name.
+(define-extern pc-set-memcard-namespace! (function string int))
 
 (define-extern *debug-segment* symbol)
 

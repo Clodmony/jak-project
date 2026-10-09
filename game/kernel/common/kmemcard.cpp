@@ -16,6 +16,7 @@
 #include "common/util/FileUtil.h"
 #include "common/util/Timer.h"
 
+#include "game/kernel/common/kscheme.h"
 #include "game/sce/sif_ee.h"
 #include "game/sce/sif_ee_memcard.h"
 
@@ -107,8 +108,19 @@ const char* mc_get_filename_no_dir(GameVersion version, int ndx) {
   return filenames[ndx];
 }
 
+// PC port: optional subfolder of the save directory. Empty (the default) is the normal save
+// location. Jak 1 local co-op uses "coop", so co-op saves never touch single-player saves.
+static std::string mc_namespace;
+// a namespace change requested while a memory card operation was running, applied after it.
+static std::string mc_pending_namespace;
+static bool mc_namespace_pending = false;
+
 inline fs::path mc_get_filename(GameVersion version, int ndx) {
-  return file_util::get_user_memcard_dir(version) / mc_get_filename_no_dir(version, ndx);
+  auto dir = file_util::get_user_memcard_dir(version);
+  if (!mc_namespace.empty()) {
+    dir /= mc_namespace;
+  }
+  return dir / mc_get_filename_no_dir(version, ndx);
 }
 
 int mc_get_total_bank_size(GameVersion) {
@@ -132,6 +144,9 @@ void kmemcard_init_globals() {
   p4 = 0;
   // memset(&dirent, 0, sizeof(sceMcTblGetDir));
   memset(&header, 0, sizeof(McHeader));
+  mc_namespace.clear();
+  mc_pending_namespace.clear();
+  mc_namespace_pending = false;
 }
 
 /*!
@@ -527,6 +542,12 @@ void MC_run() {
       }
     }
   }
+
+  // a save/load that was running when the namespace changed finishes in the old namespace.
+  if (mc_namespace_pending && op.operation == MemoryCardOperationKind::NO_OP && !callback) {
+    mc_namespace = mc_pending_namespace;
+    mc_namespace_pending = false;
+  }
 }
 
 /////////////////////////
@@ -542,6 +563,36 @@ void MC_run() {
 void MC_set_language(s32 l) {
   printf("Language set to %d\n", l);
   language = l;
+}
+
+/*!
+ * PC port: store saves in a subfolder of the save directory ("" for the normal location).
+ * Only letters, digits, '-' and '_' are allowed. If a save or load is running, the change is
+ * applied once it finishes, so a save never ends up split between two folders. Returns 1 if
+ * applied, 0 if deferred, -1 if the name is invalid.
+ */
+s32 mc_set_namespace(const std::string& name) {
+  if (name.size() > 32) {
+    return -1;
+  }
+  for (char c : name) {
+    if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' ||
+          c == '_')) {
+      return -1;
+    }
+  }
+  if (op.operation != MemoryCardOperationKind::NO_OP || callback) {
+    mc_pending_namespace = name;
+    mc_namespace_pending = true;
+    return 0;
+  }
+  mc_namespace = name;
+  mc_namespace_pending = false;
+  return 1;
+}
+
+s32 MC_set_namespace(u32 name) {
+  return mc_set_namespace(name ? std::string(Ptr<String>(name).c()->data()) : std::string());
 }
 
 /*!
