@@ -11,19 +11,21 @@ has **not been run or playtested**. Everything below is compilation and automate
 | --- | --- | --- | --- |
 | C++ build (Linux, clang 18, Release) | `cmake -B build --preset=Release-linux-clang && cmake --build build -j4` | pass | pass, no new warnings |
 | All Jak 1 GOAL code | `./build/goalc/goalc --game jak1 --cmd '(make-group "all-code")'` | 519 targets | 522 targets |
-| Test suite | `./test.sh` | 1669 passed | 1685 passed |
+| Test suite | `./test.sh` | 1669 passed | 1687 passed |
 | Type consistency (Jak 1/2/3/X) | part of `./test.sh` | pass | pass |
 
 The test suite builds the engine and loads it into a real GOAL runtime (`WithGameTests`), which runs
 the load-time code of every edited engine file (this caught a load-order crash during development).
 It also compiles all Jak 2/3/X code, which caught an edit to a file shared with Jak 2/3.
 
-New unit tests (`build/goalc-test --gtest_filter='CoopSlots*:SplitscreenLayout*'`):
+New unit tests (`build/goalc-test --gtest_filter='CoopSlots*:SplitscreenLayout*:MemcardNamespace*'`):
 - `test/test_coop_slots.cpp` (12 tests): default assignment for 0/1/2 controllers, one device can't
   feed two players, identical controllers (same GUID) are separate players, disconnect keeps the
   claim and never moves another player's device, reconnect of the same model, join flow.
 - `test/test_splitscreen_layout.cpp` (4 tests): view rects for both layouts, divider, bounds for
   odd and tiny framebuffers.
+- `test/test_memcard_namespace.cpp` (2 tests): the co-op save folder name is accepted, path-like
+  names (`..`, slashes, too long) are rejected.
 
 ## Manual test plan (needs your game files)
 
@@ -62,7 +64,8 @@ connect, then `(coop-start)`. Turn on "Local Co-op" > "Show co-op info" for the 
 | 16 | Debug menu: "Top/bottom split" | Views stack vertically with correct aspect |
 | 17 | Talk to an NPC / collect a power cell | Single full-screen view during the cutscene, both players held, both views back afterwards |
 | 18 | "Stop co-op" | Player 2 disappears, single view, single-player input mapping back |
-| 19 | Save in co-op, quit, check single-player saves | (Not implemented yet: co-op uses the normal save slots. See PLAN.md milestone C) |
+| 19 | Save in co-op to a slot, stop co-op, open the load menu | The co-op save is in `<config>/OpenGOAL/jak1/saves/coop/`; the normal `saves/` files are unchanged (compare timestamps); the load menu shows single-player saves again |
+| 20 | Die as player 1 while player 2 is alive, then "Stop co-op" before player 1 respawns | Player 1 reappears through the normal checkpoint reload; the game doesn't stay stuck with an invisible Jak |
 
 ## Performance measurement (not done)
 
