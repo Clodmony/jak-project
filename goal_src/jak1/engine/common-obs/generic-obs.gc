@@ -1061,7 +1061,7 @@
     (let ((s5-0 (new-stack-matrix0))
           (gp-0 (vector-reset! (new 'stack-no-clear 'vector))))
       ;; og:preserve-this changed for pc port
-      (let* ((f0-0 (analog-input-horizontal-third (the-as int (+ (-> *cpad-list* cpads 0 rightx) -128)) 0.0 48.0 110.0 -1.0))
+      (let* ((f0-0 (analog-input-horizontal-third (the-as int (+ (-> (coop-camera-cpad) rightx) -128)) 0.0 48.0 110.0 -1.0))
              (f1-1 (* -546.13336 f0-0))
              (f0-2 (fmin 546.13336 (fmax -546.13336 f1-1))))
         (matrix-axis-angle! s5-0 (-> *camera* local-down) f0-2))
@@ -1111,7 +1111,7 @@
   (when *camera-read-analog*
     (let ((gp-0 (new-stack-matrix0)))
       ;; og:preserve-this changed for pc port
-      (let* ((f0-0 (analog-input-horizontal-third (the-as int (+ (-> *cpad-list* cpads 0 rightx) -128)) 0.0 48.0 110.0 -1.0))
+      (let* ((f0-0 (analog-input-horizontal-third (the-as int (+ (-> (coop-camera-cpad) rightx) -128)) 0.0 48.0 110.0 -1.0))
              (f1-1 (* -546.13336 f0-0))
              (f0-2 (fmin 546.13336 (fmax -546.13336 f1-1))))
         ;; og:preserve-this changed for high fps

@@ -368,6 +368,10 @@
   (projectile 22) ;; 4194304
   (attackable 23) ;; 8388608
   (death 24) ;; 16777216
+
+  ;; og:preserve-this coop: PC local co-op (split-screen)
+  (player2 25) ;; owned by player 2 (its target, daxter, cameras, hud). inherited by children.
+  (coop-p2-near 26) ;; a world process that currently runs in player 2's context (see splitscreen.gc)
   )
 
 (declare-type process basic)
