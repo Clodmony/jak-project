@@ -1168,6 +1168,8 @@
       (sync-path 0 0)
       (service-cpads))
     (toggle-pause))
+  ;; og:preserve-this coop: either player can pause the shared session
+  (coop-merge-pause-buttons)
   (when (or (not *progress-process*) (can-go-back? (-> *progress-process* 0)))
     (if (or (cpad-pressed? 0 select r3 start) ;; push pause
             (and (logtest? (-> *cpad-list* cpads 0 valid) 128) ;; controller lost

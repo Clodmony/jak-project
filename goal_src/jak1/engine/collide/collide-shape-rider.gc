@@ -277,5 +277,6 @@
 (defmethod alloc-riders ((this collide-shape) (arg0 int))
   (if (-> this riders)
     (format 0 "ERROR: colide-shape::alloc-riders is being called multiple times!~%")
-    (set! (-> this riders) (new 'process 'collide-sticky-rider-group arg0)))
+    ;; og:preserve-this coop: room for every player, almost all platforms ask for a single rider
+    (set! (-> this riders) (new 'process 'collide-sticky-rider-group (max arg0 COOP_MAX_PLAYERS))))
   (none))

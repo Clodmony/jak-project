@@ -664,7 +664,7 @@
         (billy-game-update)
         (if (or (zero? (-> self num-snacks))
                 (and (zero? (-> self num-rats)) (-> self passed-last-stage))
-                (and *cheat-mode* (cpad-pressed? 1 x)))
+                (and *cheat-mode* (not (coop-active?)) (cpad-pressed? 1 x))) ;; og:preserve-this coop: pad 1 is player 2
           (go billy-done))
         (suspend)))
   :post

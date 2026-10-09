@@ -318,7 +318,8 @@
         (set! (-> gp-0 x) 1.0)
         (set! (-> s5-0 x) 1.0)
         (loop
-          (when (cpad-pressed? 1 r3)
+          ;; og:preserve-this coop: pad 1 is player 2 during co-op
+          (when (and (not (coop-active?)) (cpad-pressed? 1 r3))
             (suspend)
             (go fleeing-nav-enemy-debug))
           (let ((s2-0 (new-stack-vector0))
@@ -419,7 +420,8 @@
       ((-> (method-of-type nav-enemy nav-enemy-chase) enter)))
   :trans
     (behavior ()
-      (when (cpad-pressed? 1 r3)
+      ;; og:preserve-this coop: pad 1 is player 2 during co-op
+      (when (and (not (coop-active?)) (cpad-pressed? 1 r3))
         (logclear! (-> *cpad-list* cpads 1 button0-abs 0) (pad-buttons r3))
         (logclear! (-> *cpad-list* cpads 1 button0-rel 0) (pad-buttons r3))
         (go lightning-mole-debug-run)))

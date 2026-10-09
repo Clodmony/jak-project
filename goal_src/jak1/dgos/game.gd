@@ -348,4 +348,5 @@
   "ticky.o"
   "hud-classes-pc.o" ;; added
   "splitscreen.o" ;; added (coop)
+  "coop-menu.o" ;; added (coop, debug only)
  ))

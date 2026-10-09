@@ -13089,6 +13089,7 @@
     (target-falling symbol)
     (target-continue continue-point)
     (target-coop-spawn vector) ;; coop: PC local co-op
+    target-coop-respawn ;; coop: PC local co-op
     (target-warp-out vector vector)
     target-tube
     (target-tube-death symbol)

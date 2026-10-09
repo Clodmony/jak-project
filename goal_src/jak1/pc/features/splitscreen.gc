@@ -268,7 +268,10 @@
   (and tgt
        (not (logtest? (-> tgt state-flags) (state-flags grabbed dying)))
        (-> tgt state)
-       (not (or (= (-> tgt state name) 'target-continue) (= (-> tgt state name) 'target-coop-spawn)))
+       (not (or (= (-> tgt state name) 'target-continue)
+                (= (-> tgt state name) 'target-coop-spawn)
+                (= (-> tgt state name) 'target-coop-respawn)
+                (= (-> tgt state name) 'target-death)))
        (logtest? (-> tgt control status) (cshape-moving-flags onground))))
 
 (defun coop-safe-position-near ((tgt target) (result vector))
@@ -301,6 +304,8 @@
 
 (defun coop-despawn-player2 ()
   "Kill player 2's target and camera rig."
+  ;; world processes that run later this tick must not pick player 2
+  (set! (-> *coop-players* valid 1) #f)
   (let ((prev (coop-switch-context 1)))
     (when *target*
       (deactivate *target*)
@@ -351,6 +356,103 @@
       (suspend)
       (logior! (-> self control status) (cshape-moving-flags onsurf onground tsurf))
       (go target-stance)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; level streaming
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defun coop-on-level-leaving ((lev level))
+  "Level loading follows player 1. Called right before lev is discarded or hidden: if player 2 is
+   in it (and not in the other displayed level), bring player 2 to player 1 before its floor goes."
+  (let ((p1 (coop-player-target 0))
+        (p2 (coop-player-target 1)))
+    (when p2
+      (let ((pos (-> p2 control trans))
+            (safe-elsewhere #f))
+        (dotimes (i (-> *level* length))
+          (let ((other (-> *level* level i)))
+            (if (and (!= other lev) (= (-> other status) 'active) (-> other display?) (point-in-boxes? other pos))
+              (set! safe-elsewhere #t))))
+        (when (and (not safe-elsewhere) (= (coop-level-containing *level* pos (the-as level #f)) lev))
+          (format 0 "[coop] level ~A goes away under player 2, bringing player 2 to player 1~%" (-> lev name))
+          (coop-despawn-player2)
+          (if p1 (coop-spawn-player2 (coop-safe-position-near p1 (new 'stack-no-clear 'vector))))))))
+  (none))
+
+(defun coop-send-to-other-player ((msg symbol) (arg symbol))
+  "Level lifecycle events reach the current player's camera and target directly (*camera*, *target*),
+   send them to the other player's too."
+  (let* ((other (- 1 *coop-player*))
+         (cam (handle->process (-> (coop-context other) camera-handle)))
+         (tgt (coop-player-target other)))
+    (if cam (send-event cam msg arg))
+    (if tgt (send-event tgt msg arg)))
+  (none))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; death and respawn
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defun coop-set-hidden ((tgt target) (hidden symbol))
+  "Hide or show a player and their daxter."
+  (let ((sidekick (if (-> tgt sidekick) (ppointer->process (-> tgt sidekick)))))
+    (cond
+      (hidden
+       (logior! (-> tgt draw status) (draw-status hidden))
+       (if sidekick (logior! (-> (the-as process-drawable sidekick) draw status) (draw-status hidden))))
+      (else
+       (logclear! (-> tgt draw status) (draw-status hidden))
+       (if sidekick (logclear! (-> (the-as process-drawable sidekick) draw status) (draw-status hidden))))))
+  (none))
+
+;; a player that died while the other one is still playing. Entered from target-death instead of
+;; the world reset. Waits respawn-delay, then respawns at the other player's last safe ground.
+;; If the other player goes down meanwhile, their target-death does the shared checkpoint reload.
+(defstate target-coop-respawn (target)
+  :event
+    (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+      (case message
+        (('attack 'attack-or-shove 'attack-invinc 'shove 'touched 'get-pickup) #f)
+        (else (target-generic-event-handler proc argc message block))))
+  :exit
+    (behavior ()
+      (coop-set-hidden self #f)
+      (restore-collide-with-as (-> self control)))
+  :code
+    (behavior ()
+      (set-time! (-> self state-time))
+      (coop-set-hidden self #t)
+      (clear-collide-with-as (-> self control))
+      (set! (-> self control transv quad) (the-as uint128 0))
+      (suspend-for (-> *coop* respawn-delay))
+      ;; wait for the other player to stand somewhere safe
+      (let ((other (coop-other-player-target self)))
+        (until (coop-target-ready? other)
+          (suspend)
+          (set! other (coop-other-player-target self)))
+        (let ((pos (coop-safe-position-near other (new 'stack-no-clear 'vector))))
+          (format 0 "[coop] player ~D respawns next to player ~D~%" (+ 1 (coop-process-player self)) (- 2 (coop-process-player self)))
+          (reset! (-> self fact) 'health)
+          (reset! (-> self fact) 'eco)
+          (reset-target-state #t)
+          (target-exit)
+          (quaternion-copy! (-> self control quat-for-control) (-> other control quat-for-control))
+          (move-to-point! (-> self control) pos)
+          (rot->dir-targ! (-> self control))
+          (set! (-> self control camera-pos quad) (-> self control trans quad))
+          (set! (-> self control last-known-safe-ground quad) (-> pos quad))))
+      ;; our own camera (we run in our own player context)
+      (send-event *camera* 'change-state cam-string 0)
+      (send-event *camera* 'teleport)
+      (coop-set-hidden self #f)
+      (restore-collide-with-as (-> self control))
+      (target-timed-invulnerable (seconds 2) self)
+      (ja-channel-set! 1)
+      (ja :group! eichar-stance-loop-ja)
+      (suspend)
+      (logior! (-> self control status) (cshape-moving-flags onsurf onground tsurf))
+      (go target-stance))
+  :post target-no-stick-post)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; player 2's view
@@ -481,7 +583,19 @@
        (handle->process (-> *coop-context-p2* combiner-handle))
        (= *master-mode* 'game)
        (not (movie?))
+       (zero? *camera-look-through-other*) ;; npc conversations and other cutscene cameras
        (not *progress-process*)))
+
+(defun coop-neutralize-pad ((pad cpad-info))
+  "This tick, the player using pad reads no input."
+  (set! (-> pad button0-abs 0) (pad-buttons))
+  (set! (-> pad button0-rel 0) (pad-buttons))
+  (set! (-> pad leftx) (the-as uint 128))
+  (set! (-> pad lefty) (the-as uint 128))
+  (set! (-> pad rightx) (the-as uint 128))
+  (set! (-> pad righty) (the-as uint 128))
+  (set! (-> pad stick0-speed) 0.0)
+  (none))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; session manager
@@ -489,10 +603,29 @@
 
 (define *coop-p2-missing-time* (the-as time-frame 0))
 
+(define *coop-ear* (new 'global 'vector))
+
+(defun coop-player-in-play? ((tgt target))
+  (and tgt
+       (not (logtest? (-> tgt state-flags) (state-flags dying)))
+       (-> tgt state)
+       (!= (-> tgt state name) 'target-death)
+       (!= (-> tgt state name) 'target-coop-respawn)))
+
 (defun coop-update ()
   "Once per simulation tick: player positions, player 2 respawn, distance leash, split decision."
   (+! (-> *coop* sim-ticks) 1)
   (set! (-> *coop* split?) (if (coop-want-split?) #t #f))
+  ;; one listener for the session: player 1 (level streaming and ambients follow player 1 too)
+  (let ((p1 (coop-player-target 0)))
+    (set! (-> *coop-ear* quad) (-> (if p1 (-> p1 control trans) (camera-pos)) quad))
+    (set! *ear-trans-override* *coop-ear*))
+  ;; during cinematics (some skip process-grab?), a player that isn't held by the cutscene stands still
+  (when (or (movie?) (nonzero? *camera-look-through-other*))
+    (dotimes (i COOP_MAX_PLAYERS)
+      (let ((tgt (coop-player-target i)))
+        (if (and tgt (not (logtest? (-> tgt state-flags) (state-flags grabbed))))
+          (coop-neutralize-pad (-> tgt control cpad))))))
   (pc-set-splitscreen-layout! (the-as int (-> *coop* layout)))
   ;; actors near player 2 must exist and run even when player 1's camera is far away or can't see
   ;; them. Same as the "force actors" PC option, without touching the saved setting.
@@ -503,8 +636,9 @@
   (set! (-> *ACTOR-bank* birth-max) 1000)
   (let ((p1 (coop-player-target 0))
         (p2 (coop-player-target 1)))
-    (set! (-> *coop-players* valid 0) (if p1 #t #f))
-    (set! (-> *coop-players* valid 1) (if p2 #t #f))
+    ;; world processes follow the closest player that is in play (not dying or waiting to respawn)
+    (set! (-> *coop-players* valid 0) (if (coop-player-in-play? p1) #t #f))
+    (set! (-> *coop-players* valid 1) (if (coop-player-in-play? p2) #t #f))
     (if p1 (set! (-> *coop-players* pos 0 quad) (-> p1 control trans quad)))
     (if p2 (set! (-> *coop-players* pos 1 quad) (-> p2 control trans quad)))
     (cond
@@ -579,6 +713,7 @@
     (set! (-> *coop* active?) #f)
     (set! (-> *coop* enabled?) #f)
     (set! (-> *coop* split?) #f)
+    (set! *ear-trans-override* #f)
     (pc-coop-set-input-enabled! #f)
     (when *coop-manager*
       (deactivate (-> *coop-manager* 0))
@@ -627,22 +762,3 @@
       (coop-despawn-player2)
       (coop-spawn-player2 (coop-safe-position-near p1 (new 'stack-no-clear 'vector)))))
   (none))
-
-(when (-> *debug-menu-context* root-menu)
-  (debug-menu-append-item
-    (-> *debug-menu-context* root-menu)
-    (debug-menu-make-from-template
-      *debug-menu-context*
-      '(menu "Local Co-op"
-            (function "Start co-op" #f ,(lambda () (coop-start)))
-            (function "Stop co-op" #f ,(lambda () (coop-stop)))
-            (flag "Top/bottom split" #f ,(lambda (arg (msg debug-menu-msg))
-                                          (if (= msg (debug-menu-msg press)) (coop-toggle-layout))
-                                          (= (-> *coop* layout) (coop-split-layout top-bottom))))
-            (function "Player 2: join with next button" #f ,(lambda () (pc-coop-begin-join! 1)))
-            (function "Player 1: join with next button" #f ,(lambda () (pc-coop-begin-join! 0)))
-            (function "Auto-assign devices" #f ,(lambda () (pc-coop-auto-assign!)))
-            (function "Respawn player 2 near player 1" #f ,(lambda () (coop-respawn-player2-near-player1)))
-            (flag "World follows nearest player" #f ,(dm-lambda-boolean-flag (-> *coop* nearest-world?)))
-            (flag "Distance leash" #f ,(dm-lambda-boolean-flag (-> *coop* leash?)))
-            (flag "Show co-op info" #f ,(dm-lambda-boolean-flag *coop-show-info*))))))
