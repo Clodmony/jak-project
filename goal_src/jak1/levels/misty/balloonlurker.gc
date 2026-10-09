@@ -490,9 +490,10 @@
          (set! (-> self throttle-control) (fmax f0-12 (fmin f1-7 (* f2-4 (/ 1.0 f3-3)))))))
      0)
     (else
-     (let ((f0-14 (analog-input (the-as int (-> *cpad-list* cpads 1 leftx)) 128.0 48.0 110.0 -1.0)))
+     ;; og:preserve-this coop: pad 1 is player 2 during co-op, don't steer the balloon with it
+     (let ((f0-14 (analog-input (the-as int (if (coop-active?) 128 (-> *cpad-list* cpads 1 leftx))) 128.0 48.0 110.0 -1.0)))
        (seek! (-> self rudder-control) f0-14 (* 2.0 (seconds-per-frame))))
-     (if (cpad-hold? 1 x)
+     (if (and (not (coop-active?)) (cpad-hold? 1 x))
        (seek! (-> self throttle-control) 1.0 (seconds-per-frame))
        (seek! (-> self throttle-control) 0.0 (* 0.25 (seconds-per-frame))))))
   (seek! (-> self engine-thrust)

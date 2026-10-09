@@ -811,14 +811,15 @@
         ((ja-group? plant-boss-main-intro-ja))
         (else (ja-channel-push! 1 (seconds 0.25))))
       (loop
-        (when (or (and *cheat-mode* (cpad-hold? 1 r3)) (zero? (-> self aphid-count)))
+        ;; og:preserve-this coop: pad 1 is player 2 during co-op
+        (when (or (and *cheat-mode* (not (coop-active?)) (cpad-hold? 1 r3)) (zero? (-> self aphid-count)))
           (ja-no-eval :group! plant-boss-main-idle-ja :num! (seek!) :frame-num 0.0)
           (go plant-boss-vulnerable))
         (ja-no-eval :group! plant-boss-main-idle-ja :num! (seek!) :frame-num 0.0)
         (until (ja-done? 0)
           (suspend)
           (ja :num! (seek!)))
-        (when (and *cheat-mode* (cpad-hold? 1 r3))
+        (when (and *cheat-mode* (not (coop-active?)) (cpad-hold? 1 r3))
           (ja-no-eval :group! plant-boss-main-idle-ja :num! (seek!) :frame-num 0.0)
           (go plant-boss-vulnerable))
         (when (rand-vu-percent? (the-as float 0.2))

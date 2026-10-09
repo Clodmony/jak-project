@@ -453,10 +453,15 @@
     (the-as symbol
             (when gp-0
               (if (type-type? (-> self type) camera-tracker) (set! (-> self grab-target) (process->handle gp-0)))
-              (send-event gp-0 'change-mode 'grab)))))
+              (let ((result (send-event gp-0 'change-mode 'grab)))
+                ;; og:preserve-this coop: hold the other player too
+                (if result (coop-grab-other-player gp-0 #t))
+                result)))))
 
 (defbehavior process-release? process ((arg0 process))
   (let ((gp-0 (command-get-process arg0 *target*)))
+    ;; og:preserve-this coop: release the other player too
+    (coop-grab-other-player gp-0 #f)
     (the-as symbol (if (and gp-0 (send-event gp-0 'query 'mode) 'target-grab) (send-event gp-0 'end-mode) #t))))
 
 (defun camera-change-to ((arg0 string) (arg1 int) (arg2 symbol))
@@ -1323,6 +1328,8 @@
              (cond
                ((= (-> self event) 'attack)
                 (cond
+                  ;; og:preserve-this coop: no friendly fire between players
+                  ((and (= (-> proc type) target) (= (-> v1-1 type) target)) #f)
                   ((= (-> proc type) target)
                    (send-event proc
                                (-> self event)

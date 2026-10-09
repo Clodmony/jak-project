@@ -585,10 +585,15 @@
 
 (defun-extern camera-pos vector)
 
+;; og:preserve-this coop: local co-op uses one listener for the session (player 1), whatever player's
+;; context code runs in. Set once per tick by the co-op manager, #f otherwise.
+(define *ear-trans-override* (the-as vector #f))
+
 (defun ear-trans ()
   "Return the trans for the game ear"
   (cond
     ((or (movie?) *external-cam-mode*) (math-camera-pos))
+    (*ear-trans-override* *ear-trans-override*)
     (*target* (target-pos 0))
     (else (camera-pos))))
 

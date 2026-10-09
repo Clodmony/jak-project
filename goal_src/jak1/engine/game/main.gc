@@ -307,14 +307,15 @@
     (if (and (cpad-hold? 0 left) (cpad-hold? 0 up) (cpad-pressed? 0 select))
       (initialize! *game-info* 'game (the-as game-save #f) "title-start"))
     ;; push R3 to print global heap status. not very useful.
-    (if (cpad-pressed? 1 r3) (inspect global))
+    ;; og:preserve-this coop: pad 1 is player 2 during co-op
+    (if (and (not (coop-active?)) (cpad-pressed? 1 r3)) (inspect global))
     ;; push R3 to display IOP memory stats
-    (when (cpad-hold? 1 r3)
+    (when (and (not (coop-active?)) (cpad-hold? 1 r3))
       ;; grab a dma buffer
       (with-dma-buffer-add-bucket ((dma-buff (if *debug-segment* (-> (current-frame) debug-buf) (-> (current-frame) global-buf))) (bucket-id debug))
         (show-iop-memory dma-buff)))
     ;; push triangle to see level info
-    (if (cpad-pressed? 1 triangle) (not! *display-level-border*)))
+    (if (and (not (coop-active?)) (cpad-pressed? 1 triangle)) (not! *display-level-border*)))
   ;; handle timeouts
   (when (!= *kernel-boot-message* 'play) ;; not regular game mode?
     (let ((timeout (scf-get-timeout))

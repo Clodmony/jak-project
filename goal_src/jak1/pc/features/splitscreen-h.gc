@@ -169,11 +169,82 @@
       (dma-buffer-patch-buckets group BUCKET_COUNT)))
   (none))
 
+(define-extern coop-other-player-target (function process target))
+
+(defun coop-other-player-alive? ((tgt target))
+  "Co-op: is the other player in play (spawned, not dying, not waiting to respawn)?
+   Always #f without co-op, so the original single player death runs."
+  (and (coop-active?)
+       (let ((other (coop-other-player-target tgt)))
+         (and other
+              (not (logtest? (-> other state-flags) (state-flags dying)))
+              (-> other state)
+              (!= (-> other state name) 'target-death)
+              (!= (-> other state name) 'target-coop-respawn)))))
+
+(define *coop-p2-pad-was-valid* #f)
+
+(defun coop-merge-pause-buttons ()
+  "Called right before determine-pause-mode: either player can pause the shared session, and
+   player 2's controller disconnecting pauses it like player 1's does. Pad 0 is overwritten by
+   service-cpads right after, so player 1's gameplay never sees the merged buttons."
+  (when (coop-active?)
+    (let* ((p1-pad (-> *cpad-list* cpads 0))
+           (p2-pad (-> *cpad-list* cpads (-> *coop* p2-pad)))
+           (p2-valid (zero? (logand (-> p2-pad valid) 128)))
+           (pause-buttons (logand (-> p2-pad button0-rel 0) (pad-buttons start select))))
+      (if (and (not p2-valid) *coop-p2-pad-was-valid* (= *master-mode* 'game))
+        (set! pause-buttons (logior pause-buttons (pad-buttons select))))
+      (set! *coop-p2-pad-was-valid* p2-valid)
+      (when (nonzero? pause-buttons)
+        (logior! (-> p1-pad button0-abs 0) pause-buttons)
+        (logior! (-> p1-pad button0-rel 0) pause-buttons))))
+  (none))
+
+(define *coop-grabbed-partner* (the-as handle #f))
+
+(defun coop-grab-other-player ((proc process) (grab symbol))
+  "Co-op: cutscenes, conversations and elevators that grab a player hold the other player too.
+   Only a partner grabbed this way is released this way (it may be held by something else)."
+  (when (and (coop-active?) proc (= (-> proc type) target))
+    (let ((other (coop-other-player-target proc)))
+      (when other
+        (cond
+          (grab
+           (when (and (not (logtest? (-> other state-flags) (state-flags grabbed dying)))
+                      (send-event other 'change-mode 'grab))
+             (set! *coop-grabbed-partner* (process->handle other))))
+          ((= (handle->process *coop-grabbed-partner*) other)
+           (if (= (send-event other 'query 'mode) 'target-grab) (send-event other 'end-mode))
+           (set! *coop-grabbed-partner* (the-as handle #f)))))))
+  (none))
+
+(defun coop-level-containing ((levels level-group) (pos vector) (skip level))
+  "Co-op: the active level (other than skip) whose boxes contain pos, else the closest one."
+  (let ((best (the-as level #f))
+        (best-dist 0.0))
+    (dotimes (i (-> levels length))
+      (let ((lev (-> levels level i)))
+        (when (and (= (-> lev status) 'active) (!= lev skip))
+          (if (point-in-boxes? lev pos) (return lev))
+          (let ((d (vector-vector-distance (-> lev bsp bsphere) pos)))
+            (when (or (not best) (< d best-dist))
+              (set! best lev)
+              (set! best-dist d))))))
+    best))
+
+(define-extern coop-on-level-leaving (function level none))
+
+(define-extern coop-send-to-other-player (function symbol symbol none))
+
+(defmacro coop-level-leaving (lev)
+  "A level is about to be discarded or hidden. Player 2 can't stay in it (streaming follows player 1)."
+  `(if (coop-active?) (coop-on-level-leaving ,lev)))
+
 ;; defined in splitscreen.gc
 (define-extern coop-draw-player2-view (function none))
 (define-extern coop-switch-context (function int int))
 (define-extern coop-start (function symbol))
 (define-extern coop-stop (function none))
 (define-extern coop-player-target (function int target))
-(define-extern coop-other-player-target (function process target))
 (define-extern coop-kill-camera-processes (function none))

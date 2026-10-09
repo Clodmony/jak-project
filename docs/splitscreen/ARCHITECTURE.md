@@ -52,6 +52,8 @@ Consequences, by design:
   player's rig while co-op runs.
 - Manager process `coop-manager` (default pool, once per tick): player position cache, split decision,
   player 2 respawn next to player 1 after `respawn-delay`, distance leash (`leash-distance`, 60 m).
+- Debug menu "Local Co-op" (`goal_src/jak1/pc/debug/coop-menu.gc`, debug builds only): start/stop,
+  layout, device join, respawn, leash, info overlay.
 
 ## Rendering
 
@@ -103,9 +105,32 @@ changes on the graphics thread. GOAL API: `pc-coop-*` in `kernel-defs.gc`.
 
 Level loading, vis and the continue point stay driven by player 1 (camera position,
 `level-distance`, `*load-boundary-target*`). Jak 1 holds two levels; player 2 can't make the game load
-a third. Hence the leash. While co-op runs, actors are spawned and kept running regardless of player
-1's vis and distance (`ps2-actor-vis?` treated as off, birth/pause distance 10000 m), without
-changing the saved setting.
+a third. So:
+- distance leash (60 m): player 2 is brought back next to player 1;
+- residency guard: right before a level is discarded or hidden (`load-state update!`,
+  `level.gc`), `coop-on-level-leaving` brings player 2 to player 1 if player 2 stands in it;
+- player 2's current level (endless-fall height, level-enter events) comes from its own position
+  (`level-get-target-inside`), not from the continue point or player 1's camera;
+- `level-activate`/`level-deactivate` events reach both players' cameras and targets.
+
+While co-op runs, actors are spawned and kept running regardless of player 1's vis and distance:
+the same behaviour as the existing PC "force actors" option, without changing the saved setting.
+
+## Death, interactions, pause
+
+- `target-death`: if the other player is in play, skip the world freeze, the streamed death movie and
+  `initialize! 'dead`; go to `target-coop-respawn` (hidden, no collision, waits `respawn-delay`, then
+  respawns at the other player's last safe ground with full health). If both are down, the original
+  single checkpoint reload runs once.
+- Friendly fire is off: a player's touch-tracker (red-eco or flut flop) never attacks the other
+  player (`touch-tracker-idle`, `generic-obs.gc`). Player 2's attack ids start at `#x40000000`, so
+  enemies that de-duplicate hits by id don't drop one player's hit.
+- `process-grab?`/`process-release?` (cutscenes, talks, elevators) hold and release both players.
+- Moving platforms reserve at least two rider slots.
+- Pause: right before `determine-pause-mode`, player 2's Start/Select are merged into pad 0, and a
+  player 2 controller loss injects a pause (`coop-merge-pause-buttons`).
+- Pad 1 debug/cheat binds (Billy skip, plant boss skip, lightning mole, balloon lurker steering,
+  retail debug cheats) are disabled while co-op runs, since pad 1 is player 2.
 
 ## Source map (verified)
 

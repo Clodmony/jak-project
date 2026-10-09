@@ -612,7 +612,8 @@
        ;;(load-dbg "send activate~%")
        ;; note: this isn't a great name - the level isn't actually activated, just alive.
        (send-event *camera* 'level-activate (-> this name))
-       (send-event *target* 'level-activate (-> this name)))))
+       (send-event *target* 'level-activate (-> this name))
+       (if (coop-active?) (coop-send-to-other-player 'level-activate (-> this name))))))
   this)
 
 (defmethod deactivate ((this level))
@@ -631,6 +632,7 @@
            (update-perm! (-> ent extra perm) 'game (the-as entity-perm-status 1919)))))
      (send-event *camera* 'level-deactivate (-> this name))
      (send-event *target* 'level-deactivate (-> this name))
+     (if (coop-active?) (coop-send-to-other-player 'level-deactivate (-> this name)))
      ;; remove this BSP from the engine. This will stop us from being drawn.
      (remove-by-param1 *background-draw-engine* (-> this bsp))
      ;; track down all the entities and kill them
@@ -906,6 +908,10 @@
 (defmethod level-get-target-inside ((this level-group))
   "Get the level target is in, or one it is close to.
    The distance checks do not work."
+  ;; og:preserve-this coop: player 2's level comes from player 2's own position, not from the continue
+  ;; point or player 1's camera (inside-boxes?). It decides player 2's endless-fall height.
+  (if (and (coop-active?) (nonzero? *coop-player*) *target*)
+    (return (coop-level-containing this (-> *target* control trans) (the-as level #f))))
   (let ((target-trans (target-pos 0)))
     (let ((current-level (-> *game-info* current-continue level)))
       (dotimes (i (-> this length))
@@ -1093,6 +1099,7 @@
               (if (= (-> s4-0 name) (-> this want a1-2 name)) (set! a0-6 #t)))
             (when (not a0-6)
               (format 0 "Discarding level ~A~%" (-> s4-0 name))
+              (coop-level-leaving s4-0) ;; og:preserve-this coop
               (level-status-set! s4-0 'inactive)
               (set! v1-0 #t)
               (#when PC_PORT
@@ -1150,6 +1157,7 @@
                      ((not (-> this want s5-2 display?))
                       (set! (-> s3-1 display?) #f)
                       (format 0 "Turning level ~A off~%" (-> s3-1 name))
+                      (coop-level-leaving s3-1) ;; og:preserve-this coop
                       (deactivate s3-1))
                      (else
                       (format 0 "Setting level ~A display command to ~A~%" (-> this want s5-2 name) (-> this want s5-2 display?))
