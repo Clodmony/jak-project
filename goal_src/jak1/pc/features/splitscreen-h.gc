@@ -285,3 +285,49 @@
 (define-extern coop-stop (function none))
 (define-extern coop-player-target (function int target))
 (define-extern coop-kill-camera-processes (function none))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; water volumes
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; A water-vol tracks one player in its target field (player 1 in co-op). The player it tracks
+;; for player 2 is kept here, keyed by the volume's handle, so the type layout stays as decompiled.
+(defconstant COOP_WATER_VOL_SLOTS 64)
+
+(define *coop-water-vols* (new 'global 'array 'uint64 COOP_WATER_VOL_SLOTS))
+
+(define *coop-water-p2-targets* (new 'global 'array 'uint64 COOP_WATER_VOL_SLOTS))
+
+;; empty slots hold #f handles (a zero handle is not "no process" in GOAL)
+(dotimes (i COOP_WATER_VOL_SLOTS)
+  (set! (-> *coop-water-vols* i) (the-as uint64 #f))
+  (set! (-> *coop-water-p2-targets* i) (the-as uint64 #f)))
+
+;; >0 while water-vol update! runs its per-player passes (it can nest through on-exit-water)
+(define *coop-water-updating* 0)
+
+(defun coop-water-slot ((vol process) (create? symbol))
+  "Index of vol's player 2 slot, -1 if it has none (and create? is #f or the table is full)."
+  (let ((h (the-as uint64 (process->handle vol)))
+        (free -1))
+    (dotimes (i COOP_WATER_VOL_SLOTS)
+      (cond
+        ((= (-> *coop-water-vols* i) h) (return i))
+        ((and (< free 0) (not (handle->process (the-as handle (-> *coop-water-vols* i))))) (set! free i))))
+    (when (and create? (>= free 0))
+      (set! (-> *coop-water-vols* free) h)
+      (set! (-> *coop-water-p2-targets* free) (the-as uint64 #f)))
+    (if create? free -1)))
+
+(defun coop-water-p2-target ((vol process))
+  "The handle of player 2 if vol currently holds them, else #f."
+  (let ((i (coop-water-slot vol #f)))
+    (if (>= i 0) (the-as handle (-> *coop-water-p2-targets* i)) (the-as handle #f))))
+
+(defun coop-water-set-p2-target ((vol process) (h handle))
+  (let ((i (coop-water-slot vol (if (handle->process h) #t #f))))
+    (when (>= i 0)
+      (set! (-> *coop-water-p2-targets* i) (the-as uint64 h))
+      ;; nothing tracked any more: free the slot
+      (if (not (handle->process h)) (set! (-> *coop-water-vols* i) (the-as uint64 #f)))))
+  (none))

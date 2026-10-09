@@ -76,7 +76,10 @@ class SlotAssigner {
 
   /// Default assignment: two or more controllers -> controllers 0 and 1;
   /// otherwise keyboard/mouse is player 1 and the first controller (if any) is player 2.
-  void auto_assign(const std::vector<ConnectedController>& controllers);
+  /// With two or more controllers, player1_instance_id (the pad that is player 1 right now, if
+  /// connected) stays player 1, so starting co-op never moves the current player to slot 2.
+  void auto_assign(const std::vector<ConnectedController>& controllers,
+                   int player1_instance_id = -1);
 
   const SlotState& slot(int slot) const { return m_slots.at(slot); }
   int slot_for_controller(int instance_id) const;
