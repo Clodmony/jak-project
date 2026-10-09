@@ -185,7 +185,7 @@
                    (set-height! s5-2 80)
                    (set! (-> s5-2 flags) (font-flags shadow kerning large))
                    (print-game-text (lookup-text! *common-text* (text-id press-to-use) #f) s5-2 #f 128 22))
-                 (when (and (cpad-pressed? 0 circle) (process-grab? *target*))
+                 (when (and (cpad-pressed? (target-cpad-idx) circle) (process-grab? *target*)) ;; og:preserve-this coop: pad of the player using it
                    (if arg0 (go-virtual ride-down) (go-virtual ride-up))))))))
         (spool-push *art-control* (-> self anim name) 0 self -99.0)
         (suspend))))
