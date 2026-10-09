@@ -2,6 +2,31 @@
 
 > Written with AI assistance (AI-assisted). Newest first.
 
+## 2026-10-10: in-game testing with two virtual pads
+
+Tested in the running game with two virtual gamepads (`scripts/splitscreen/vpad.py`) and the REPL;
+results per step in TESTING.md, including a frame-time measurement.
+
+Fixed:
+- Crash on a later death/respawn: HUD particles and icons were `'static`, shared by both players'
+  HUDs; one player's HUD dying left the other drawing through freed memory. Now per HUD, moved
+  in `relocate`.
+- A player held during a conversation/cutscene/elevator was never released: the pair's handles
+  were stored in symbols (32 bits) and lost their pid. Also moved the respawn timer into a structure.
+- Player 2 could not use the pause menu (it reads pad 0): player 2's buttons count in menus.
+- Talking, boarding, mounting, warp gates, cannon, periscope, fisherman, yes/no questions read the pad
+  of the player the object serves (`target-cpad-idx`), not pad 0. Player 2 can talk to NPCs.
+- Player 2 swims: water volumes track both players (side table, decompiled layout unchanged).
+- HUD and 2d drawn with the view's aspect ratio in split frames (were squeezed/stretched).
+- The pad that is player 1 stays player 1 when co-op starts.
+- Nearest-player margin 4 m -> 0.25 m: the closer player could not board the boat.
+- German text for the co-op menu entries.
+
+Not tested yet: keyboard steps (5, 27, 28), elevator (22), fisherman minigame (29), stopping co-op
+during a respawn (20), a non-debug boot driven end to end (21).
+
+Next: the untested steps above, then the launcher mod packaging.
+
 ## 2026-10-10: first runtime session (PAL disc, keyboard only, no controllers)
 
 First time the game ran with co-op. Linux (CachyOS), 1920x1080 window, debug boot (`-boot -fakeiso
@@ -30,7 +55,6 @@ Fixed from this session:
 
 Confirmed known gap: player 2 does not swim (stands on the sea floor in `target-stance`).
 
-Next: water/swimming for player 2, playtest with two controllers.
 
 ## 2026-10-09: saves, in-game toggle, review fixes (compiles, not playtested)
 

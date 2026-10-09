@@ -99,40 +99,63 @@ connect, then `(coop-start)`. Turn on "Local Co-op" > "Show co-op info" for the 
 
 ## Runtime results
 
-2026-10-10, branch at the commit that adds this section. CachyOS Linux, 1920x1080 window, Jak 1 PAL,
-debug boot, Sandover (debug boot starts there, not Geyser Rock). No controllers: player 1 on
-keyboard, player 2 without a device. Players were moved with `move-to-point!`, damaged with
-`'attack` events and pickups were reached by teleporting, all from the REPL. Evidence: REPL output
-and in-game screenshots (`pc-screen-shot`).
+2026-10-10, CachyOS Linux, KDE Wayland, 1920x1080 window (internal 2560x1440, MSAA 8), Jak 1 PAL,
+debug boot (starts in Sandover, not Geyser Rock).
+
+How: two virtual gamepads (`scripts/splitscreen/vpad.py`, Xbox 360 type, same model so they share
+a GUID) feed real SDL input; game state was read and set from the REPL (`goalc` + `(lt)`), and
+pictures taken with `(pc-screen-shot)`. Teleports (`move-to-point!`), `'attack` events and task flags
+were used to set scenes up quickly; the actions under test (moving, attacking, talking, boarding,
+menus, unplugging) went through the pads. No keyboard input was injected: the desktop was in use.
 
 | # | Result |
 | --- | --- |
-| 1 | Pass (short check): single player boots and plays normally with co-op never started |
-| 2 | Pass after fix: player 2 appears 1.5 m beside player 1 after ~2 s, window splits, one `gk` process. Before the fix co-op paused immediately when player 2 had no device, and player 2 spawned inside player 1 |
-| 3, 4, 5 | Not tested (needs controllers) |
-| 6 | Pass: over 10.5 s, sim ticks +1579, view-2 passes +1579, integral frames +1579, `base-frame-counter` +3158 (= 10.5 s at 300/s) |
-| 7 | Pass: with player 2 25 m away, player 2's view shows houses and water player 1 can't see |
-| 8 | Pass: both players put on one orb in the same frame -> money 1, orb gone |
-| 9 | Partly: each player's own health drops and shows in their own view (enemies and friendly fire not tested) |
-| 10 | Pass: player 2 killed -> `target-death` -> `target-coop-respawn` -> back with 3 health; player 1 unaffected, no world reset |
-| 12 | Pass (incidental): both players fell out of an unloaded level -> one checkpoint reload, player 2 respawned beside player 1 |
-| 15 | Pass: player 2 moved 70 m away -> brought back beside player 1 |
-| 16 | Pass: top/bottom layout, correct proportions |
-| 17, 23 | Pass after fix: player 2 collects a power cell -> victory on player 2, one full-screen view, cell count +1, both views back afterwards. Before the fix player 1 stood in the shot; now hidden for the cinematic |
-| 24 | Pass: progress menu is one full-screen view |
-| Known gap | Player 2 in deep water stands on the sea floor (no swimming) |
+| 1 | Pass: single player with a pad: walk, jump, punch, spin. Note (upstream): with two pads of the same model only one drives single player, the port mapping is per model |
+| 2 | Pass after fixes: two pads, co-op starts, player 2 appears 1.5 m beside player 1, window splits, one `gk` process |
+| 3 | Pass: pad A moves/jumps/attacks only player 1, pad B only player 2 |
+| 4 | Pass: right stick of pad A turns only camera 1 (yaw 154 -> -42), pad B only camera 2 |
+| 5 | Not tested (keyboard) |
+| 6 | Pass: over 10.5 s, sim ticks +1579, view-2 passes +1579, frames +1579, game clock +10.5 s |
+| 7 | Pass: player 2 25 m away sees houses and water player 1 can't |
+| 8 | Pass: both players on one orb in the same frame -> one orb |
+| 9 | Pass: an enemy (lurker puppy) chases and hits the closer player, each player's own health drops, player 2's attacks kill enemies and break crates, point-blank punches/spins between players do nothing |
+| 10, 11 | Pass: either player dies -> respawns beside the other with full health, the other is unaffected, no world reset. 12 death/respawn cycles without a crash (after the HUD fix) |
+| 12 | Pass: both dead -> one checkpoint reload, player 2 respawns beside player 1, shared orbs kept |
+| 13 | Pass: player 2's Start opens the shared menu, Select pauses; after the fix player 2 can also navigate the menu |
+| 14, 26 | Pass: unplugging player 2's pad while walking pauses the session, player 2 stops (neutral input), slot 2 keeps its claim; plugging the same model back in gives player 2 control again |
+| 15 | Pass: player 2 70 m away -> brought back beside player 1 |
+| 16 | Pass: top/bottom layout, correct proportions, HUD correct after the fix |
+| 17, 23 | Pass after fix: power cell collected by player 2 -> victory on player 2, one full-screen view, player 1 hidden for the cinematic, both views back afterwards |
+| 18 | Pass: "Stop co-op" -> single view, player 1 only |
+| 19 | Pass: a co-op save goes to `saves/coop/`; loading it restores the shared progress; after stopping co-op the save slots show the single-player save again; the single-player save files are byte-identical before and after |
+| 20 | Not run |
+| 21 | Partly: the menu flow (Options > Game Options > Misc Options > Local co-op / layout / assign devices) works with the pad in a debug boot and fits on screen; a non-debug boot has no REPL, so it was not driven |
+| 22 | Not completed: the jungle elevator to the plant boss needs that level loaded; the test setup didn't trigger it |
+| 24 | Pass: pause/progress menu is one full-screen view |
+| 25 | Pass: hitting player 2 buzzes only pad 1, hitting player 1 only pad 0 (game side; the virtual pads have no motors) |
+| 27, 28 | Not tested (keyboard) |
+| 29 | Not run (fisherman minigame) |
+| 30 | Pass after fix: both on the fisherman's boat, player 1 boards, the ride plays full-screen with player 2 held, both are free at Misty, player 2 brought over once |
+| 31 | Not conclusive: REPL sampling too coarse to time the death dissolve; code review only |
+| 32 | Code review only (second view doesn't integrate the wind) |
+| 33 | Partly: player 2's hit on a dark vine 55 m from player 1 registers; the puff is not clearly visible in a still screenshot |
+| Water | Pass after fix: player 2 swims, both players in one water volume, leaving clears only that player, deadly water kills player 2 and not player 1 |
+| NPCs | Pass after fix: player 2 talks to an NPC with their own pad, the prompt shows in player 2's view, player 1's button doesn't trigger it, both are released afterwards |
 
-Not run yet: 3-5, 11, 13, 14, 18-22, 25-33, and performance.
+## Performance
 
-## Performance measurement (not done)
+Same machine: AMD Ryzen 7 7700X, Radeon RX 7900 XT (Mesa 26.2.4, radeonsi), CachyOS. Internal
+resolution 2560x1440, MSAA 8, vsync off, frame limit raised to 1000 for the measurement, Sandover at
+the debug start point, camera untouched, 10 s per case, real frames drawn per wall-clock second:
 
-No measurements exist yet: they need the real game and a GPU. Repeatable scene: Geyser Rock at the
-first continue point, camera untouched, co-op info overlay on.
+| Case | fps | ms/frame |
+| --- | --- | --- |
+| Single player | 721 | 1.39 |
+| Co-op side by side | 674 | 1.48 |
+| Co-op top/bottom | 674 | 1.48 |
 
-1. Open the imgui debug bar (F1 in debug builds) and enable the profiler / small profiler window.
-2. Record the frame time with co-op off for 30 s, then with co-op on (side by side) for 30 s.
-3. Report: CPU/GPU model, OS, window and internal resolution, MSAA, vsync/target fps, and the
-   GOAL profiler times for `draw-hook` and `coop-view-2`.
+The second view costs about 0.09 ms per frame in this scene. Busier areas (jungle, many actors) were
+not measured.
 
 Expected cost: GOAL draw work for the second view (background, foreground, bones, merc, sprites)
 and GPU work for a second set of buckets. Simulation cost is unchanged. If a frame takes longer than
