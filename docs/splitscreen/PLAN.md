@@ -20,9 +20,9 @@
 | --- | --- |
 | Baseline build, GOAL compile, test suite | done (see TESTING.md) |
 | 1. Two devices feed independent player slots | implemented + unit tested; not run on hardware |
-| 2. Two real player actors in one world | implemented, compiles; not playtested |
-| 3. Two cameras rendering in one window | implemented, compiles; not playtested |
-| 4. Two views don't advance the simulation twice | by construction (render-only pass); counters in the debug overlay; not playtested |
+| 2. Two real player actors in one world | verified in game 2026-10-10 (REPL-driven, no controllers) |
+| 3. Two cameras rendering in one window | verified in game 2026-10-10, both layouts |
+| 4. Two views don't advance the simulation twice | verified in game 2026-10-10 (tick/pass/frame counters, see TESTING.md step 6) |
 
 ### B. Playable prototype
 

@@ -4,8 +4,10 @@
 
 ## What has been verified, and how
 
-No game assets were available in the development environment (`iso_data/jak1` is empty), so the game
-has **not been run or playtested**. Everything below is compilation and automated tests.
+The first development round had no game assets: everything in the table below is compilation and
+automated tests. A first runtime session followed on 2026-10-10 (see "Runtime results" below):
+keyboard only, no controllers, players driven from the REPL. Steps that need two controllers are
+still unverified.
 
 | Check | Command | Baseline (`efb21c3e`) | Co-op branch |
 | --- | --- | --- | --- |
@@ -39,6 +41,19 @@ cmake -B build --preset=Release-linux-clang && cmake --build build -j8
   --version "ntsc_v1" --config-override '{"decompile_code": false, "levels_extract": true, "allowed_objects": []}'
 ./build/goalc/goalc --game jak1     # then at the g > prompt: (mi)
 ./build/game/gk -v --game jak1 -- -boot -fakeiso -debug    # task boot-game
+```
+
+PAL (or another non-NTSC) disc: the decompiler config and the folder names differ.
+`goalc --cmd` ignores `goal_src/user/<name>/repl-config.json`, and the test-zone custom level
+always looks in `iso_data/jak1` and assumes NTSC unless the disc folder has a `buildinfo.json`
+(written by the launcher's extractor, not by `task extract`). What worked with the disc in
+`iso_data/jak1_pal`:
+
+```sh
+./build/decompiler/decompiler ./decompiler/config/jak1/jak1_config.jsonc ./iso_data ./decompiler_out \
+  --version pal --config-override '{"decompile_code": false, "levels_extract": true, "allowed_objects": []}'
+# buildinfo.json: serial and xxhash64 of the ELF (SCES_503.61), as the launcher extractor writes it
+echo '(mi)' | ./build/goalc/goalc --game jak1 --user <you> --iso-path iso_data/jak1_pal
 ```
 
 Start co-op from the pause menu (any build): Options > Game Options > Misc Options > "Local co-op"
@@ -81,6 +96,33 @@ connect, then `(coop-start)`. Turn on "Local Co-op" > "Show co-op info" for the 
 | 31 | Kill an enemy visible in both views | Its death dissolve plays at normal speed |
 | 32 | Stand in foliage (jungle) with the split on and off | Plants sway at the same speed in both cases |
 | 33 | Player 2 hits a dark vine 40+ m from player 1 with player 1's camera turned away | The puff appears in player 2's view |
+
+## Runtime results
+
+2026-10-10, branch at the commit that adds this section. CachyOS Linux, 1920x1080 window, Jak 1 PAL,
+debug boot, Sandover (debug boot starts there, not Geyser Rock). No controllers: player 1 on
+keyboard, player 2 without a device. Players were moved with `move-to-point!`, damaged with
+`'attack` events and pickups were reached by teleporting, all from the REPL. Evidence: REPL output
+and in-game screenshots (`pc-screen-shot`).
+
+| # | Result |
+| --- | --- |
+| 1 | Pass (short check): single player boots and plays normally with co-op never started |
+| 2 | Pass after fix: player 2 appears 1.5 m beside player 1 after ~2 s, window splits, one `gk` process. Before the fix co-op paused immediately when player 2 had no device, and player 2 spawned inside player 1 |
+| 3, 4, 5 | Not tested (needs controllers) |
+| 6 | Pass: over 10.5 s, sim ticks +1579, view-2 passes +1579, integral frames +1579, `base-frame-counter` +3158 (= 10.5 s at 300/s) |
+| 7 | Pass: with player 2 25 m away, player 2's view shows houses and water player 1 can't see |
+| 8 | Pass: both players put on one orb in the same frame -> money 1, orb gone |
+| 9 | Partly: each player's own health drops and shows in their own view (enemies and friendly fire not tested) |
+| 10 | Pass: player 2 killed -> `target-death` -> `target-coop-respawn` -> back with 3 health; player 1 unaffected, no world reset |
+| 12 | Pass (incidental): both players fell out of an unloaded level -> one checkpoint reload, player 2 respawned beside player 1 |
+| 15 | Pass: player 2 moved 70 m away -> brought back beside player 1 |
+| 16 | Pass: top/bottom layout, correct proportions |
+| 17, 23 | Pass after fix: player 2 collects a power cell -> victory on player 2, one full-screen view, cell count +1, both views back afterwards. Before the fix player 1 stood in the shot; now hidden for the cinematic |
+| 24 | Pass: progress menu is one full-screen view |
+| Known gap | Player 2 in deep water stands on the sea floor (no swimming) |
+
+Not run yet: 3-5, 11, 13, 14, 18-22, 25-33, and performance.
 
 ## Performance measurement (not done)
 

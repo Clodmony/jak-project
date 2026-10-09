@@ -2,6 +2,36 @@
 
 > Written with AI assistance (AI-assisted). Newest first.
 
+## 2026-10-10: first runtime session (PAL disc, keyboard only, no controllers)
+
+First time the game ran with co-op. Linux (CachyOS), 1920x1080 window, debug boot (`-boot -fakeiso
+-debug`), Jak 1 PAL. Players were moved, damaged and killed through the REPL because no
+controllers were connected, so input-driven steps are still open. Results per step are in
+TESTING.md.
+
+Works in the running game: split screen in both layouts, two real players, independent cameras,
+per-view culling, per-player health HUD inside each view, one sim tick per frame with two views
+(sim ticks = view-2 passes = integral frames; game clock at real-time speed), shared orbs and power
+cells (one reward when both players touch the same orb in the same frame), player 2 death and
+respawn without a world reset, both-down checkpoint reload, 60 m leash, full-screen pause/progress
+menu, full-screen power cell cinematic with both views restored afterwards.
+
+Fixed from this session:
+- Co-op start paused the game at once when player 2 had no device: the "player 2 controller
+  lost" pause fired on the frame pad 1 went from the single-player "always connected" to the
+  co-op "no device". It now pauses only when a device assigned to player 2 loses its connection.
+- Player 2 spawned exactly inside player 1. Spawns and respawns now step 1.5 m to the side (or
+  behind), checked with collision probes for a clear path and ground at the same height; falls back
+  to the old spot.
+- The idle player stood in the other player's cinematic (power cell victory). During a cinematic
+  about one player the other one and their daxter are hidden, and shown again afterwards (also when
+  co-op is stopped mid-cinematic).
+- Removed `coop-settings frame-views`, a stats field nothing wrote (always 0).
+
+Confirmed known gap: player 2 does not swim (stands on the sea floor in `target-stance`).
+
+Next: water/swimming for player 2, playtest with two controllers.
+
 ## 2026-10-09: saves, in-game toggle, review fixes (compiles, not playtested)
 
 - Co-op saves in their own folder `saves/coop/`; auto-save stays off until a slot is picked.
