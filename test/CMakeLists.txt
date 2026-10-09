@@ -20,6 +20,7 @@ add_executable(goalc-test
         ${CMAKE_CURRENT_LIST_DIR}/test_goal_trampolines_arm64.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_common_util.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_coop_slots.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/test_splitscreen_layout.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_pretty_print.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_math.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_zstd.cpp

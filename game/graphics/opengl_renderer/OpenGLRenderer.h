@@ -54,6 +54,10 @@ struct RenderOptions {
   // when enabled, does a `glFinish()` after each major rendering pass. This blocks until the GPU
   // is done working, making it easier to profile GPU utilization.
   bool gpu_sync = false;
+
+  // Jak 1 local co-op: how to lay out the views when the game sends more than one view per frame.
+  // See SplitscreenLayout.h. Single-view frames ignore this.
+  int splitscreen_layout = 0;
 };
 
 /*!
@@ -76,8 +80,19 @@ class OpenGLRenderer {
 
  private:
   void setup_frame(const RenderOptions& settings);
-  void dispatch_buckets(DmaFollower dma, ScopedProfilerNode& prof, bool sync_after_buckets);
-  void dispatch_buckets_jak1(DmaFollower dma, ScopedProfilerNode& prof, bool sync_after_buckets);
+  void dispatch_buckets(DmaFollower dma,
+                        ScopedProfilerNode& prof,
+                        bool sync_after_buckets,
+                        const RenderOptions& settings);
+  void dispatch_buckets_jak1(DmaFollower& dma,
+                             ScopedProfilerNode& prof,
+                             bool sync_after_buckets,
+                             bool primary_view = true);
+  int count_jak1_views(const DmaFollower& dma) const;
+  void dispatch_jak1_split_views(DmaFollower& dma,
+                                 ScopedProfilerNode& prof,
+                                 const RenderOptions& settings,
+                                 int num_views);
   void dispatch_buckets_jak2(DmaFollower dma, ScopedProfilerNode& prof, bool sync_after_buckets);
   void dispatch_buckets_jak3(DmaFollower dma, ScopedProfilerNode& prof, bool sync_after_buckets);
 
@@ -142,6 +157,10 @@ class OpenGLRenderer {
 
     Fbo* render_fbo = nullptr;  // the selected fbo from the three above to use for rendering
   } m_fbo_state;
+
+  // Jak 1 local co-op: each view renders at the origin of its own framebuffer, then gets copied
+  // into its rect of render_fbo.
+  std::array<Fbo, 2> m_view_fbos;
 
   GLuint screen_vao = 0;  // vertex array object for a screen-space draw
   GLuint screen_vbo = 0;  // vertex buffer object for a screen-space draw

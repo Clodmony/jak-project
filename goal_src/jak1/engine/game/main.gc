@@ -416,10 +416,16 @@
         (main-cheats))
       (add-ee-profile-frame 'draw :r #x20 :g #x20)
       (with-profiler "camera"
-        (update-camera))
+        ;; og:preserve-this coop: on split-screen frames, the camera uses one view's aspect ratio
+        (with-coop-view-camera
+          (update-camera)))
       (add-ee-profile-frame 'draw :r #x40 :b #x40)
       (with-profiler "draw-hook"
         (*draw-hook*))
+      ;; og:preserve-this coop: player 2's view, render only (the simulation already ran once)
+      (when (coop-split-frame?)
+        (with-profiler "coop-view-2"
+          (coop-draw-player2-view)))
       (add-ee-profile-frame 'draw :g #x80)
       (with-profiler "menu"
         (#when PC_PORT
