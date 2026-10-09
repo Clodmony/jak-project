@@ -586,12 +586,12 @@
             (vector-reset! s5-0)
             (when *camera-read-analog*
               ;; og:preserve-this Mirror controls changed to respect PC Port settings
-              (let ((f26-0 (analog-input-horizontal-first (the-as int (+ (-> *cpad-list* cpads 0 rightx) -256 (-> *cpad-list* cpads 0 leftx)))
+              (let ((f26-0 (analog-input-horizontal-first (the-as int (+ (-> *cpad-list* cpads (target-cpad-idx) rightx) -256 (-> *cpad-list* cpads (target-cpad-idx) leftx))) ;; og:preserve-this coop: pad of the player using it
                                                           0.0
                                                           48.0
                                                           110.0
                                                           -1.0))
-                    (f0-0 (analog-input-vertical-first (the-as int (+ (-> *cpad-list* cpads 0 righty) -256 (-> *cpad-list* cpads 0 lefty)))
+                    (f0-0 (analog-input-vertical-first (the-as int (+ (-> *cpad-list* cpads (target-cpad-idx) righty) -256 (-> *cpad-list* cpads (target-cpad-idx) lefty))) ;; og:preserve-this coop: pad of the player using it
                                                        0.0
                                                        48.0
                                                        110.0
@@ -1070,7 +1070,7 @@
                     (set-height! s2-2 80)
                     (set! (-> s2-2 flags) (font-flags shadow kerning large))
                     (print-game-text (lookup-text! *common-text* (text-id press-to-use) #f) s2-2 #f 128 22))
-                  (when (cpad-pressed? 0 circle)
+                  (when (cpad-pressed? (target-cpad-idx) circle) ;; og:preserve-this coop: pad of the player using it
                     (set! (-> self grips-moving?) #f)
                     (loop
                       (send-event *target* 'change-mode 'periscope self)
@@ -1194,7 +1194,7 @@
       (loop
         (if (not (-> self aligned?)) (set-time! (-> self lock-time)))
         (periscope-crosshair)
-        (when (or (cpad-pressed? 0 triangle x) (and (-> self aligned?) (time-elapsed? (-> self lock-time) (seconds 3))))
+        (when (or (cpad-pressed? (target-cpad-idx) triangle x) (and (-> self aligned?) (time-elapsed? (-> self lock-time) (seconds 3)))) ;; og:preserve-this coop: pad of the player using it
           (sound-stop (-> self sound-id))
           (if (periscope-test-task-complete?) (close-specific-task! (game-task jungle-lurkerm) (task-status need-reminder)))
           (loop
