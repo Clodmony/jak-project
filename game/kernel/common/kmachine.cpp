@@ -1054,6 +1054,10 @@ void pc_set_letterbox(int w, int h) {
   Gfx::g_global_settings.lbox_h = h;
 }
 
+void pc_set_splitscreen_layout(s32 layout) {
+  Gfx::g_global_settings.splitscreen_layout = layout;
+}
+
 void pc_set_brightness_contrast(s32 color, s32 alpha) {
   Gfx::g_global_settings.brightness_contrast_color = color;
   Gfx::g_global_settings.brightness_contrast_alpha = alpha;
@@ -1265,6 +1269,7 @@ void init_common_pc_port_functions(
   make_func_symbol_func("pc-set-game-resolution", (void*)pc_set_game_resolution);
   make_func_symbol_func("pc-set-brightness-contrast", (void*)pc_set_brightness_contrast);
   make_func_symbol_func("pc-set-letterbox", (void*)pc_set_letterbox);
+  make_func_symbol_func("pc-set-splitscreen-layout!", (void*)pc_set_splitscreen_layout);
   make_func_symbol_func("pc-renderer-tree-set-lod", (void*)pc_renderer_tree_set_lod);
   make_func_symbol_func("pc-set-collision-mode", (void*)Gfx::CollisionRendererSetMode);
   make_func_symbol_func("pc-set-collision-mask", (void*)pc_set_collision_mask);

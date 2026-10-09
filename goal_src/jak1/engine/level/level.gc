@@ -713,7 +713,8 @@
   "Is arg0 visible? Note that this will return #f if the visibility data is not loaded."
   ;; og:preserve-this pc port added option to show every actor regardless
   (with-pc
-    (if (not (-> *pc-settings* ps2-actor-vis?)) (return #t)))
+    ;; og:preserve-this coop: vis is one camera's view, co-op spawns actors regardless of vis
+    (if (or (not (-> *pc-settings* ps2-actor-vis?)) (coop-active?)) (return #t)))
   ;; check the vis bits!
   (let* (;; lwu v1, 388(a0)
          (vis-data (-> this vis-bits))

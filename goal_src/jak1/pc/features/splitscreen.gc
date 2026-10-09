@@ -145,7 +145,11 @@
     (when (!= idx prev)
       (coop-save-context (coop-context prev))
       (coop-load-context (coop-context idx))
-      (set! *coop-player* idx))
+      (set! *coop-player* idx)
+      ;; on split-screen frames, anything a player's processes draw directly (hud text, prompts)
+      ;; goes to that player's view
+      (when (coop-split-frame?)
+        (set! (-> *display* frames (-> *display* on-screen) frame bucket-group) (-> *coop-frame* groups idx))))
     prev))
 
 (defun coop-player-target ((idx int))
@@ -349,14 +353,154 @@
       (go target-stance)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; player 2's view
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defun coop-draw-view-only ()
+  "The view dependent part of real-main-draw-hook, for player 2's view.
+   Nothing here may advance the simulation: touching events, actors-update, time of day, ocean
+   waves, eye blinks and the fake shadow buffer swap only happen in player 1's pass."
+  (generic-init-buffers)
+  ;; texture uploads. These only upload what the previous view replaced, and must stay in the
+  ;; order the renderer replays them in.
+  (when (logtest? *texture-enable-user* 1)
+    (dotimes (i (-> *level* length))
+      (let ((lev (-> *level* level i))) (if (= (-> lev status) 'active) (add-tex-to-dma! *texture-pool* lev 0)))))
+  (when (logtest? *texture-enable-user* 2)
+    (dotimes (i (-> *level* length))
+      (let ((lev (-> *level* level i))) (if (= (-> lev status) 'active) (add-tex-to-dma! *texture-pool* lev 1)))))
+  (when (logtest? *texture-enable-user* 4)
+    (dotimes (i (-> *level* length))
+      (let ((lev (-> *level* level i))) (if (= (-> lev status) 'active) (add-tex-to-dma! *texture-pool* lev 2)))))
+  (when (logtest? *texture-enable-user* 8)
+    (let ((uploaded-common #f))
+      (dotimes (i (-> *level* length))
+        (let ((lev (-> *level* level i)))
+          (when (= (-> lev status) 'active)
+            (add-tex-to-dma! *texture-pool* lev 3)
+            (when (not uploaded-common)
+              (upload-one-common! *texture-pool* (-> *level* level0))
+              (set! uploaded-common #t)))))
+      (if (not uploaded-common) (upload-one-common! *texture-pool* (-> *level* level0)))))
+  (when (logtest? *texture-enable-user* 16)
+    (dotimes (i (-> *level* length))
+      (let ((lev (-> *level* level i))) (if (= (-> lev status) 'active) (add-tex-to-dma! *texture-pool* lev 4)))))
+  ;; sky. The sky textures were generated in player 1's pass, which the renderer runs first.
+  (when (zero? (logand *vu1-enable-user* (vu1-renderer-mask sky)))
+    (with-dma-buffer-add-bucket ((dma-buf (-> (current-frame) global-buf)) (bucket-id sky-draw))
+      (dma-buffer-add-gs-set dma-buf
+                             (zbuf-1 (new 'static 'gs-zbuf :zbp #x1c0 :psm (gs-psm ct24)))
+                             (test-1 (new 'static 'gs-test :ate #x1 :atst (gs-atest always) :zte #x1 :ztst (gs-ztest always)))
+                             (alpha-1 (new 'static 'gs-alpha :b #x1 :d #x1)))
+      (screen-gradient dma-buf
+                       (-> *display* bg-clear-color 0)
+                       (-> *display* bg-clear-color 1)
+                       (-> *display* bg-clear-color 2)
+                       (-> *display* bg-clear-color 3))))
+  (when (logtest? *vu1-enable-user* (vu1-renderer-mask sky))
+    (cond
+      ((and (-> *time-of-day-context* sky) *sky-drawn*) (render-sky-tng *time-of-day-context*))
+      (else
+       (with-dma-buffer-add-bucket ((dma-buf (-> (current-frame) global-buf)) (bucket-id sky-draw))
+         (dma-buffer-add-gs-set dma-buf
+                                (zbuf-1 (new 'static 'gs-zbuf :zbp #x1c0 :psm (gs-psm ct24)))
+                                (test-1 (new 'static 'gs-test :ate #x1 :atst (gs-atest always) :zte #x1 :ztst (gs-ztest always)))
+                                (alpha-1 (new 'static 'gs-alpha :b #x1 :d #x1)))
+         (screen-gradient dma-buf
+                          (-> *time-of-day-context* erase-color)
+                          (-> *time-of-day-context* erase-color)
+                          (-> *time-of-day-context* erase-color)
+                          (-> *time-of-day-context* erase-color))))))
+  ;; ocean, using the waves draw-ocean generated in player 1's pass
+  (draw-ocean-view)
+  ;; merc and shadows start over for each view
+  (set! (-> *merc-global-array* count) (the-as uint 0))
+  (set! *merc-globals* (the-as merc-globals (-> *merc-global-array* globals)))
+  (set! (-> *shadow-queue* cur-run) (the-as uint 0))
+  ;; background
+  (init-background)
+  (execute-connections *background-draw-engine* (-> *display* frames (-> *display* on-screen) frame))
+  (finish-background)
+  ;; foreground
+  (foreground-engine-execute (-> *level* level-default foreground-draw-engine 0)
+                             (-> *display* frames (-> *display* on-screen) frame)
+                             2
+                             0)
+  (foreground-engine-execute (-> *level* level-default foreground-draw-engine 1)
+                             (-> *display* frames (-> *display* on-screen) frame)
+                             2
+                             1)
+  (let ((global-buf (-> *display* frames (-> *display* on-screen) frame global-buf)))
+    ;; skinning bakes in this view's camera, so it must run before the camera changes again
+    (bones-mtx-calc-execute)
+    (generic-merc-execute-all global-buf)
+    (shadow-execute-all global-buf *shadow-queue*))
+  ;; particles and other sprites (simulated once by process-particles)
+  (when (logtest? (vu1-renderer-mask sprite) *vu1-enable-user*)
+    (sprite-draw *display*))
+  (none))
+
+(defun coop-draw-player2-view ()
+  "Render player 2's view into the second group of buckets. Called by display-loop after player 1's
+   view (*draw-hook*) on split-screen frames."
+  (let ((frame (-> *display* frames (-> *display* on-screen) frame))
+        (prev-player (coop-switch-context 1)))
+    (set! *coop-view* 1)
+    (+! (-> *coop* render-passes) 1)
+    ;; update-time-of-day computed this frame's fog into player 1's camera
+    (let ((p1-cam (-> *coop-context-p1* math-camera)))
+      (set! (-> *math-camera* fog-start) (-> p1-cam fog-start))
+      (set! (-> *math-camera* fog-end) (-> p1-cam fog-end))
+      (set! (-> *math-camera* fog-max) (-> p1-cam fog-max))
+      (set! (-> *math-camera* fog-min) (-> p1-cam fog-min)))
+    ;; player 2's camera rig -> player 2's math camera, frustum, tie/shrub constants
+    (with-coop-view-camera
+      (update-camera))
+    (coop-draw-view-only)
+    (if (not *progress-process*) (depth-cue *display*))
+    ;; the camera dependent setup of this group's tie and merc buckets, with this view's camera.
+    ;; display-frame-finish does it for player 1's group.
+    (tie-init-buffers (-> frame calc-buf))
+    (merc-vu1-init-buffers)
+    ;; draw-ocean leaves this to the last view of the frame
+    (when (not (paused?))
+      (set! *ocean-off* #f)
+      (set! *ocean-mid-off* #f)
+      (set! *ocean-near-off* #f))
+    (set! *coop-view* 0)
+    ;; back to player 1's globals and player 1's group of buckets
+    (coop-switch-context prev-player))
+  (set! (-> *display* frames (-> *display* on-screen) frame bucket-group) (-> *coop-frame* groups 0))
+  (none))
+
+(defun coop-want-split? ()
+  "Should the next frame show two views? Only during normal gameplay with both players around.
+   Menus and cutscenes use one full-screen view of player 1."
+  (and (coop-active?)
+       (coop-player-target 1)
+       (handle->process (-> *coop-context-p2* combiner-handle))
+       (= *master-mode* 'game)
+       (not (movie?))
+       (not *progress-process*)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; session manager
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (define *coop-p2-missing-time* (the-as time-frame 0))
 
 (defun coop-update ()
-  "Once per simulation tick: player positions, player 2 respawn, distance leash."
+  "Once per simulation tick: player positions, player 2 respawn, distance leash, split decision."
   (+! (-> *coop* sim-ticks) 1)
+  (set! (-> *coop* split?) (if (coop-want-split?) #t #f))
+  (pc-set-splitscreen-layout! (the-as int (-> *coop* layout)))
+  ;; actors near player 2 must exist and run even when player 1's camera is far away or can't see
+  ;; them. Same as the "force actors" PC option, without touching the saved setting.
+  ;; (pc-settings update may lower these again after the frame; actor birth and pause happen
+  ;; during the next tick and draw, after this runs.)
+  (set! (-> *ACTOR-bank* birth-dist) (meters 10000))
+  (set! (-> *ACTOR-bank* pause-dist) (meters 10000))
+  (set! (-> *ACTOR-bank* birth-max) 1000)
   (let ((p1 (coop-player-target 0))
         (p2 (coop-player-target 1)))
     (set! (-> *coop-players* valid 0) (if p1 #t #f))
@@ -383,9 +527,15 @@
          (coop-despawn-player2)
          (coop-spawn-player2 (coop-safe-position-near p1 (new 'stack-no-clear 'vector))))))))
 
+(define-extern coop-print-info (function none))
+
+(define-extern *coop-show-info* symbol)
+
 (defun coop-manager-loop ()
   (loop
-    (if (coop-active?) (coop-update))
+    (when (coop-active?)
+      (coop-update)
+      (if *coop-show-info* (coop-print-info)))
     (suspend))
   (none))
 
@@ -435,3 +585,64 @@
       (set! *coop-manager* #f))
     (format 0 "[coop] local co-op stopped~%"))
   (none))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; debug info and debug menu
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(define *coop-show-info* #f)
+
+(defun coop-slot-status-string ((slot int))
+  (let ((status (pc-coop-slot-status slot)))
+    (case (logand status 3)
+      ((1) (if (logtest? status 4) "keyboard/mouse" "keyboard/mouse (?)"))
+      ((2) (if (logtest? status 4) "controller" "controller DISCONNECTED"))
+      (else (if (logtest? status 8) "press a button to join" "no device")))))
+
+(defun coop-print-info ()
+  "Debug overlay: proves one simulation tick per frame and shows the device assignment."
+  (format *stdcon* "~1kco-op: ~A  split: ~A  views last frame: ~D~%" (coop-active?) (-> *coop* split?) (-> *coop-frame* views))
+  (format *stdcon* "~1kticks: ~D  view-2 passes: ~D~%" (-> *coop* sim-ticks) (-> *coop* render-passes))
+  (dotimes (i COOP_MAX_PLAYERS)
+    (let ((tgt (coop-player-target i)))
+      (format *stdcon* "~1kP~D ~S: " (+ i 1) (coop-slot-status-string i))
+      (if tgt
+        (format *stdcon* "~1k~M ~M ~M hp ~f ~A~%"
+                (-> tgt control trans x)
+                (-> tgt control trans y)
+                (-> tgt control trans z)
+                (-> tgt fact health)
+                (if (-> tgt state) (-> tgt state name) 'none))
+        (format *stdcon* "~1k(none)~%"))))
+  (none))
+
+(defun coop-toggle-layout ()
+  (set! (-> *coop* layout)
+        (if (= (-> *coop* layout) (coop-split-layout side-by-side)) (coop-split-layout top-bottom) (coop-split-layout side-by-side)))
+  (none))
+
+(defun coop-respawn-player2-near-player1 ()
+  (let ((p1 (coop-player-target 0)))
+    (when (and (coop-active?) p1)
+      (coop-despawn-player2)
+      (coop-spawn-player2 (coop-safe-position-near p1 (new 'stack-no-clear 'vector)))))
+  (none))
+
+(when (-> *debug-menu-context* root-menu)
+  (debug-menu-append-item
+    (-> *debug-menu-context* root-menu)
+    (debug-menu-make-from-template
+      *debug-menu-context*
+      '(menu "Local Co-op"
+            (function "Start co-op" #f ,(lambda () (coop-start)))
+            (function "Stop co-op" #f ,(lambda () (coop-stop)))
+            (flag "Top/bottom split" #f ,(lambda (arg (msg debug-menu-msg))
+                                          (if (= msg (debug-menu-msg press)) (coop-toggle-layout))
+                                          (= (-> *coop* layout) (coop-split-layout top-bottom))))
+            (function "Player 2: join with next button" #f ,(lambda () (pc-coop-begin-join! 1)))
+            (function "Player 1: join with next button" #f ,(lambda () (pc-coop-begin-join! 0)))
+            (function "Auto-assign devices" #f ,(lambda () (pc-coop-auto-assign!)))
+            (function "Respawn player 2 near player 1" #f ,(lambda () (coop-respawn-player2-near-player1)))
+            (flag "World follows nearest player" #f ,(dm-lambda-boolean-flag (-> *coop* nearest-world?)))
+            (flag "Distance leash" #f ,(dm-lambda-boolean-flag (-> *coop* leash?)))
+            (flag "Show co-op info" #f ,(dm-lambda-boolean-flag *coop-show-info*))))))

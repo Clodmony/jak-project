@@ -11,6 +11,7 @@
 #include "game/graphics/opengl_renderer/ProgressRenderer.h"
 #include "game/graphics/opengl_renderer/ShadowRenderer.h"
 #include "game/graphics/opengl_renderer/SkyRenderer.h"
+#include "game/graphics/opengl_renderer/SplitscreenLayout.h"
 #include "game/graphics/opengl_renderer/TextureUploadHandler.h"
 #include "game/graphics/opengl_renderer/VisDataHandler.h"
 #include "game/graphics/opengl_renderer/Warp.h"
@@ -1011,7 +1012,7 @@ void OpenGLRenderer::render(DmaFollower dma, const RenderOptions& settings) {
   // render the buckets!
   {
     auto prof = m_profiler.root()->make_scoped_child("buckets");
-    dispatch_buckets(dma, prof, settings.gpu_sync);
+    dispatch_buckets(dma, prof, settings.gpu_sync, settings);
     if (m_texture_animator) {
       // if animation requests weren't made, assume the level is unloaded and the textures should
       // reset.
@@ -1288,9 +1289,10 @@ void OpenGLRenderer::setup_frame(const RenderOptions& settings) {
   glViewport(0, 0, settings.game_res_w, settings.game_res_h);
 }
 
-void OpenGLRenderer::dispatch_buckets_jak1(DmaFollower dma,
+void OpenGLRenderer::dispatch_buckets_jak1(DmaFollower& dma,
                                            ScopedProfilerNode& prof,
-                                           bool sync_after_buckets) {
+                                           bool sync_after_buckets,
+                                           bool primary_view) {
   // The first thing the DMA chain should be a call to a common default-registers chain.
   // this chain resets the state of the GS. After this is buckets
   m_category_times.fill(0);
@@ -1339,7 +1341,10 @@ void OpenGLRenderer::dispatch_buckets_jak1(DmaFollower dma,
     //  should have ended at the start of the next chain
     ASSERT(dma.current_tag_offset() == m_render_state.next_bucket);
     m_render_state.next_bucket += 16;
-    vif_interrupt_callback(bucket_id);
+    if (primary_view) {
+      // calls back into the game (debug profile bars), once per frame
+      vif_interrupt_callback(bucket_id);
+    }
     m_category_times[(int)m_bucket_categories[bucket_id]] += bucket_prof.get_elapsed_time();
 
     // hack to draw the collision mesh in the middle the drawing
@@ -1350,6 +1355,107 @@ void OpenGLRenderer::dispatch_buckets_jak1(DmaFollower dma,
   }
 
   // TODO ending data.
+}
+
+/*!
+ * Jak 1 local co-op: a split-screen frame is one chain with one group of buckets per view:
+ *   [CALL default-regs][buckets of view 0][CALL default-regs][buckets of view 1]...[FLUSHE][END]
+ * Count the groups without consuming the chain.
+ */
+int OpenGLRenderer::count_jak1_views(const DmaFollower& dma) const {
+  constexpr u32 kGroupSize = 16 * (1 + (u32)jak1::BucketId::MAX_BUCKETS);
+  u32 offset = dma.current_tag_offset();
+  int views = 0;
+  while (views < splitscreen::kMaxViews &&
+         DmaTag(dma.read_val<u64>(offset)).kind == DmaTag::Kind::CALL) {
+    views++;
+    offset += kGroupSize;
+  }
+  return std::max(views, 1);
+}
+
+/*!
+ * Jak 1 local co-op: render each view's bucket group into its own framebuffer at the origin, so
+ * renderers that read back or clear the whole framebuffer (depth cue, distort sprites, stencil
+ * shadows, the GS scissor emulation) stay inside their view. Then copy each view into its rect of
+ * the game framebuffer. Presentation (pcrtc effects, blackout) happens once, afterwards.
+ */
+void OpenGLRenderer::dispatch_jak1_split_views(DmaFollower& dma,
+                                               ScopedProfilerNode& prof,
+                                               const RenderOptions& settings,
+                                               int num_views) {
+  const auto rects =
+      splitscreen::view_rects(settings.game_res_w, settings.game_res_h,
+                              splitscreen::layout_from_int(settings.splitscreen_layout));
+
+  // window-level state that the views override
+  const int saved_draw_offset_x = m_render_state.draw_offset_x;
+  const int saved_draw_offset_y = m_render_state.draw_offset_y;
+  const int saved_draw_region_w = m_render_state.draw_region_w;
+  const int saved_draw_region_h = m_render_state.draw_region_h;
+  const bool saved_occlusion = m_render_state.use_occlusion_culling;
+  // The game keeps one occlusion vis buffer per level, written by the last view's camera.
+  // Rely on frustum culling only while split.
+  m_render_state.use_occlusion_culling = false;
+
+  for (int view = 0; view < num_views; view++) {
+    const auto& rect = rects.at(view);
+    auto& fbo = m_view_fbos.at(view);
+    if (!fbo.matches(rect.w, rect.h, settings.msaa_samples)) {
+      fbo.clear();
+      fbo = make_fbo(rect.w, rect.h, settings.msaa_samples, true);
+    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo.fbo_id);
+    glViewport(0, 0, rect.w, rect.h);
+    glClearColor(0.0, 0.0, 0.0, 0.0);
+    glClearDepth(0.0);
+    glClearStencil(0);
+    glDepthMask(GL_TRUE);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+    glDisable(GL_BLEND);
+
+    // per-view render state: camera data and vis come from this view's buckets
+    m_render_state.has_pc_data = false;
+    for (auto& vis : m_render_state.occlusion_vis) {
+      vis.valid = false;
+    }
+    m_render_state.stencil_dirty = false;
+    m_render_state.render_fb = fbo.fbo_id;
+    m_render_state.render_fb_x = 0;
+    m_render_state.render_fb_y = 0;
+    m_render_state.render_fb_w = rect.w;
+    m_render_state.render_fb_h = rect.h;
+    m_render_state.draw_offset_x = 0;
+    m_render_state.draw_offset_y = 0;
+    m_render_state.draw_region_w = rect.w;
+    m_render_state.draw_region_h = rect.h;
+
+    {
+      auto view_prof = prof.make_scoped_child(view == 0 ? "view-0" : "view-1");
+      dispatch_buckets_jak1(dma, view_prof, settings.gpu_sync, view == 0);
+    }
+
+    // copy into this view's rect of the game framebuffer (same sample count, same size: a plain
+    // copy, also valid between two multisampled framebuffers)
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo.fbo_id);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_fbo_state.render_fbo->fbo_id);
+    glBlitFramebuffer(0, 0, rect.w, rect.h, rect.x, rect.y, rect.x + rect.w, rect.y + rect.h,
+                      GL_COLOR_BUFFER_BIT, GL_NEAREST);
+  }
+
+  m_render_state.use_occlusion_culling = saved_occlusion;
+  m_render_state.render_fb = m_fbo_state.render_fbo->fbo_id;
+  m_render_state.render_fb_x = 0;
+  m_render_state.render_fb_y = 0;
+  m_render_state.render_fb_w = settings.game_res_w;
+  m_render_state.render_fb_h = settings.game_res_h;
+  m_render_state.draw_offset_x = saved_draw_offset_x;
+  m_render_state.draw_offset_y = saved_draw_offset_y;
+  m_render_state.draw_region_w = saved_draw_region_w;
+  m_render_state.draw_region_h = saved_draw_region_h;
+  glBindFramebuffer(GL_FRAMEBUFFER, m_fbo_state.render_fbo->fbo_id);
+  glViewport(0, 0, settings.game_res_w, settings.game_res_h);
 }
 
 void OpenGLRenderer::dispatch_buckets_jak2(DmaFollower dma,
@@ -1446,15 +1552,21 @@ void OpenGLRenderer::dispatch_buckets_jak3(DmaFollower dma,
  */
 void OpenGLRenderer::dispatch_buckets(DmaFollower dma,
                                       ScopedProfilerNode& prof,
-                                      bool sync_after_buckets) {
+                                      bool sync_after_buckets,
+                                      const RenderOptions& settings) {
   g_current_renderer = "dispatch-buckets pre";
 
   m_render_state.version = m_version;
   m_render_state.frame_idx++;
   switch (m_version) {
-    case GameVersion::Jak1:
-      dispatch_buckets_jak1(dma, prof, sync_after_buckets);
-      break;
+    case GameVersion::Jak1: {
+      const int num_views = count_jak1_views(dma);
+      if (num_views > 1) {
+        dispatch_jak1_split_views(dma, prof, settings, num_views);
+      } else {
+        dispatch_buckets_jak1(dma, prof, sync_after_buckets);
+      }
+    } break;
     case GameVersion::Jak2:
       dispatch_buckets_jak2(dma, prof, sync_after_buckets);
       break;

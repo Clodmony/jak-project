@@ -61,6 +61,17 @@
 ;; index of the player context the code currently runs in. 0 = player 1.
 (define *coop-player* 0)
 
+;; The display frame being built. A split-screen frame has one group of buckets per view, laid out
+;; in calc-buf as [CALL default-regs][buckets of view 0][CALL default-regs][buckets of view 1].
+;; The PC renderer detects the second group and renders each view into its own viewport.
+;; Groups are built in chain order (view 0, then view 1): the texture upload tracking assumes the
+;; renderer replays uploads in the order the game built them.
+(deftype coop-frame (structure)
+  ((views  int32) ;; 1 or 2
+   (groups (inline-array dma-bucket) 2)))
+
+(define *coop-frame* (new 'static 'coop-frame :views 1))
+
 ;; index of the view currently being rendered. 0 = player 1 / full screen.
 (define *coop-view* 0)
 
@@ -85,7 +96,81 @@
       (if (>= coop-prev-player 0) (coop-switch-context coop-prev-player))
       coop-result)))
 
+(defmacro coop-split-frame? ()
+  "Is the frame being built a split-screen frame?"
+  `(> (-> *coop-frame* views) 1))
+
+(defun coop-view-aspect ((aspect float))
+  "The aspect ratio of one view, from the aspect ratio of the whole game area."
+  (if (= (-> *coop* layout) (coop-split-layout top-bottom)) (* aspect 2.0) (* aspect 0.5)))
+
+(defmacro with-coop-view-camera (&rest body)
+  "Camera updates inside body use the aspect ratio of one view on split-screen frames.
+   Co-op always uses the PC (non-vis) projection, which handles any aspect ratio."
+  `(let ((coop-saved-aspect (-> *pc-settings* aspect-ratio))
+         (coop-saved-use-vis (-> *pc-settings* use-vis?)))
+    (when (coop-split-frame?)
+      (set! (-> *pc-settings* aspect-ratio) (coop-view-aspect coop-saved-aspect))
+      (set! (-> *pc-settings* use-vis?) #f))
+    (let ((coop-result (begin
+                        ,@body)))
+      (set! (-> *pc-settings* aspect-ratio) coop-saved-aspect)
+      (set! (-> *pc-settings* use-vis?) coop-saved-use-vis)
+      coop-result)))
+
+(define-extern debug-init-buffer (function bucket-id gs-zbuf gs-test none))
+
+(defun coop-frame-start ((frame display-frame))
+  "Called by display-frame-start once the main buckets exist: on split-screen frames, add the
+   buckets of player 2's view right after them."
+  (set! (-> *coop-frame* views) 1)
+  (set! (-> *coop-frame* groups 0) (-> frame bucket-group))
+  (set! (-> *coop-frame* groups 1) (-> frame bucket-group))
+  (when (and (coop-active?) (-> *coop* split?))
+    (let* ((buf (-> frame calc-buf))
+           (pkt (the-as dma-packet (-> buf base))))
+      ;; same header as the first group: reset the GS state
+      (set! (-> pkt dma) (new 'static 'dma-tag :id (dma-tag-id call) :addr (the-as int (-> *default-regs-buffer* data))))
+      (set! (-> pkt vif0) (new 'static 'vif-tag))
+      (set! (-> pkt vif1) (new 'static 'vif-tag))
+      (set! (-> buf base) (&+ (the-as pointer pkt) 16))
+      (set! (-> *coop-frame* groups 1) (dma-buffer-add-buckets buf BUCKET_COUNT))
+      (set! (-> *coop-frame* views) 2)
+      ;; the debug bucket setup display-frame-start did for the first group
+      (set! (-> frame bucket-group) (-> *coop-frame* groups 1))
+      (debug-init-buffer (bucket-id debug-no-zbuf)
+                         (new 'static 'gs-zbuf :zbp #x1c0 :psm (gs-psm ct24) :zmsk #x1)
+                         (new 'static 'gs-test :zte #x1 :ztst (gs-ztest always)))
+      (set! (-> frame bucket-group) (-> *coop-frame* groups 0))))
+  (none))
+
+(defun coop-frame-finish ((frame display-frame))
+  "Called by display-frame-finish after the first group is finished: finish player 2's buckets
+   the same way (a GS reset after each bucket) and stitch them into the chain."
+  (when (coop-split-frame?)
+    (let ((group (-> *coop-frame* groups 1))
+          (global-buf (-> frame global-buf)))
+      (dotimes (bucket-idx BUCKET_COUNT)
+        (let ((start (-> global-buf base)))
+          (let ((pkt (the-as dma-packet (-> global-buf base))))
+            (set! (-> pkt dma) (new 'static 'dma-tag :id (dma-tag-id call) :addr (the-as int (-> *default-regs-buffer* data))))
+            (set! (-> pkt vif0) (new 'static 'vif-tag :irq #x1))
+            (set! (-> pkt vif1) (new 'static 'vif-tag))
+            (set! (-> global-buf base) (&+ (the-as pointer pkt) 16)))
+          (let ((end (-> global-buf base)))
+            (let ((pkt (the-as dma-packet (-> global-buf base))))
+              (set! (-> pkt dma) (new 'static 'dma-tag :id (dma-tag-id next)))
+              (set! (-> pkt vif0) (new 'static 'vif-tag))
+              (set! (-> pkt vif1) (new 'static 'vif-tag))
+              (set! (-> global-buf base) (&+ (the-as pointer pkt) 16)))
+            (dma-bucket-insert-tag group (the-as bucket-id bucket-idx) start (the-as (pointer dma-tag) end)))))
+      ;; the first group's last bucket links to the second group's header, the second group's last
+      ;; bucket links to whatever display-frame-finish puts after it (FLUSHE, END).
+      (dma-buffer-patch-buckets group BUCKET_COUNT)))
+  (none))
+
 ;; defined in splitscreen.gc
+(define-extern coop-draw-player2-view (function none))
 (define-extern coop-switch-context (function int int))
 (define-extern coop-start (function symbol))
 (define-extern coop-stop (function none))

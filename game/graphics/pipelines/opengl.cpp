@@ -506,6 +506,7 @@ void render_game_frame(int game_width,
     options.quick_screenshot = false;
     options.internal_res_screenshot = false;
     options.gpu_sync = g_gfx_data->debug_gui.should_gl_finish();
+    options.splitscreen_layout = Gfx::g_global_settings.splitscreen_layout;
 
     if (take_screenshot) {
       options.save_screenshot = true;
