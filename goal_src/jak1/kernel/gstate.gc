@@ -447,10 +447,13 @@ It type checks the arguments for the entry function.
     (when (and (valid? proc process #f #f 0)
                (nonzero? (-> (the process proc) pid))
                (-> (the process proc) event-hook))
-      (let ((pp-backup pp))
+      (let ((pp-backup pp)
+            ;; og:preserve-this coop: handle the event in the context of the player involved.
+            (prev-context (if *player-context-for-event* (*player-context-for-event* (the process proc) (-> msg from)) -1)))
         (set! pp (the process proc))
         (let ((result ((-> (the process proc) event-hook) (-> msg from) (-> msg num-params) (-> msg message) msg)))
           (set! pp pp-backup)
+          (if (>= prev-context 0) (*player-context-restore* prev-context))
           result)))))
 
 (defmacro send-event (proc msg &key (from (with-pp pp)) &rest params)

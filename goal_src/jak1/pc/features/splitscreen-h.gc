@@ -1,0 +1,94 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+#|
+  Local split-screen co-op (PC port addition), header.
+
+  One world simulation, two real players. Player 1 is the original game: *target*, *camera*,
+  *math-camera* and friends. Player 2 gets its own copies of those "player globals", and every
+  process runs with the globals of the player it belongs to (its "player context"):
+
+  - processes owned by player 2 (its target, daxter, cameras, hud) carry the player2 process-mask
+    bit, which children inherit when they are spawned.
+  - the kernel switches the context around each process run and each event delivery, see
+    *player-context-for-process* in gkernel.gc. World processes (enemies, collectables, ...) run in
+    the context of the player closest to them, so the original "*target* is the player" code
+    targets the nearest player.
+  - the display loop renders view 2 in player 2's context.
+
+  Everything here is inert until co-op is started (see splitscreen.gc). With co-op off, the game
+  runs the original single player code paths.
+|#
+
+(defconstant COOP_MAX_PLAYERS 2)
+
+(defenum coop-split-layout
+  :type uint8
+  (side-by-side 0) ;; player 1 left, player 2 right
+  (top-bottom 1) ;; player 1 top, player 2 bottom
+  )
+
+(deftype coop-settings (structure)
+  ((enabled?          symbol) ;; co-op requested (debug menu / progress menu)
+   (active?           symbol) ;; player contexts installed, player 2 may exist
+   (split?            symbol) ;; rendering two views this frame
+   (layout            coop-split-layout)
+   (nearest-world?    symbol) ;; world processes use the context of the closest player
+   (leash?            symbol) ;; teleport a player that strays too far back to the other one
+   (leash-distance    meters) ;; max distance between players before the catch-up teleport
+   (near-hysteresis   meters) ;; a world process only switches player when the other is this much closer
+   (respawn-delay     time-frame) ;; dead player waits this long before respawning next to the survivor
+   (p2-pad            int32) ;; cpad index of player 2
+   (frame-views       int32) ;; views rendered in the last frame (for tests / stats)
+   (sim-ticks         uint32) ;; simulation ticks since co-op started (for tests / stats)
+   (render-passes     uint32) ;; view render passes since co-op started (for tests / stats)
+   ))
+
+(define *coop*
+  (new 'static
+       'coop-settings
+       :enabled? #f
+       :active? #f
+       :split? #f
+       :layout (coop-split-layout side-by-side)
+       :nearest-world? #t
+       :leash? #t
+       :leash-distance (meters 60)
+       :near-hysteresis (meters 4)
+       :respawn-delay (seconds 2)
+       :p2-pad 1))
+
+;; index of the player context the code currently runs in. 0 = player 1.
+(define *coop-player* 0)
+
+;; index of the view currently being rendered. 0 = player 1 / full screen.
+(define *coop-view* 0)
+
+(defmacro coop-active? ()
+  "Is local co-op running?"
+  `(-> *coop* active?))
+
+(defmacro coop-process-player (proc)
+  "Index of the player that owns this process, 0 for player 1 and everything that isn't player 2's."
+  `(if (process-mask? (-> ,proc mask) player2) 1 0))
+
+(defmacro coop-camera-cpad ()
+  "The pad that controls the camera of the current player context."
+  `(-> *cpad-list* cpads (if (zero? *coop-player*) 0 (-> *coop* p2-pad))))
+
+(defmacro with-coop-player (idx &rest body)
+  "Run body in the context of player idx (a no-op without co-op). Used for session level operations
+   like start/stop that must always act on player 1, whoever triggered them."
+  `(let ((coop-prev-player (if (coop-active?) (coop-switch-context ,idx) -1)))
+    (let ((coop-result (begin
+                        ,@body)))
+      (if (>= coop-prev-player 0) (coop-switch-context coop-prev-player))
+      coop-result)))
+
+;; defined in splitscreen.gc
+(define-extern coop-switch-context (function int int))
+(define-extern coop-start (function symbol))
+(define-extern coop-stop (function none))
+(define-extern coop-player-target (function int target))
+(define-extern coop-other-player-target (function process target))
+(define-extern coop-kill-camera-processes (function none))
