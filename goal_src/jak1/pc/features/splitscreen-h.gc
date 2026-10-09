@@ -112,6 +112,9 @@
   "Is the frame being built a split-screen frame?"
   `(> (-> *coop-frame* views) 1))
 
+;; pc-settings applied the split-screen view aspect to the 2d scale (see pc-settings update)
+(define *coop-video-hacks-applied* #f)
+
 (defun coop-view-aspect ((aspect float))
   "The aspect ratio of one view, from the aspect ratio of the whole game area."
   (if (= (-> *coop* layout) (coop-split-layout top-bottom)) (* aspect 2.0) (* aspect 0.5)))
