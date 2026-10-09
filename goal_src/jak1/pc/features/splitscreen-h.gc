@@ -55,7 +55,9 @@
        :nearest-world? #t
        :leash? #t
        :leash-distance (meters 60)
-       :near-hysteresis (meters 4)
+       ;; small: interactions have small radii (the fisherman's boat 1.5 m), a big margin left the closer
+       ;; player unable to use an object the other player had touched
+       :near-hysteresis (meters 0.25)
        :respawn-delay (seconds 2)
        :p2-pad 1))
 
