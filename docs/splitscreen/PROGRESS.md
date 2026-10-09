@@ -2,6 +2,29 @@
 
 > Written with AI assistance (AI-assisted). Newest first.
 
+## 2026-10-09: launcher mod packaging (branch `feature/jak1-coop-launcher-mod`)
+
+- `scripts/coop-mod/package_mod.py`: packages a local build as an OpenGOAL Launcher mod for
+  "Add from File" (`build/coop-mod/jak1-coop.tar.gz`, `.zip` on Windows). Same layout as the
+  release assets; only git-tracked files; every entry checked against an allow list before and
+  after writing (no `iso_data`, `decompiler_out`, `out`, saves, settings, game file types, symlinks,
+  keys); refuses dynamically linked builds unless `--allow-dynamic` (Linux/macOS only);
+  `--check` verifies any archive, including downloaded release assets.
+- GitHub release tooling from OpenGOAL-Mods/OG-Mod-Base (ISC): "Cut Mod Release" workflow, mod
+  release pipeline, bundling scripts, metadata schema. Always builds this fork's binaries; releases
+  only from `master` and `feature/jak1-coop-launcher-mod` (otherwise the tag action would make
+  `v0.0.1-<branch>.N` pre-release tags). Shared build workflows unchanged.
+- Docs: MOD.md (build, package, Add from File, release setup, settings/save paths, updating).
+
+Verified (Linux): the package from a static build and from the dynamic `build/` has exactly the
+paths and modes of the official `extract_mod_build_unix.sh` output, identical `data/`; extracted
+binaries run (`gk --version`, `--help`, launcher-style `gk` arguments); forbidden content is
+rejected; archives are reproducible; workflows pass PyYAML and actionlint (only template
+warnings left in the copied pipeline); `metadata.json` validates with ajv-cli and jsonschema.
+
+Not verified: a release run on GitHub, an install in the launcher, Windows packaging with real
+binaries, the game itself.
+
 ## 2026-10-09: saves, in-game toggle, review fixes (compiles, not playtested)
 
 - Co-op saves in their own folder `saves/coop/`; auto-save stays off until a slot is picked.

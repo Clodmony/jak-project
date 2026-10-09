@@ -57,24 +57,33 @@ Open for B:
 Area by area, see COMPATIBILITY.md. Vehicles (zoomer, flut flut), bosses and minigames need individual
 work; until validated they are listed as unsupported.
 
-## Shipping as a mod (researched, not done)
+## Shipping as a mod (tooling done, not verified end to end)
 
 OpenGOAL has no plugin loader: a launcher "mod" is a complete jak-project build (own `gk`, `goalc`,
-`extractor`, `data/`). A fork with C++ changes is a normal mod.
+`extractor`, `data/`). A fork with C++ changes is a normal mod. Details and steps: MOD.md.
 
-- The OpenGOAL Launcher runs a mod's `gk` with
-  `--config-path <install>/features/jak1/mods/<source>/_settings/<mod>`, so the mod gets its own
-  settings and saves without code changes, separate from vanilla OpenGOAL.
+Done on branch `feature/jak1-coop-launcher-mod`:
+- Local package: `scripts/coop-mod/package_mod.py` builds the launcher archive from a local build
+  (same layout as the release assets, git-tracked files only, allow list for every entry, refuses
+  non-portable dynamic builds) for "Add from File". Name fixed to `jak1-coop` because the launcher
+  uses the file name as the mod name and settings/save folder.
+- GitHub releases: OG-Mod-Base's `cut-release.yaml` / `mod-release-pipeline.yml` and scripts,
+  always building this fork's binaries (`Release-*-clang-static`), releasable from `master` and
+  `feature/jak1-coop-launcher-mod` (`releaseBranches`). Assets: `windows-<tag>.zip`,
+  `linux-<tag>.tar.gz`, `macos-intel-<tag>.tar.gz`, `metadata.json`.
+- Settings and saves: the launcher passes
+  `--config-path <install>/features/jak1/mods/<source>/_settings/<mod>`, so the mod has its own
+  settings and saves (co-op saves in `saves/coop/`), separate from vanilla OpenGOAL.
 - The launcher passes no custom arguments, so co-op is enabled in game: Misc Options > "Local co-op"
   (works without `-debug`).
-- Packaging: copy the release tooling from `OpenGOAL-Mods/OG-Mod-Base` (`cut-release.yaml`,
-  `mod-release-pipeline.yml`, `.github/scripts/...`) with `binary_source=build_binaries`. Release
-  assets `windows-*.zip`, `linux-*.tar.gz`, `macos-*.tar.gz` with the binaries at the archive root.
-- Distribution: "Add from File" in the launcher (keep the archive name fixed, it names the save
-  folder), a self-hosted mod-source JSON, or the community list (jakmods.dev).
 - New co-op code must write files through `*pc-settings-folder*`, not `*pc-user-dir-base-path*`
   (the latter ignores `--config-path`).
-- Not verified end to end (no release run, no launcher install).
+
+Open:
+1. Install a local package in the launcher and play it (needs the user's game files).
+2. Fork setup on GitHub: enable Actions, make `cut-release.yaml` dispatchable (default branch or a
+   copy on `master`), then cut the first release.
+3. Optional: a self-hosted mod-source JSON (example in MOD.md) or a listing on the community list.
 
 Keeping it rebaseable: co-op code lives in new files (`goal_src/jak1/pc/features/splitscreen*.gc`,
 `goal_src/jak1/pc/debug/coop-menu.gc`, `game/system/hid/coop_slots.*`,
