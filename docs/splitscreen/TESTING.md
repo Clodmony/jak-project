@@ -130,11 +130,11 @@ menus, unplugging) went through the pads. No keyboard input was injected: the de
 | 19 | Pass: a co-op save goes to `saves/coop/`; loading it restores the shared progress; after stopping co-op the save slots show the single-player save again; the single-player save files are byte-identical before and after |
 | 20 | Not run, #10 |
 | 21 | Partly: the menu flow (Options > Game Options > Misc Options > Local co-op / layout / assign devices) works with the pad in a debug boot and fits on screen; a non-debug boot has no REPL, so it was not driven (#11). A packaged mod, installed the way the launcher does it, boots to the title screen without `-debug` and keeps its settings in its own config folder |
-| 22 | Not completed: the jungle elevator to the plant boss needs that level loaded; the test setup didn't trigger it, #12 |
+| 22 | Pass after fix (`jungle-elevator` scenario): the elevator only runs once the temple top task (`jungle-tower`) is done, which the earlier test setup hadn't; with it done, either player stepping onto the button starts it, the other player is put onto it and both ride down, held at the start, free at the bottom. Before the fix only the presser was carried down (the elevator moves `*target*` by hand) and the other player was left at the top or fell down the shaft |
 | 24 | Pass: pause/progress menu is one full-screen view |
 | 25 | Pass: hitting player 2 buzzes only pad 1, hitting player 1 only pad 0 (game side; the virtual pads have no motors) |
 | 27, 28 | Not tested (keyboard), #9 |
-| 29 | Not run (fisherman minigame), #12 |
+| 29 | Pass (`fisher` scenario): player 2 talks to the fisherman, answers "fish?" and later "play again?" with their own pad (player 1's buttons don't answer), fishes with their own stick; after the fix the caught/missed counter is in player 2's view (it was drawn in player 1's). During the game player 1 is free (#21) |
 | 30 | Pass after fix: both on the fisherman's boat, player 1 boards, the ride plays full-screen with player 2 held, both are free at Misty, player 2 brought over once |
 | 31 | Not conclusive: REPL sampling too coarse to time the death dissolve; code review only, #13 |
 | 32 | Code review only (second view doesn't integrate the wind), #13 |
