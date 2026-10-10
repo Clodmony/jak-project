@@ -180,12 +180,69 @@
 
 (define *coop-players* (new 'global 'coop-player-cache))
 
+;; the last touches of world processes by players: a process a player touches runs for that player
+(deftype coop-touch-log (structure)
+  ((proc   process 16)
+   (player int32 16)
+   (time   time-frame 16)
+   (next   int32)))
+
+(define *coop-touch-log* (new 'global 'coop-touch-log))
+
+(dotimes (i 16)
+  (set! (-> *coop-touch-log* proc i) (the-as process #f)))
+
+(set! (-> *coop-touch-log* next) 0)
+
+(defun coop-touch-player ((proc process-drawable))
+  "The player who uses proc by touching it: whoever touched it in the last half second; if both did
+   (both stand on a platform, both are at a periscope), the one horizontally nearer to it (an
+   origin can be far below what is touched), on a tie the one it runs for now. -1 if nobody touched
+   it lately (then the coop-touched bit is cleared). Without this a touch decided only until the next
+   frame's distance check, and two players touching an object flipped it back and forth (#31)."
+  (let ((touched (the-as uint 0)))
+    (dotimes (i 16)
+      (if (and (= (-> *coop-touch-log* proc i) proc) (not (time-elapsed? (-> *coop-touch-log* time i) (seconds 0.5))))
+        (set! touched (logior touched (ash 1 (-> *coop-touch-log* player i))))))
+    (case touched
+      ((1) 0)
+      ((2) 1)
+      ((3)
+       (let ((d0 (vector-vector-xz-distance (-> proc root trans) (-> *coop-players* pos 0)))
+             (d1 (vector-vector-xz-distance (-> proc root trans) (-> *coop-players* pos 1))))
+         (cond
+           ((< (+ d0 (meters 0.25)) d1) 0)
+           ((< (+ d1 (meters 0.25)) d0) 1)
+           ((process-mask? (-> proc mask) coop-p2-near) 1)
+           (else 0))))
+      (else (logclear! (-> proc mask) (process-mask coop-touched)) -1))))
+
+(defun coop-note-touch ((proc process) (player int))
+  "A player touched or attacked the world process proc: it runs for that player while they keep
+   touching it, and stays with them afterwards until the other player is nearer (coop-touch-player)."
+  (let ((i (-> *coop-touch-log* next)))
+    (set! (-> *coop-touch-log* proc i) proc)
+    (set! (-> *coop-touch-log* player i) player)
+    (set! (-> *coop-touch-log* time i) (current-time))
+    (set! (-> *coop-touch-log* next) (logand (+ i 1) 15)))
+  (let ((user player))
+    (when (and (type-type? (-> proc type) process-drawable) (nonzero? (-> (the-as process-drawable proc) root)))
+      (logior! (-> proc mask) (process-mask coop-touched))
+      (set! user (coop-touch-player (the-as process-drawable proc))))
+    (if (= user 1) (logior! (-> proc mask) (process-mask coop-p2-near)) (logclear! (-> proc mask) (process-mask coop-p2-near))))
+  (none))
+
 (defun coop-nearest-player-for ((proc process-drawable))
   (let ((root (-> proc root)))
     (cond
       ((not (-> *coop-players* valid 1)) 0)
       ((not (-> *coop-players* valid 0)) 1)
       ((zero? root) 0)
+      ;; a player touching it uses it
+      ((and (process-mask? (-> proc mask) coop-touched) (>= (coop-touch-player proc) 0))
+       (let ((user (coop-touch-player proc)))
+         (if (= user 1) (logior! (-> proc mask) (process-mask coop-p2-near)) (logclear! (-> proc mask) (process-mask coop-p2-near)))
+         user))
       (else
        (let ((d1 (vector-vector-distance (-> root trans) (-> *coop-players* pos 0)))
              (d2 (vector-vector-distance (-> root trans) (-> *coop-players* pos 1)))
@@ -300,14 +357,11 @@
    of the player that sent it, otherwise in the current context.
    A world process that a player touches or attacks also stays with that player afterwards (until the
    other player is near-hysteresis closer): a fuel cell's pickup, a button's elevator ride or an
-   enemy's reaction then use the player who caused it."
+   enemy's reaction then use the player who caused it (coop-note-touch, coop-touch-player)."
   (let ((want (coop-owner-player proc)))
     (when (and (< want 0) from (type-type? (-> from type) process))
       (set! want (coop-owner-player from))
-      (when (or (= message 'touch) (= message 'attack))
-        (case want
-          ((1) (logior! (-> proc mask) (process-mask coop-p2-near)))
-          ((0) (logclear! (-> proc mask) (process-mask coop-p2-near))))))
+      (if (and (>= want 0) (or (= message 'touch) (= message 'attack))) (coop-note-touch proc want)))
     (if (or (< want 0) (= want *coop-player*)) -1 (coop-switch-context want))))
 
 (defun coop-context-restore ((idx int))
@@ -364,7 +418,8 @@
                 (= (-> tgt state name) 'target-coop-spawn)
                 (= (-> tgt state name) 'target-coop-respawn)
                 (= (-> tgt state name) 'target-death)))
-       (logtest? (-> tgt control status) (cshape-moving-flags onground))))
+       ;; onsurf too: a flut flut standing in shallow water (Boggy Swamp) is onsurf but never onground
+       (logtest? (-> tgt control status) (cshape-moving-flags onground onsurf))))
 
 (defun coop-safe-position-near ((tgt target) (result vector))
   "A safe position next to tgt: its last known safe ground, or its own position when that is unset or
@@ -1173,7 +1228,9 @@
        (handle->process (-> *coop-context-p2* combiner-handle))
        (= *master-mode* 'game)
        (not (movie?))
-       (zero? *camera-look-through-other*) ;; npc conversations and other cutscene cameras
+       ;; npc conversations and other cutscene cameras, except a minigame's screen while the other
+       ;; player is free (it shows in the minigame player's view only)
+       (or (zero? *camera-look-through-other*) (>= (coop-look-through-player) 0))
        (not *progress-process*)))
 
 (defun coop-neutralize-pad ((pad cpad-info))
@@ -1224,6 +1281,21 @@
        (or (logtest? (-> tgt state-flags) (state-flags grabbed))
            (and (-> tgt next-state)
                 (or (coop-grab-state? (-> tgt next-state name)) (coop-clone-anim-state? (-> tgt next-state name)))))))
+
+(defun coop-look-through-player ()
+  "During a look-through camera (*camera-look-through-other*, e.g. the fisherman's play-again
+   screen): the player it belongs to when it is a minigame's and the other player is free, else -1
+   (then it is a cutscene for both and fills the screen)."
+  (if (zero? *camera-look-through-other*) (return -1))
+  (dotimes (i 2)
+    (if (and (coop-player-in-minigame? (coop-player-target i)) (not (coop-held? (coop-player-target (- 1 i))))) (return i)))
+  -1)
+
+(defun coop-look-through-here? ()
+  "update-camera: does the look-through camera apply to the view being updated? Always without
+   co-op; with a minigame's look-through only in that player's view."
+  (or (not (coop-active?))
+      (let ((owner (coop-look-through-player))) (or (< owner 0) (= owner *coop-player*)))))
 
 (defun coop-grab-watch ()
   "Once per tick: when one player of the recorded grab pair is no longer held, the other one is

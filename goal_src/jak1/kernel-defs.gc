@@ -375,6 +375,7 @@
   (player2 25) ;; owned by player 2 (its target, daxter, cameras, hud). inherited by children.
   (coop-p2-near 26) ;; a world process that currently runs in player 2's context (see splitscreen.gc)
   (coop-p1 27) ;; spawned by player 1 into a shared pool (coop-adopt), e.g. their first-person hud
+  (coop-touched 28) ;; a world process a player touched recently (see coop-touch-player)
   )
 
 (declare-type process basic)
