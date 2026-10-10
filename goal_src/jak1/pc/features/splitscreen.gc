@@ -491,11 +491,14 @@
         (return tgt))))
   (the-as target #f))
 
-;; player 2's hips last frame for each race ring (the ring itself keeps player 1's)
+;; per race ring: player 2's hips last frame (the ring itself keeps player 1's) and, for the
+;; every-ring option, which players flew through it since it lit up
 (deftype coop-ring-hips (structure)
-  ((owner process 8)
-   (next  int32)
-   (hips  vector 8 :inline)))
+  ((owner  process 8)
+   (next   int32)
+   (passed uint8 8)       ;; bit per player
+   (lit    time-frame 8)  ;; the ring's state-time when the bits were recorded (it lit up again: reset)
+   (hips   vector 8 :inline)))
 
 (define *coop-ring-hips* (new 'global 'coop-ring-hips))
 
@@ -504,36 +507,55 @@
 
 (set! (-> *coop-ring-hips* next) 0)
 
-(defun coop-ring-p2-hips ((ring process))
-  "Player 2's last hips position for this ring (a new slot starts far away, so the first frame
-   doesn't count)."
+(defun coop-ring-slot ((ring process))
+  "The slot of this ring (a new one starts with player 2 far away, so their first frame doesn't count)."
   (dotimes (i 8)
     (if (= (-> *coop-ring-hips* owner i) ring)
-      (return (-> *coop-ring-hips* hips i))))
+      (return i)))
   (let ((i (-> *coop-ring-hips* next)))
     (set! (-> *coop-ring-hips* next) (mod (+ i 1) 8))
     (set! (-> *coop-ring-hips* owner i) ring)
+    (set! (-> *coop-ring-hips* passed i) (the-as uint 0))
+    (set! (-> *coop-ring-hips* lit i) (-> (the-as process-drawable ring) state-time))
     (set-vector! (-> *coop-ring-hips* hips i) 0.0 (meters 100000) 0.0 1.0)
-    (-> *coop-ring-hips* hips i)))
+    i))
 
 (defun coop-ring-crossed? ((ring process) (cyl cylinder-flat) (hips0 vector))
-  "Race rings: did a player's hips go through cyl since the last frame? hips0 holds player 1's hips
-   from the last frame (the ring's own field), player 2's are kept here; both are updated. With one
-   position for both, a switch between the players drew a line from one to the other that could
-   cross the ring. A jump of more than 10 m (a respawn) doesn't count. Without co-op only *target*,
-   in hips0."
-  (let ((crossed #f)
-        (hips1 (if (coop-active?) (coop-ring-p2-hips ring) hips0)))
-    (dotimes (i (if (coop-active?) 2 1))
-      (let ((tgt (if (coop-active?) (coop-player-target i) *target*))
+  "Race rings: does the ring count as flown through this frame? hips0 holds player 1's hips from the
+   last frame (the ring's own field), player 2's are kept here; both are updated. Each player's own
+   path is checked: with one position for both, a switch between the players drew a line from one
+   to the other that could cross the ring. A jump of more than 10 m (a respawn) doesn't count.
+   By default either player flying through counts. With the every-ring option the ring counts once
+   every player in play flew through it since it lit up. Without co-op only *target*, in hips0."
+  (let* ((coop (coop-active?))
+         (slot (if coop (coop-ring-slot ring) 0))
+         (hips1 (if coop (-> *coop-ring-hips* hips slot) hips0))
+         (crossed #f))
+    (when (and coop (!= (-> *coop-ring-hips* lit slot) (-> (the-as process-drawable ring) state-time)))
+      (set! (-> *coop-ring-hips* lit slot) (-> (the-as process-drawable ring) state-time))
+      (set! (-> *coop-ring-hips* passed slot) (the-as uint 0)))
+    (dotimes (i (if coop 2 1))
+      (let ((tgt (if coop (coop-player-target i) *target*))
             (hips (if (zero? i) hips0 hips1)))
         (when tgt
           (let ((dir (new 'stack-no-clear 'vector)))
             (set! (-> dir quad) (-> hips quad))
             (vector<-cspace! hips (-> tgt node-list data 26))
             (vector-! dir dir hips)
-            (if (and (< (vector-length dir) (meters 10)) (>= (ray-flat-cyl-intersect cyl hips dir) 0.0))
-              (set! crossed #t))))))
+            (when (and (< (vector-length dir) (meters 10)) (>= (ray-flat-cyl-intersect cyl hips dir) 0.0))
+              (set! crossed #t)
+              (when (and coop (not (logtest? (-> *coop-ring-hips* passed slot) (ash 1 i))))
+                (logior! (-> *coop-ring-hips* passed slot) (ash 1 i))
+                (when (-> *coop* every-ring?)
+                  (sound-play "close-racering")
+                  (format 0 "[coop] player ~D flew through ~A~%" (+ i 1) (-> ring name)))))))))
+    (when (and coop (-> *coop* every-ring?))
+      ;; every player in play must have flown through (a player waiting to respawn doesn't hold it up)
+      (set! crossed (nonzero? (-> *coop-ring-hips* passed slot)))
+      (dotimes (i 2)
+        (let ((tgt (coop-player-target i)))
+          (if (and (coop-player-in-play? tgt) (not (logtest? (-> *coop-ring-hips* passed slot) (ash 1 i))))
+            (set! crossed #f)))))
     crossed))
 
 (defun coop-racer-pad-near ((pos vector) (radius float))

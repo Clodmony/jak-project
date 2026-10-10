@@ -737,6 +737,8 @@
 ;; og:preserve-this coop: set while the timer is drawn a second time, into the other player's view
 (define *coop-gorge-drawing-other* #f)
 
+(define-extern gorge-start-draw-time (function symbol symbol none :behavior gorge-start)) ;; og:preserve-this coop: it calls itself
+
 (defbehavior gorge-start-draw-time gorge-start ((arg0 symbol) (arg1 symbol))
   ;; og:preserve-this coop: on a split frame the timer shows in both views (no task/record changes
   ;; the second time)
