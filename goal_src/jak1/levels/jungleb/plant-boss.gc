@@ -157,7 +157,10 @@
           v0-0))))
     (('target)
      (case (-> arg3 param 0)
-       (('die) (if (= (-> arg3 param 1) 'plant-boss) (go plant-boss-eat)))))))
+       (('die)
+        (when (= (-> arg3 param 1) 'plant-boss)
+          (coop-boss-eats self arg0) ;; og:preserve-this coop: the eat scene and its end belong to the eaten player
+          (go plant-boss-eat)))))))
 
 (defbehavior plant-boss-default-event-handler plant-boss ((arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
   (case arg2
@@ -698,7 +701,7 @@
   :code
     (behavior ()
       (set-setting! 'music 'danger 0.0 0)
-      (send-event *target* 'reset-pickup 'eco)
+      (coop-send-to-players 'reset-pickup 'eco) ;; og:preserve-this coop: both players
       (let ((v1-9 (-> self entity extra perm)))
         (logior! (-> v1-9 status) (entity-perm-status user-set-from-cstage))
         (b! (zero? (-> v1-9 user-int8 2)) cfg-5 :delay (empty-form)))
@@ -845,7 +848,7 @@
       (set! (-> self body flex-blend) 0.0)
       (set! (-> self neck flex-blend) 1.0)
       (set! (-> self want-aphid-count)
-            (min (- 4 (the int (-> self health)))
+            (min (- 4 (the int (coop-boss-phase-health (-> self health) 3))) ;; og:preserve-this coop: tougher bosses
                  (cond
                    ((>= (-> self try) 15) 1)
                    ((>= (-> self try) 10) 2)
@@ -857,7 +860,7 @@
       (cond
         ((zero? (-> self want-aphid-count))
          enter-state
-         (let ((v1-7 (the int (-> self health))))
+         (let ((v1-7 (the int (coop-boss-phase-health (-> self health) 3)))) ;; og:preserve-this coop: tougher bosses
            (go plant-boss-attack
                (cond
                  ((= v1-7 2) 2)
@@ -992,6 +995,7 @@
   :exit
     (behavior ()
       (logclear! (-> self skel status) (janim-status spool))
+      (coop-unpin self) ;; og:preserve-this coop
       (let ((a0-4 (handle->process (-> self camera)))) (if a0-4 (deactivate a0-4))))
   :code
     (behavior ()
@@ -1013,6 +1017,7 @@
           (when (and (>= (ja-aframe-num 0) 175.0) (zero? gp-0))
             (set! gp-0 1)
             (set! (-> self camera) (ppointer->handle (process-spawn othercam self 28 #f #t :to self)))
+            (coop-pin-alone-like (handle->process (-> self camera)) self) ;; og:preserve-this coop: in the eaten player's view
             (logior! (-> self skel status) (janim-status spool))
             (ambient-hint-spawn "gamcam29" (the-as vector #f) *entity-pool* 'ambient))
           (when (and (>= (ja-aframe-num 0) 236.0) (= gp-0 1))
@@ -1389,7 +1394,7 @@
                        :to
                        this))
   (set! (-> this energy) 0.25)
-  (set! (-> this health) 3.0)
+  (set! (-> this health) (the float (coop-boss-hits 3))) ;; og:preserve-this coop: tougher bosses
   (set! (-> this cam-tracker) (the-as handle #f))
   (set! (-> this camera) (the-as handle #f))
   (set! (-> this money) (the-as handle #f))
