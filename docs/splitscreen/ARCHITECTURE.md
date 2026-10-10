@@ -159,6 +159,12 @@ the same behaviour as the existing PC "force actors" option, without changing th
   would block the knockback). Option "Co-op: friendly fire" (`*coop* friendly-fire?`, on by
   default) turns the hits off; collision stays. Player 2's attack ids start at `#x40000000`, so
   enemies that de-duplicate hits by id don't drop one player's hit; hits between players carry no id.
+- A boss eating a player (Dark Eco Plant) runs for that player until the scene ends (`coop-boss-eats`,
+  a pin that doesn't cover the boss's children, `coop-pin-alone`): the scene's release reaches the
+  eaten player. Its othercam is pinned the same way; an othercam pinned alone while the other
+  player is in play adds no movie or process-mask setting and its look-through applies only to
+  that player's view (`coop-solo-cam-player`). A respawn also restores the player's root joint
+  (the eat scene drives it from the plant's joint) and daxter's matrix mode.
 - Scripts that send the player to a checkpoint (`'continue`, Klaww's intro) go through
   `coop-continue`: player 1 runs `target-continue`, player 2 is despawned and comes back next to
   player 1.

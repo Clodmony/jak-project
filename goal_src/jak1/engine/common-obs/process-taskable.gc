@@ -745,9 +745,12 @@
       (case (-> self spooling?)
         (('logo))
         (else
-         (add-setting! 'process-mask 'set 0.0 (-> self mask-to-clear))
-         (add-setting! 'movie (process->ppointer self) 0.0 0)
-         (if (not (-> self border-value)) (add-setting! 'border-mode (-> self border-value) 0.0 0))))
+         ;; og:preserve-this coop: a cinematic of one player (a boss eating them) shows in their view only
+         ;; and doesn't stop the world, the other player plays on
+         (when (< (coop-solo-cam-player self) 0)
+           (add-setting! 'process-mask 'set 0.0 (-> self mask-to-clear))
+           (add-setting! 'movie (process->ppointer self) 0.0 0)
+           (if (not (-> self border-value)) (add-setting! 'border-mode (-> self border-value) 0.0 0)))))
       (set! (-> self had-valid-frame) #f)
       (let ((gp-0 (-> self hand process 0)))
         (vector<-cspace! (-> self old-pos) (-> (the-as process-taskable gp-0) node-list data (-> self cam-joint-index)))
