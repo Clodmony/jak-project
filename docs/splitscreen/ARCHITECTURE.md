@@ -255,7 +255,9 @@ upstream OpenGOAL, never a diverging copy:
   `pc-debug-common`).
 - Every hand edit in a decompiled file carries `og:preserve-this` (upstream's CI then flags any
   regeneration that would drop it).
-- Shared C++ runtime changes only take effect when Jak 1 turns co-op on.
+- Shared C++ runtime changes only take effect when Jak 1 turns co-op on. One exception, a bug fix:
+  `gk --port` now sets the listener port (upstream declared it as a flag and the listener used a
+  fixed port); without `--port` nothing changes. The local test tools use it to run several games.
 - Co-op code writes files through `*pc-settings-folder*`, not `*pc-user-dir-base-path*` (the latter
   ignores the launcher's `--config-path`).
 
