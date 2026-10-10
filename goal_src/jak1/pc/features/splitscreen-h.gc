@@ -36,6 +36,7 @@
    (top-bottom?       symbol) ;; menu toggle for layout (on-off options edit symbols)
    (nearest-world?    symbol) ;; world processes use the context of the closest player
    (leash?            symbol) ;; teleport a player that strays too far back to the other one
+   (every-ring?       symbol) ;; race rings: each ring counts only once both players flew through it
    (leash-distance    meters) ;; max distance between players before the catch-up teleport
    (near-hysteresis   meters) ;; a world process only switches player when the other is this much closer
    (respawn-delay     time-frame) ;; dead player waits this long before respawning next to the survivor
@@ -54,6 +55,7 @@
        :top-bottom? #f
        :nearest-world? #t
        :leash? #t
+       :every-ring? #f
        :leash-distance (meters 60)
        ;; small: interactions have small radii (the fisherman's boat 1.5 m), a big margin left the closer
        ;; player unable to use an object the other player had touched
@@ -263,6 +265,10 @@
 
 (set! (-> *coop-grab* partner) (the-as handle #f))
 
+(defun coop-grab-state? ((name symbol))
+  "Is name a state a grabbed player waits in: on foot, on the zoomer or on the flut flut."
+  (or (= name 'target-grab) (= name 'target-racing-grab) (= name 'target-flut-grab)))
+
 (defun coop-grab-other-player ((proc process) (grab symbol))
   "Co-op: cutscenes, conversations and elevators that grab a player hold the other player too.
    The grabber may later release either player (its *target* can be the other one by then), so a
@@ -279,17 +285,18 @@
                     (not (logtest? (-> other state-flags) (state-flags grabbed dying)))
                     (begin
                       (send-event other 'change-mode 'grab)
-                      (= (-> other next-state name) 'target-grab)))
+                      (coop-grab-state? (-> other next-state name))))
            (set! (-> *coop-grab* main) (process->handle proc))
            (set! (-> *coop-grab* partner) (process->handle other)))))
       (else
        (let ((main (handle->process (-> *coop-grab* main)))
              (partner (handle->process (-> *coop-grab* partner))))
          (when (and partner (or (= proc main) (= proc partner)))
-           (let ((to-release (if (= proc partner) main partner)))
-             (if (and to-release (= (send-event to-release 'query 'mode) 'target-grab)) (send-event to-release 'end-mode)))
+           ;; forget the pair first: the release below comes back here from the grab state's 'end-mode
            (set! (-> *coop-grab* main) (the-as handle #f))
-           (set! (-> *coop-grab* partner) (the-as handle #f)))))))
+           (set! (-> *coop-grab* partner) (the-as handle #f))
+           (let ((to-release (if (= proc partner) main partner)))
+             (if (and to-release (coop-grab-state? (the-as symbol (send-event to-release 'query 'mode)))) (send-event to-release 'end-mode))))))))
   (none))
 
 (defun coop-level-containing ((levels level-group) (pos vector) (skip level))
@@ -320,6 +327,14 @@
 (define-extern coop-start (function symbol))
 (define-extern coop-stop (function none))
 (define-extern coop-player-target (function int target))
+(define-extern coop-racer-mount-other (function process target none))
+(define-extern coop-racer-dismount-other (function process none))
+(define-extern coop-racer-finish-ready? (function process-drawable symbol))
+(define-extern coop-racer-may-get-off? (function process symbol))
+(define-extern coop-racer-note-death (function target none))
+(define-extern coop-player-in-play? (function target basic))
+(define-extern coop-powerup-player-near (function vector float pickup-type target))
+(define-extern coop-ring-crossed? (function process cylinder-flat vector symbol))
 (define-extern coop-kill-camera-processes (function none))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

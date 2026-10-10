@@ -800,6 +800,7 @@
   (local-coop #x1700)
   (local-coop-top-bottom #x1701)
   (local-coop-auto-assign #x1702)
+  (local-coop-every-ring #x1703) ;; og:preserve-this coop
   ;; GAME-TEXT-ID ENUM ENDS
   )
 
