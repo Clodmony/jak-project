@@ -412,16 +412,16 @@
 ;; player 2's spawn: a light version of target-continue that doesn't touch session state
 ;; (load state, continue point, settings, player 1's camera).
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; zoomer (racer): both players drive their own, progress needs both
+;; vehicles (zoomer and flut flut): both players ride their own, progress needs both
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (define-extern coop-player-in-play? (function target basic))
 
 (deftype coop-racer-state (structure)
-  ((pad        handle)       ;; the zoomer pad the players got on at (a handle: in a structure, not a symbol)
-   (left-pad   symbol 2)   ;; has each player driven away from the pad since they last got on
+  ((pad        handle)       ;; the zoomer or flut flut pad the players got on at (a handle: in a structure, not a symbol)
+   (left-pad   symbol 2)   ;; has each player moved away from the pad since they last got on
    (checkpoint continue-point 2)   ;; the last checkpoint each player drove past (where they respawn)
-   (died-racing symbol 2)))        ;; did each player's last death happen on a zoomer
+   (died-racing symbol 2)))        ;; did each player's last death happen on a zoomer or flut flut
 
 (define *coop-racer* (new 'global 'coop-racer-state))
 
@@ -442,10 +442,35 @@
 (defun coop-player-racing? ((tgt target))
   (and tgt (logtest? (-> tgt control root-prim prim-core action) (collide-action racer))))
 
+(defun coop-player-on-flut? ((tgt target))
+  (and tgt (logtest? (-> tgt control root-prim prim-core action) (collide-action flut))))
+
+(defun coop-player-riding? ((tgt target))
+  "On a zoomer or a flut flut."
+  (and tgt (logtest? (-> tgt control root-prim prim-core action) (collide-action racer flut))))
+
+(defun coop-flut-rider ()
+  "For the flut flut pads: a player riding a flut flut, or #f. Without co-op that is *target*. With
+   co-op it is any player (the one nearest to the pad first), so a pad keeps its riding state (and the
+   walls that keep the flut flut in its area) while either player rides."
+  (cond
+    ((coop-player-on-flut? *target*) *target*)
+    ((not (coop-active?)) (the-as target #f))
+    ((coop-player-on-flut? (coop-player-target 0)) (coop-player-target 0))
+    ((coop-player-on-flut? (coop-player-target 1)) (coop-player-target 1))
+    (else (the-as target #f))))
+
 (defun coop-vehicle-section? ()
-  "Is a zoomer section going on (a player drives a zoomer from the pad they got on at)?"
+  "Is a zoomer or flut flut section going on (a player rides from the pad they got on at)?"
   (and (handle->process (-> *coop-racer* pad))
-       (or (coop-player-racing? (coop-player-target 0)) (coop-player-racing? (coop-player-target 1)))))
+       (or (coop-player-riding? (coop-player-target 0)) (coop-player-riding? (coop-player-target 1)))))
+
+(defun coop-flut-section? ()
+  "Is the vehicle section going on a flut flut one?"
+  (and (coop-vehicle-section?) (= (-> (handle->process (-> *coop-racer* pad)) type symbol) 'flutflut)))
+
+(defun coop-zoomer-section? ()
+  (and (coop-vehicle-section?) (not (coop-flut-section?))))
 
 (defun coop-racer-note-mount ((tgt target))
   (if tgt (set! (-> *coop-racer* left-pad (coop-process-player tgt)) #f))
@@ -477,27 +502,29 @@
   (if (-> *coop-racer* checkpoint idx) (-> *coop-racer* checkpoint idx) (-> *game-info* current-continue)))
 
 (defun coop-racer-update ()
-  "Once per tick: note which riders have driven more than 6 m away from the pad, and the last
-   checkpoint each rider drove past."
+  "Once per tick: note which riders have moved more than 6 m away from the pad, and the last
+   checkpoint each zoomer rider drove past (a flut flut rider respawns at the pad)."
   (let ((pad (the-as process-drawable (handle->process (-> *coop-racer* pad)))))
     (when pad
       (dotimes (i 2)
         (let ((tgt (coop-player-target i)))
-          ;; only while driving: getting on moves the rider onto the pad first
-          (when (and (coop-player-racing? tgt)
+          ;; only while riding: getting on moves the rider onto the pad first
+          (when (and (coop-player-riding? tgt)
                      (!= (-> tgt state name) 'target-racing-start)
-                     (!= (-> tgt state name) 'target-racing-get-on))
+                     (!= (-> tgt state name) 'target-racing-get-on)
+                     (!= (-> tgt state name) 'target-flut-start)
+                     (!= (-> tgt state name) 'target-flut-get-on))
             (if (< (meters 6) (vector-vector-distance (-> tgt control trans) (-> pad root trans)))
               (set! (-> *coop-racer* left-pad i) #t))
-            (let ((cp (coop-racer-checkpoint-near (-> tgt control trans))))
+            (let ((cp (if (coop-player-racing? tgt) (coop-racer-checkpoint-near (-> tgt control trans)))))
               (when (and cp (!= cp (-> *coop-racer* checkpoint i)))
                 (set! (-> *coop-racer* checkpoint i) cp)
                 (format 0 "[coop] player ~D checkpoint ~A~%" (+ i 1) (-> cp name)))))))))
   (none))
 
 (defun coop-racer-mount-other ((pad process) (mounted target))
-  "A player got on a zoomer at pad: the other player gets their own zoomer next to them, so both
-   race at the same time."
+  "A player got on a zoomer or flut flut at pad: the other player gets their own next to them, so
+   both ride at the same time."
   (when (and (coop-active?) mounted)
     (set! (-> *coop-racer* pad) (process->handle pad))
     ;; a new zoomer section: both start from the game's checkpoint
@@ -505,10 +532,10 @@
     (set! (-> *coop-racer* checkpoint 1) (-> *game-info* current-continue))
     (coop-racer-note-mount mounted)
     (let ((other (coop-other-player-target mounted)))
-      (when (and other (coop-player-in-play? other) (not (coop-player-racing? other)))
+      (when (and other (coop-player-in-play? other) (not (coop-player-riding? other)))
         (move-to-point! (-> other control) (coop-safe-position-near mounted (new 'stack-no-clear 'vector)))
         (coop-racer-note-mount other)
-        (send-event other 'change-mode 'racing pad))))
+        (send-event other 'change-mode (if (= (-> pad type symbol) 'flutflut) 'flut 'racing) pad))))
   (none))
 
 (defun coop-racer-dismount-other ((dismounted process))
@@ -521,7 +548,8 @@
 (deftype coop-pad-search (structure)
   ((pos  vector :inline)
    (best process)
-   (dist float)))
+   (dist float)
+   (kind symbol)))
 
 ;; lambdas don't capture locals, so the nearest-pad search keeps its state here
 (define *coop-pad-search* (new 'global 'coop-pad-search))
@@ -605,14 +633,15 @@
             (set! crossed #f)))))
     crossed))
 
-(defun coop-racer-pad-near ((pos vector) (radius float))
-  "The zoomer pad (racer) closest to pos within radius, or #f."
+(defun coop-racer-pad-near ((pos vector) (radius float) (kind symbol))
+  "The pad of type kind (racer or flutflut) closest to pos within radius, or #f."
   (set! (-> *coop-pad-search* pos quad) (-> pos quad))
   (set! (-> *coop-pad-search* best) #f)
   (set! (-> *coop-pad-search* dist) radius)
+  (set! (-> *coop-pad-search* kind) kind)
   (iterate-process-tree *entity-pool*
                         (lambda ((p process))
-                          (when (= (-> p type symbol) 'racer)
+                          (when (= (-> p type symbol) (-> *coop-pad-search* kind))
                             (let ((d (vector-vector-distance (-> (the-as process-drawable p) root trans) (-> *coop-pad-search* pos))))
                               (when (< d (-> *coop-pad-search* dist))
                                 (set! (-> *coop-pad-search* dist) d)
@@ -622,22 +651,92 @@
   (-> *coop-pad-search* best))
 
 (defun coop-racer-note-death ((tgt target))
-  "tgt died on a zoomer while the other player drives on: the respawn puts them back on one."
-  (set! (-> *coop-racer* died-racing (coop-process-player tgt)) #t)
+  "tgt died on a zoomer or flut flut while the other player rides on: the respawn puts them back on one."
+  (set! (-> *coop-racer* died-racing (coop-process-player tgt)) (if (coop-player-on-flut? tgt) 'flutflut 'racer))
   (none))
 
-(defun coop-racer-remount ((tgt target) (always symbol))
-  "After a spawn or a zoomer death, called from tgt's own code: if the other player is on a zoomer
-   (or always, after a zoomer death), tgt gets one too.
+(defun coop-racer-remount ((tgt target) (kind symbol))
+  "After a spawn or a vehicle death, called from tgt's own code: tgt gets a vehicle of kind (racer or
+   flutflut, after a death on one), or with kind #f the vehicle the other player rides from the
+   section's pad, if any.
    Getting on moves the rider onto the pad it uses, so use the pad at the respawn point; with no pad
-   nearby the rider gets on where they stand. (The spawn/respawn states don't take 'change-mode
-   events, so this switches state directly.)"
-  (let ((other (coop-other-player-target tgt)))
-    (when (and (or always (and (handle->process (-> *coop-racer* pad)) (coop-player-racing? other))) (not (coop-player-racing? tgt)))
-      (let ((near-pad (coop-racer-pad-near (-> tgt control trans) (meters 30))))
-        (coop-racer-note-mount tgt)
-        (go-process tgt target-racing-start (if near-pad (process->handle near-pad) (the-as handle #f))))))
+   nearby a zoomer rider gets on where they stand. A flut flut always needs a pad (its model is found
+   through the pad's level), away from it the rider gets on where they stand (coop-flut-mount-at-pad?).
+   (The spawn/respawn states don't take 'change-mode events, so this switches state directly.)"
+  (let* ((other (coop-other-player-target tgt))
+         (section-pad (handle->process (-> *coop-racer* pad)))
+         (want (cond
+                 (kind kind)
+                 ((not (and section-pad (coop-player-riding? other))) #f)
+                 ((coop-player-on-flut? other) 'flutflut)
+                 (else 'racer))))
+    (when (and want (not (coop-player-riding? tgt)))
+      (let* ((flut? (= want 'flutflut))
+             (pad (coop-racer-pad-near (-> tgt control trans) (if flut? (meters 8) (meters 30)) want)))
+        (when (and flut? (not pad))
+          (set! pad (if (and section-pad (= (-> section-pad type symbol) 'flutflut))
+                      section-pad
+                      (coop-racer-pad-near (-> tgt control trans) (meters 100000) 'flutflut))))
+        (cond
+          ((not flut?)
+           (coop-racer-note-mount tgt)
+           (go-process tgt target-racing-start (if pad (process->handle pad) (the-as handle #f))))
+          (pad
+           (coop-racer-note-mount tgt)
+           (go-process tgt target-flut-start (process->handle pad)))))))
   (none))
+
+(defun coop-flut-mount-at-pad? ((pad process-drawable) (tgt target))
+  "Does tgt get onto the flut flut at pad (moving onto it), or where they stand? Only a co-op
+   (re)spawn more than 8 m from the pad gets on where they stand."
+  (or (not (coop-active?)) (>= (meters 8) (vector-vector-distance (-> tgt control trans) (-> pad root trans)))))
+
+(defun coop-racer-respawn-point ((idx int) (pos vector) (quat quaternion))
+  "Where player idx respawns after dying on a vehicle: a flut flut rider at the pad they got on at,
+   a zoomer rider at their own last checkpoint. Returns the name of the place."
+  (let ((pad (the-as process-drawable (handle->process (-> *coop-racer* pad)))))
+    (cond
+      ((and pad (= (-> pad type symbol) 'flutflut))
+       (set! (-> pos quad) (-> pad root trans quad))
+       (quaternion-copy! quat (-> pad root quat))
+       (the-as string (-> pad name)))
+      (else
+       (let ((cp (coop-racer-checkpoint idx)))
+         (set! (-> pos quad) (-> cp trans quad))
+         (quaternion-copy! quat (-> cp quat))
+         (-> cp name))))))
+
+(defun coop-elevator-called? ((plat process-drawable) (height float))
+  "A platform waiting at the top (Snowy's flut flut elevator to the fort) goes back down for a player
+   below height who isn't jumping. Without co-op that is *target* (the original check). With co-op it
+   is either player on foot, and only while no player is within 5 m of the platform: the other player
+   may have just ridden it up."
+  (when (coop-active?)
+    (dotimes (i 2)
+      (let ((tgt (coop-player-target i)))
+        (if (and (coop-player-in-play? tgt) (>= (meters 5) (vector-vector-distance (-> tgt control trans) (-> plat root trans))))
+          (return #f)))))
+  (dotimes (i (if (coop-active?) 2 1))
+    (let ((tgt (if (coop-active?) (coop-player-target i) *target*)))
+      (if (and tgt
+               (or (not (coop-active?)) (and (coop-player-in-play? tgt) (not (coop-player-riding? tgt))))
+               (>= height (-> tgt control trans y))
+               (not (and (logtest? (-> tgt control mod-surface flags) (surface-flags jump))
+                         (not (logtest? (-> tgt control status) (cshape-moving-flags onsurf))))))
+        (return #t))))
+  #f)
+
+(defun coop-flut-cell-ready? ((cell process-drawable))
+  "In a flut flut section a power cell waits for both players: it can be taken once every player in
+   play is within 30 m of it. Always #t otherwise."
+  (or (not (coop-active?))
+      (not (coop-flut-section?))
+      (let ((ready #t))
+        (dotimes (i 2)
+          (let ((tgt (coop-player-target i)))
+            (if (and (coop-player-in-play? tgt) (< (meters 30) (vector-vector-distance (-> tgt control trans) (-> cell root trans))))
+              (set! ready #f))))
+        ready)))
 
 (defun coop-racer-finish-ready? ((pad process-drawable))
   "A zoomer finish pad only hands out its reward once every player has arrived (within 30 m)."
@@ -774,11 +873,11 @@
       (clear-collide-with-as (-> self control))
       (set! (-> self control transv quad) (the-as uint128 0))
       (suspend-for (-> *coop* respawn-delay))
-      ;; wait for the other player to stand somewhere safe (not after a zoomer death or in a zoomer
-      ;; section: there the dead player goes back to their last checkpoint alone and races that part again)
+      ;; wait for the other player to stand somewhere safe (not after a vehicle death or in a zoomer
+      ;; section: there the dead player goes back to their last checkpoint alone and rides that part again)
       (let ((other (coop-other-player-target self))
             (racing-death (-> *coop-racer* died-racing (coop-process-player self))))
-        (until (or (not (coop-active?)) racing-death (coop-vehicle-section?) (coop-target-ready? other))
+        (until (or (not (coop-active?)) racing-death (coop-zoomer-section?) (coop-target-ready? other))
           (suspend)
           (set! other (coop-other-player-target self)))
         ;; co-op was stopped while we waited: finish the original single player death
@@ -787,22 +886,22 @@
           (initialize! (-> self game) 'dead (the-as game-save #f) (the-as string #f))
           (set-time! (-> self state-time))
           (anim-loop))
-        (let* ((pos (new 'stack-no-clear 'vector))
-               (at-checkpoint (or racing-death (coop-vehicle-section?)))
-               (cp (coop-racer-checkpoint (coop-process-player self))))
+        (let ((pos (new 'stack-no-clear 'vector))
+              (quat (new 'stack-no-clear 'quaternion))
+              (at-checkpoint (or racing-death (coop-zoomer-section?))))
           (cond
             (at-checkpoint
-             (set! (-> pos quad) (-> cp trans quad))
-             (format 0 "[coop] player ~D respawns at the checkpoint ~A~%" (+ 1 (coop-process-player self)) (-> cp name)))
+             (let ((place (coop-racer-respawn-point (coop-process-player self) pos quat)))
+               (format 0 "[coop] player ~D respawns at the checkpoint ~A~%" (+ 1 (coop-process-player self)) place)))
             (else
              (coop-safe-position-near other pos)
+             (quaternion-copy! quat (-> other control quat-for-control))
              (format 0 "[coop] player ~D respawns next to player ~D~%" (+ 1 (coop-process-player self)) (- 2 (coop-process-player self)))))
           (reset! (-> self fact) 'health)
           (reset! (-> self fact) 'eco)
           (reset-target-state #t)
           (target-exit)
-          (quaternion-copy! (-> self control quat-for-control)
-                            (if at-checkpoint (-> cp quat) (-> other control quat-for-control)))
+          (quaternion-copy! (-> self control quat-for-control) quat)
           (move-to-point! (-> self control) pos)
           (rot->dir-targ! (-> self control))
           (set! (-> self control camera-pos quad) (-> self control trans quad))
@@ -817,11 +916,15 @@
       (ja :group! eichar-stance-loop-ja)
       (suspend)
       (logior! (-> self control status) (cshape-moving-flags onsurf onground tsurf))
-      ;; back on a zoomer only after a zoomer death (also when the other player got off meanwhile):
-      ;; a player who got off at a pad and died on foot stays on foot
-      (when (-> *coop-racer* died-racing (coop-process-player self))
-        (set! (-> *coop-racer* died-racing (coop-process-player self)) #f)
-        (coop-racer-remount self #t))
+      ;; back on a zoomer or flut flut after a death on one (also when the other player got off
+      ;; meanwhile). A player who got off at a zoomer pad and died on foot stays on foot; in a flut flut
+      ;; section a player who died on foot comes back next to the other one, on a flut flut too.
+      (cond
+        ((-> *coop-racer* died-racing (coop-process-player self))
+         (let ((kind (-> *coop-racer* died-racing (coop-process-player self))))
+           (set! (-> *coop-racer* died-racing (coop-process-player self)) #f)
+           (coop-racer-remount self kind)))
+        ((coop-flut-section?) (coop-racer-remount self #f)))
       (go target-stance))
   :post target-no-stick-post)
 
