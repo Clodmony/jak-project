@@ -676,6 +676,8 @@
   :trans
     (behavior ()
       (when (send-event *target* 'change-mode 'billy)
+        ;; og:preserve-this coop: the game (rats, snacks, counters) runs for the player shooting
+        (coop-pin-minigame self (process->handle *target*))
         (send-event *target* 'trans 'reset)
         (let ((v1-8 (entity-actor-lookup (-> self entity) 'alt-actor 0)))
           (cond
@@ -716,6 +718,7 @@
   :virtual #t
   :code
     (behavior ()
+      (coop-unpin self) ;; og:preserve-this coop: waiting for a player again
       (if (!= (ja-group) (get-art-elem self)) (ja-channel-push! 1 (seconds 0.2)))
       (loop
         (ja :group! (get-art-elem self))
