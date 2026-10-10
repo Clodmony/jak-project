@@ -648,6 +648,10 @@
             (if (and tgt (< (meters 30) (vector-vector-distance (-> tgt control trans) (-> pad root trans)))) (set! ready #f))))
         ready)))
 
+(defun coop-player-warping-in? ((tgt target))
+  "Is tgt coming out of a warp gate?"
+  (and tgt (-> tgt state) (= (-> tgt state name) 'target-warp-in)))
+
 (defstate target-coop-spawn (target)
   :event target-generic-event-handler
   :exit
@@ -686,6 +690,15 @@
       (suspend)
       (logior! (-> self control status) (cshape-moving-flags onsurf onground tsurf))
       (coop-racer-remount self #f)
+      ;; player 1 is coming out of a warp gate: come out of it too, landing beside them
+      (let ((p1 (coop-player-target 0)))
+        (when (coop-player-warping-in? p1)
+          (let ((gate (new 'stack-no-clear 'vector))
+                (dest (new 'stack-no-clear 'vector)))
+            (vector+! gate (-> p1 control unknown-vector102) (new 'static 'vector :y 4096.0 :w 1.0))
+            (vector+! dest (-> p1 control unknown-vector103) (new 'static 'vector :x 6144.0 :w 1.0))
+            (format 0 "[coop] player 2 comes out of the warp gate~%")
+            (go target-warp-in gate dest))))
       (go target-stance)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1071,7 +1084,9 @@
        ;; respawn next to player 1 after a short delay, once player 1 is in control.
        (cond
          ((zero? (-> *coop-timers* p2-missing)) (set! (-> *coop-timers* p2-missing) (current-time)))
-         ((and (coop-target-ready? p1) (time-elapsed? (-> *coop-timers* p2-missing) (-> *coop* respawn-delay)))
+         ;; player 1 coming out of a warp gate: player 2 comes out right behind them
+         ((or (coop-player-warping-in? p1)
+              (and (coop-target-ready? p1) (time-elapsed? (-> *coop-timers* p2-missing) (-> *coop* respawn-delay))))
           (set! (-> *coop-timers* p2-missing) 0)
           (coop-despawn-player2) ;; clean up a camera rig left behind
           (coop-spawn-player2 (coop-safe-position-near p1 (new 'stack-no-clear 'vector))))))
