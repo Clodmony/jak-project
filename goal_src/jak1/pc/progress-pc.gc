@@ -703,6 +703,7 @@
               (none)))
        (new 'static 'game-option :option-type (game-option-type on-off) :name (text-id local-coop-every-ring) :scale #t)
        (new 'static 'game-option :option-type (game-option-type on-off) :name (text-id local-coop-friendly-fire) :scale #t)
+       (new 'static 'game-option :option-type (game-option-type on-off) :name (text-id local-coop-tougher-bosses) :scale #t)
        (new 'static 'game-option :option-type (game-option-type button) :name (text-id back) :scale #t)))
 
 (define *gfx-ps2-options*
@@ -2178,6 +2179,7 @@
   (set! (-> *misc-options* 5 value-to-modify) (&-> *coop* top-bottom?))
   (set! (-> *misc-options* 7 value-to-modify) (&-> *coop* every-ring?)) ;; og:preserve-this coop
   (set! (-> *misc-options* 8 value-to-modify) (&-> *coop* friendly-fire?)) ;; og:preserve-this coop
+  (set! (-> *misc-options* 9 value-to-modify) (&-> *coop* tougher-bosses?)) ;; og:preserve-this coop
   (set! (-> *camera-options* 0 value-to-modify) (&-> *pc-settings* first-camera-h-inverted?))
   (set! (-> *camera-options* 1 value-to-modify) (&-> *pc-settings* first-camera-v-inverted?))
   (set! (-> *camera-options* 2 value-to-modify) (&-> *pc-settings* third-camera-h-inverted?))
@@ -3506,7 +3508,7 @@
              (hide-progress-icons)
              (draw-options self 115 25 0.82))
             (((progress-screen settings) (progress-screen settings-title)) (hide-progress-icons) (draw-options self 115 25 0.78))
-            (((progress-screen misc-options)) (hide-progress-icons) (draw-options self 115 25 0.62)) ;; og:preserve-this coop: 0.79 -> 0.62, five more options
+            (((progress-screen misc-options)) (hide-progress-icons) (draw-options self 115 25 0.59)) ;; og:preserve-this coop: 0.79 -> 0.59, six more options
             (((progress-screen music-player)) (hide-progress-icons) (draw-options self 128 21 0.82))
             (((progress-screen flava-player)) (hide-progress-icons) (draw-options self 128 21 0.82))
             (((progress-screen speedrun-options)) (hide-progress-icons) (draw-notice-screen self) (draw-options self 155 25 0.65))

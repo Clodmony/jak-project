@@ -430,7 +430,7 @@
             (< (meters 8) (vector-vector-distance safe (-> tgt control trans))))
       (set! (-> result quad) (-> tgt control trans quad))
       (set! (-> result quad) (-> safe quad))))
-  ;; step to the side so the two players don't overlap (players don't collide with each other).
+  ;; step to the side so the two players don't overlap.
   ;; a spot is used only if the way there is clear and it has ground at about the same height.
   (let ((side (vector-x-quaternion! (new 'stack-no-clear 'vector) (-> tgt control quat-for-control)))
         (fwd (vector-z-quaternion! (new 'stack-no-clear 'vector) (-> tgt control quat-for-control)))
@@ -1363,10 +1363,11 @@
          (logclear! (-> tgt control unknown-sphere-array00 i collide-with) (collide-kind target))))))
   (none))
 
-(defun coop-players-overlap? ((a target) (b target))
-  "Do the two players' bodies overlap (0.7 m spheres up to 2.8 m high)?"
+(defun coop-players-overlap? ((a target) (b target) (xz float) (y float))
+  "Are the two players closer than xz horizontally and y vertically? Their bodies (0.7 m spheres up
+   to 2.8 m high) overlap within 1.4 m and 2.8 m."
   (let ((d (vector-! (new 'stack-no-clear 'vector) (-> b control trans) (-> a control trans))))
-    (and (< (fabs (-> d y)) (meters 2.8)) (< (vector-xz-length d) (meters 1.4)))))
+    (and (< (fabs (-> d y)) y) (< (vector-xz-length d) xz))))
 
 (defun coop-push-player ((pusher target) (pushed target))
   "pusher walks into pushed (same height, touching, facing them): pushed is moved along at up to
@@ -1393,12 +1394,52 @@
   (let* ((p1 (coop-player-target 0))
          (p2 (coop-player-target 1))
          (both (and p1 p2 (coop-player-collides? p1) (coop-player-collides? p2) (< *coop-contact-off-until* (current-time)))))
-    (set! *coop-contact?* (if (and both (or *coop-contact?* (not (coop-players-overlap? p1 p2)))) #t #f))
+    ;; deep inside each other (a script or teleport put one player there): off until they're apart
+    (set! *coop-contact?* (if (and both
+                                   (not (coop-players-overlap? p1 p2 (meters 1) (meters 2.4)))
+                                   (or *coop-contact?* (not (coop-players-overlap? p1 p2 (meters 1.4) (meters 2.8)))))
+                            #t
+                            #f))
     (if p1 (coop-set-player-contact p1 *coop-contact?*))
     (if p2 (coop-set-player-contact p2 *coop-contact?*))
     (when *coop-contact?*
       (coop-push-player p1 p2)
       (coop-push-player p2 p1)))
+  (none))
+
+(defun coop-continue ((cp continue-point))
+  "A script sends the player to a checkpoint ('continue, e.g. after Klaww's intro). With co-op only
+   player 1 runs target-continue (it sets the continue point, camera and load state); player 2 is
+   taken out and comes back next to player 1 once player 1 stands there."
+  (cond
+    ((coop-active?)
+     (send-event (coop-player-target 0) 'continue cp)
+     (coop-despawn-player2))
+    (else (send-event *target* 'continue cp)))
+  (none))
+
+(defun coop-lowest-health ()
+  "Health of the most hurt player in play, for help a boss gives a struggling player (Klaww's green
+   eco boulders). *target*'s health without co-op."
+  (let ((health (-> *target* fact health)))
+    (when (coop-active?)
+      (dotimes (i 2)
+        (let ((tgt (coop-player-target i)))
+          (if (and (coop-player-in-play? tgt) (< (-> tgt fact health) health)) (set! health (-> tgt fact health))))))
+    health))
+
+(defun coop-boss-hits ((hits int))
+  "Hits a boss (phase) needs: with co-op and the option \"Co-op: tougher bosses\" half as many
+   again (rounded up), else unchanged."
+  (if (and (coop-active?) (-> *coop* tougher-bosses?)) (/ (+ (* hits 3) 1) 2) hits))
+
+(defun coop-send-to-cameras ((msg symbol) (arg object))
+  "Send msg to the camera of the player the code runs for and, with co-op, to the other player's
+   camera too (a boss's point of interest belongs in both views)."
+  (send-event *camera* msg arg)
+  (when (coop-active?)
+    (let ((cam (handle->process (-> (coop-context (- 1 *coop-player*)) camera-handle))))
+      (if cam (send-event cam msg arg))))
   (none))
 
 (defun coop-player-attack ((victim process) (attacker process) (touch object) (mode symbol))

@@ -847,7 +847,8 @@
           (ja :num! (seek!)))
         (close-specific-task! (game-task ogre-boss) (task-status need-hint))
         (suspend)
-        (send-event *target* 'continue (get-continue-by-name *game-info* "ogre-start"))
+        ;; og:preserve-this coop: player 1 continues, player 2 comes back next to them
+        (coop-continue (get-continue-by-name *game-info* "ogre-start"))
         (ogreboss-inc-try-count))
       (set-setting! 'music 'ogreboss 0.0 0)
       (go ogreboss-wait-for-player))
@@ -1008,7 +1009,7 @@
 
 (defbehavior ogreboss-post ogreboss ()
   (transform-post)
-  (send-event *camera* 'point-of-interest (-> self node-list data 5 bone transform vector 3))
+  (coop-send-to-cameras 'point-of-interest (-> self node-list data 5 bone transform vector 3)) ;; og:preserve-this coop: both views
   0
   (none))
 
@@ -1055,8 +1056,9 @@
           (let ((boulder-pickup (pickup-type none)))
             (let ((f28-0 0.0))
               (cond
-                ((>= 1.0 (-> *target* fact health)) (set! f28-0 0.1))
-                ((>= 2.0 (-> *target* fact health)) (set! f28-0 0.05)))
+                ;; og:preserve-this coop: the most hurt player counts, not the nearest
+                ((>= 1.0 (coop-lowest-health)) (set! f28-0 0.1))
+                ((>= 2.0 (coop-lowest-health)) (set! f28-0 0.05)))
               (set! f28-0
                     (cond
                       ((< (-> self try-count) (the-as uint 5)) (* 0.0 f28-0))
@@ -1195,12 +1197,13 @@
     (behavior ()
       (set-time! (-> self state-time))
       (set! (-> self hit-count) 0)
-      (set! (-> self max-hit-count) (the int (* 6.0 (-> self difficulty))))
+      ;; og:preserve-this coop: more hits with the option "Co-op: tougher bosses"
+      (set! (-> self max-hit-count) (coop-boss-hits (the int (* 6.0 (-> self difficulty)))))
       (set! (-> self grow-time) (* 300.0 (+ (/ 10.0 (-> self difficulty)) (* -1.0 (-> self level)))))
       (set! (-> self boulder) (the-as handle #f)))
   :exit
     (behavior ()
-      (send-event *camera* 'point-of-interest #f)
+      (coop-send-to-cameras 'point-of-interest #f) ;; og:preserve-this coop: both views
       (set! (-> self vulnerable) #f))
   :trans
     (behavior ()
