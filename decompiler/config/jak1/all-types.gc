@@ -185,6 +185,7 @@
     (player2        25)
     (coop-p2-near   26)
     (coop-p1        27)
+    (coop-touched   28)
     )
 
 (defenum timer-clock-selection
