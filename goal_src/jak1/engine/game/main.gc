@@ -572,7 +572,9 @@
       ; (auto-save-check)
       (with-profiler "update-pc"
         (#when PC_PORT
-          (update *pc-settings*)))
+          (update *pc-settings*)
+          ;; og:preserve-this coop: 2d aspect for split views (pckernel-common.gc is shared with the other games)
+          (coop-update-video-hacks)))
       ;; suspend
       (suspend)))
   0)

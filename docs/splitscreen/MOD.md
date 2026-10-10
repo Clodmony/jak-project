@@ -407,6 +407,18 @@ Added on 2026-10-10, after a review:
   `0.10.1` / `0.11.0` / `1.0.0` with `v0.0.1`, `v0.9.0`, `v0.10.0` (pre-release and malformed tags
   ignored).
 
+Added on 2026-10-10, after merging the co-op branch (`ee509d24`):
+
+- `package_mod.py --allow-dynamic` on the rebuilt `build/`, archive extracted to a fresh folder:
+  the packaged `goal_src` is identical to the branch, and the packaged `goalc` compiles all 522
+  Jak 1 targets from the packaged `data/` (`goalc --game jak1 --cmd '(make-group "all-code")'`,
+  after `mkdir -p data/out/jak1/obj`).
+- `./test.sh` found that the merge broke the Jak 2/3 compile tests: `goal_src/jak1/pc/pckernel-common.gc`
+  is compiled for every game and had started to use the Jak 1-only `coop-split-frame?`. The
+  release builds run these tests, so a release would have failed. The co-op part moved to
+  `coop-update-video-hacks` (Jak 1 only, called right after the pc-settings update in `main.gc`);
+  Jak 1 behaves the same and the type consistency tests of all games pass again.
+
 ## Attribution
 
 The release tooling is adapted from
