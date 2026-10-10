@@ -689,8 +689,7 @@
       (ogre-bridge-update-joints))
   :trans
     (behavior ()
-      (if (and (and *target* (>= 286720.0 (vector-vector-distance (-> self root trans) (-> *target* control trans))))
-               (send-event *target* 'query 'powerup (pickup-type eco-blue)))
+      (if (coop-powerup-player-near (-> self root trans) 286720.0 (pickup-type eco-blue)) ;; og:preserve-this coop: either player's blue eco
         (go ogre-bridge-activate))
       0)
   :code

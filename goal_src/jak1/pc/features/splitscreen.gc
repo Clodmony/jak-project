@@ -373,7 +373,8 @@
 (deftype coop-racer-state (structure)
   ((pad        handle)       ;; the zoomer pad the players got on at (a handle: in a structure, not a symbol)
    (left-pad   symbol 2)   ;; has each player driven away from the pad since they last got on
-   (checkpoint continue-point 2))) ;; the last checkpoint each player drove past (where they respawn)
+   (checkpoint continue-point 2)   ;; the last checkpoint each player drove past (where they respawn)
+   (died-racing symbol 2)))        ;; did each player's last death happen on a zoomer
 
 (define *coop-racer* (new 'global 'coop-racer-state))
 
@@ -386,6 +387,10 @@
 (set! (-> *coop-racer* checkpoint 0) #f)
 
 (set! (-> *coop-racer* checkpoint 1) #f)
+
+(set! (-> *coop-racer* died-racing 0) #f)
+
+(set! (-> *coop-racer* died-racing 1) #f)
 
 (defun coop-player-racing? ((tgt target))
   (and tgt (logtest? (-> tgt control root-prim prim-core action) (collide-action racer))))
@@ -474,6 +479,18 @@
 ;; lambdas don't capture locals, so the nearest-pad search keeps its state here
 (define *coop-pad-search* (new 'global 'coop-pad-search))
 
+(defun coop-powerup-player-near ((pos vector) (radius float) (kind pickup-type))
+  "A player within radius of pos who has the powerup kind (e.g. blue eco), or #f. Without co-op
+   only *target* counts. For world objects that react to the player carrying an eco: the one
+   nearest to them (*target* in their context) may not be the one carrying it."
+  (dotimes (i (if (coop-active?) 2 1))
+    (let ((tgt (if (coop-active?) (coop-player-target i) *target*)))
+      (if (and tgt
+               (>= radius (vector-vector-distance pos (-> tgt control trans)))
+               (send-event tgt 'query 'powerup kind))
+        (return tgt))))
+  (the-as target #f))
+
 (defun coop-racer-pad-near ((pos vector) (radius float))
   "The zoomer pad (racer) closest to pos within radius, or #f."
   (set! (-> *coop-pad-search* pos quad) (-> pos quad))
@@ -490,13 +507,19 @@
                         *kernel-context*)
   (-> *coop-pad-search* best))
 
-(defun coop-racer-remount ((tgt target))
-  "After a respawn, called from tgt's own code: if the other player is on a zoomer, tgt gets one too.
+(defun coop-racer-note-death ((tgt target))
+  "tgt died on a zoomer while the other player drives on: the respawn puts them back on one."
+  (set! (-> *coop-racer* died-racing (coop-process-player tgt)) #t)
+  (none))
+
+(defun coop-racer-remount ((tgt target) (always symbol))
+  "After a spawn or a zoomer death, called from tgt's own code: if the other player is on a zoomer
+   (or always, after a zoomer death), tgt gets one too.
    Getting on moves the rider onto the pad it uses, so use the pad at the respawn point; with no pad
    nearby the rider gets on where they stand. (The spawn/respawn states don't take 'change-mode
    events, so this switches state directly.)"
   (let ((other (coop-other-player-target tgt)))
-    (when (and (handle->process (-> *coop-racer* pad)) (coop-player-racing? other) (not (coop-player-racing? tgt)))
+    (when (and (or always (and (handle->process (-> *coop-racer* pad)) (coop-player-racing? other))) (not (coop-player-racing? tgt)))
       (let ((near-pad (coop-racer-pad-near (-> tgt control trans) (meters 30))))
         (coop-racer-note-mount tgt)
         (go-process tgt target-racing-start (if near-pad (process->handle near-pad) (the-as handle #f))))))
@@ -548,7 +571,7 @@
       (ja :group! eichar-stance-loop-ja)
       (suspend)
       (logior! (-> self control status) (cshape-moving-flags onsurf onground tsurf))
-      (coop-racer-remount self)
+      (coop-racer-remount self #f)
       (go target-stance)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -624,10 +647,11 @@
       (clear-collide-with-as (-> self control))
       (set! (-> self control transv quad) (the-as uint128 0))
       (suspend-for (-> *coop* respawn-delay))
-      ;; wait for the other player to stand somewhere safe (not in a zoomer section: there the dead
-      ;; player goes back to the last checkpoint alone and races that part again)
-      (let ((other (coop-other-player-target self)))
-        (until (or (not (coop-active?)) (coop-vehicle-section?) (coop-target-ready? other))
+      ;; wait for the other player to stand somewhere safe (not after a zoomer death or in a zoomer
+      ;; section: there the dead player goes back to their last checkpoint alone and races that part again)
+      (let ((other (coop-other-player-target self))
+            (racing-death (-> *coop-racer* died-racing (coop-process-player self))))
+        (until (or (not (coop-active?)) racing-death (coop-vehicle-section?) (coop-target-ready? other))
           (suspend)
           (set! other (coop-other-player-target self)))
         ;; co-op was stopped while we waited: finish the original single player death
@@ -637,7 +661,7 @@
           (set-time! (-> self state-time))
           (anim-loop))
         (let* ((pos (new 'stack-no-clear 'vector))
-               (at-checkpoint (coop-vehicle-section?))
+               (at-checkpoint (or racing-death (coop-vehicle-section?)))
                (cp (coop-racer-checkpoint (coop-process-player self))))
           (cond
             (at-checkpoint
@@ -666,7 +690,11 @@
       (ja :group! eichar-stance-loop-ja)
       (suspend)
       (logior! (-> self control status) (cshape-moving-flags onsurf onground tsurf))
-      (coop-racer-remount self)
+      ;; back on a zoomer only after a zoomer death (also when the other player got off meanwhile):
+      ;; a player who got off at a pad and died on foot stays on foot
+      (when (-> *coop-racer* died-racing (coop-process-player self))
+        (set! (-> *coop-racer* died-racing (coop-process-player self)) #f)
+        (coop-racer-remount self #t))
       (go target-stance))
   :post target-no-stick-post)
 
@@ -909,6 +937,7 @@
        (when (and (-> *coop* leash?)
                   (not (coop-vehicle-section?))
                   (coop-target-ready? p1)
+                  (coop-player-in-play? p2)
                   (< (-> *coop* leash-distance) (vector-vector-distance (-> p1 control trans) (-> p2 control trans))))
          (format 0 "[coop] player 2 is too far from player 1, bringing them back~%")
          (coop-despawn-player2)
