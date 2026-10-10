@@ -12,8 +12,9 @@ from) the official Jak 1:
    macOS (Intel) binaries and publishes them as release assets, ready for "Add from File" or a
    mod source.
 
-Nothing here has been verified end to end yet: no release has run on GitHub and no package has been
-installed in a launcher. What was checked is listed under [Validation](#validation).
+A local package installed the way the launcher installs it boots the game (see
+[Validation](#validation)). Not done yet: an install through the launcher's own UI (#1), a release
+run on GitHub (#2), Windows (#3).
 
 ## What a launcher mod is
 
@@ -335,8 +336,7 @@ by the launcher; it is for mod lists that collect releases.
 
 ## Limitations
 
-- Not verified end to end: no GitHub release run, no launcher install, no game run with the
-  packaged build (no game files in the development environment).
+- No GitHub release run (#2) and no install through the launcher UI yet (#1).
 - One macOS asset (Intel); the launcher has a single `macos` key, so Apple Silicon runs it through
   Rosetta.
 - Each mod install keeps its own decompiled and compiled copy of the game inside the mod folder
@@ -389,8 +389,9 @@ Added on 2026-10-10, after a review:
   --coff-imports`. macOS: dylib lists match `llvm-objdump --macho --dylibs-used` for thin and
   universal binaries; Homebrew and `@rpath` dylibs are refused.
 - `--check` on truncated, corrupt and non-archive files prints an error and exits 1 (no traceback).
-- The "Prep Variables" script, run against a local test repository: refuses a release branch that
-  misses a co-op commit, passes after the merge, refuses the co-op branch itself, skips the check
+- The "Prep Variables" script, run against a local test repository with the two-branch setup of
+  that time: refuses a release branch that misses a co-op commit, passes after the merge, refuses
+  a branch not in `ALLOWED_BRANCHES`, skips the check
   when the co-op branch is gone, and computes `0.0.1` / `0.1.0` / `1.0.0` without tags and
   `0.10.1` / `0.11.0` / `1.0.0` with `v0.0.1`, `v0.9.0`, `v0.10.0` (pre-release and malformed tags
   ignored).
@@ -406,6 +407,16 @@ Added on 2026-10-10, after merging the co-op branch (`ee509d24`):
   release builds run these tests, so a release would have failed. The co-op part moved to
   `coop-update-2d-aspect` (Jak 1 only, called right after the pc-settings update in `main.gc`);
   Jak 1 behaves the same and the type consistency tests of all games pass again.
+
+Added on 2026-10-10, after moving the packaging onto `feature/jak1-local-splitscreen` (releases are
+now cut from that branch):
+
+- With the user's own Jak 1 disc files (PAL), the launcher's install steps run by hand in a scratch
+  folder: unpack `jak1-coop.tar.gz`, `./extractor --game jak1 --proj-path ./data --folder
+  --decompile --compile <disc files>` (all 1321 targets built), then `./gk -v --game jak1
+  --config-path <scratch> -- -boot -fakeiso` (no `-debug`, as the launcher starts it). The game
+  boots to the title screen, writes `pc-settings.gc` and `display-settings.json` only under the
+  given config path, and leaves `~/.config/OpenGOAL` untouched.
 
 ## Attribution
 

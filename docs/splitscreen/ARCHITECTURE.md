@@ -197,3 +197,32 @@ the same behaviour as the existing PC "force actors" option, without changing th
   constants, was-drawn (merged), HUD models.
 - Session: pause/master mode, settings, device assignment, split layout, audio listener (player 1),
   level streaming (player 1).
+
+## Staying an add-on
+
+OpenGOAL has no plugin loader, so the co-op ships as a launcher mod: a full build installed next to
+the official Jak 1 with its own settings and saves (MOD.md). The code is a change set on top of
+upstream OpenGOAL, never a diverging copy:
+
+- Co-op code lives in new files (`goal_src/jak1/pc/features/splitscreen*.gc`,
+  `goal_src/jak1/pc/debug/coop-menu.gc`, `game/system/hid/coop_slots.*`,
+  `game/graphics/opengl_renderer/SplitscreenLayout.h`). Edits to upstream files are short hooks.
+- With co-op off, Jak 1 behaves like upstream (the kernel hooks are `#f`, every co-op branch is
+  skipped), and Jak 2/3/X are not affected.
+- Files other games compile stay byte-identical to upstream: everything under `goal_src/` outside
+  `goal_src/jak1/`, plus the Jak 1 files Jak 2/3/X reuse (`pckernel-h`, `pckernel-common`,
+  `pc-debug-common`).
+- Every hand edit in a decompiled file carries `og:preserve-this` (upstream's CI then flags any
+  regeneration that would drop it).
+- Shared C++ runtime changes only take effect when Jak 1 turns co-op on.
+- Co-op code writes files through `*pc-settings-folder*`, not `*pc-user-dir-base-path*` (the latter
+  ignores the launcher's `--config-path`).
+
+Tools:
+- `scripts/splitscreen/check_upstream_compat.py`: checks the file rules against the merge base with
+  upstream and lists the shared C++ files to review. Run it before every push.
+- `scripts/splitscreen/sync_upstream.sh`: merges `upstream/master`, builds, compiles all Jak 1 code,
+  runs `test.sh` (includes the Jak 2/3/X compile and type checks) and the compatibility check.
+  `--preview` only lists conflicting files.
+
+Work items are GitHub issues on the fork, not files in this folder.

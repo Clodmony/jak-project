@@ -114,7 +114,7 @@ menus, unplugging) went through the pads. No keyboard input was injected: the de
 | 2 | Pass after fixes: two pads, co-op starts, player 2 appears 1.5 m beside player 1, window splits, one `gk` process |
 | 3 | Pass: pad A moves/jumps/attacks only player 1, pad B only player 2 |
 | 4 | Pass: right stick of pad A turns only camera 1 (yaw 154 -> -42), pad B only camera 2 |
-| 5 | Not tested (keyboard) |
+| 5 | Not tested (keyboard), #9 |
 | 6 | Pass: over 10.5 s, sim ticks +1579, view-2 passes +1579, frames +1579, game clock +10.5 s |
 | 7 | Pass: player 2 25 m away sees houses and water player 1 can't |
 | 8 | Pass: both players on one orb in the same frame -> one orb |
@@ -128,17 +128,17 @@ menus, unplugging) went through the pads. No keyboard input was injected: the de
 | 17, 23 | Pass after fix: power cell collected by player 2 -> victory on player 2, one full-screen view, player 1 hidden for the cinematic, both views back afterwards |
 | 18 | Pass: "Stop co-op" -> single view, player 1 only |
 | 19 | Pass: a co-op save goes to `saves/coop/`; loading it restores the shared progress; after stopping co-op the save slots show the single-player save again; the single-player save files are byte-identical before and after |
-| 20 | Not run |
-| 21 | Partly: the menu flow (Options > Game Options > Misc Options > Local co-op / layout / assign devices) works with the pad in a debug boot and fits on screen; a non-debug boot has no REPL, so it was not driven |
-| 22 | Not completed: the jungle elevator to the plant boss needs that level loaded; the test setup didn't trigger it |
+| 20 | Not run, #10 |
+| 21 | Partly: the menu flow (Options > Game Options > Misc Options > Local co-op / layout / assign devices) works with the pad in a debug boot and fits on screen; a non-debug boot has no REPL, so it was not driven (#11). A packaged mod, installed the way the launcher does it, boots to the title screen without `-debug` and keeps its settings in its own config folder |
+| 22 | Not completed: the jungle elevator to the plant boss needs that level loaded; the test setup didn't trigger it, #12 |
 | 24 | Pass: pause/progress menu is one full-screen view |
 | 25 | Pass: hitting player 2 buzzes only pad 1, hitting player 1 only pad 0 (game side; the virtual pads have no motors) |
-| 27, 28 | Not tested (keyboard) |
-| 29 | Not run (fisherman minigame) |
+| 27, 28 | Not tested (keyboard), #9 |
+| 29 | Not run (fisherman minigame), #12 |
 | 30 | Pass after fix: both on the fisherman's boat, player 1 boards, the ride plays full-screen with player 2 held, both are free at Misty, player 2 brought over once |
-| 31 | Not conclusive: REPL sampling too coarse to time the death dissolve; code review only |
-| 32 | Code review only (second view doesn't integrate the wind) |
-| 33 | Partly: player 2's hit on a dark vine 55 m from player 1 registers; the puff is not clearly visible in a still screenshot |
+| 31 | Not conclusive: REPL sampling too coarse to time the death dissolve; code review only, #13 |
+| 32 | Code review only (second view doesn't integrate the wind), #13 |
+| 33 | Partly: player 2's hit on a dark vine 55 m from player 1 registers; the puff is not clearly visible in a still screenshot, #13 |
 | Water | Pass after fix: player 2 swims, both players in one water volume, leaving clears only that player, deadly water kills player 2 and not player 1 |
 | NPCs | Pass after fix: player 2 talks to an NPC with their own pad, the prompt shows in player 2's view, player 1's button doesn't trigger it, both are released afterwards |
 
@@ -155,7 +155,7 @@ the debug start point, camera untouched, 10 s per case, real frames drawn per wa
 | Co-op top/bottom | 674 | 1.48 |
 
 The second view costs about 0.09 ms per frame in this scene. Busier areas (jungle, many actors) were
-not measured.
+not measured (#14).
 
 Expected cost: GOAL draw work for the second view (background, foreground, bones, merc, sprites)
 and GPU work for a second set of buckets. Simulation cost is unchanged. If a frame takes longer than
