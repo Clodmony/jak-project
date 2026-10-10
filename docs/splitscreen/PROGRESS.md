@@ -2,6 +2,21 @@
 
 > Written with AI assistance (AI-assisted). Newest first.
 
+## 2026-10-10: launcher mod packaging, review fixes (branch `feature/jak1-coop-launcher-mod`)
+
+- `package_mod.py` now refuses (each with an `--allow-...` override): binaries older than their
+  C/C++ sources; staged-but-uncommitted, untracked or deleted files in the packaged folders;
+  archives missing custom assets that game.gp builds. Linking is judged from the binaries (ELF
+  libraries and RUNPATH, PE imports including delay-loaded DLLs, Mach-O dylibs), not from
+  CMakeCache; Linux builds report their minimum glibc/libstdc++ (this machine's build needs glibc
+  2.38 and `GLIBCXX_3.4.32`, more than Ubuntu 22.04 has). More game disc names are denied;
+  `--check` reports a corrupt archive instead of a Python traceback.
+- Cut Mod Release: refuses a release that misses commits of `feature/jak1-local-splitscreen`, and
+  computes the version from the chosen bump (passed as `custom_tag`, so commit messages no longer
+  override it).
+- Merged `feature/jak1-local-splitscreen` (the in-game testing fixes below) into this branch, so a
+  release contains them.
+
 ## 2026-10-10: in-game testing with two virtual pads
 
 Tested in the running game with two virtual gamepads (`scripts/splitscreen/vpad.py`) and the REPL;
@@ -55,6 +70,28 @@ Fixed from this session:
 
 Confirmed known gap: player 2 does not swim (stands on the sea floor in `target-stance`).
 
+## 2026-10-09: launcher mod packaging (branch `feature/jak1-coop-launcher-mod`)
+
+- `scripts/coop-mod/package_mod.py`: packages a local build as an OpenGOAL Launcher mod for
+  "Add from File" (`build/coop-mod/jak1-coop.tar.gz`, `.zip` on Windows). Same layout as the
+  release assets; only git-tracked files; every entry checked against an allow list before and
+  after writing (no `iso_data`, `decompiler_out`, `out`, saves, settings, game file types, symlinks,
+  keys); refuses dynamically linked builds unless `--allow-dynamic` (Linux/macOS only);
+  `--check` verifies any archive, including downloaded release assets.
+- GitHub release tooling from OpenGOAL-Mods/OG-Mod-Base (ISC): "Cut Mod Release" workflow, mod
+  release pipeline, bundling scripts, metadata schema. Always builds this fork's binaries; releases
+  only from `master` and `feature/jak1-coop-launcher-mod` (otherwise the tag action would make
+  `v0.0.1-<branch>.N` pre-release tags). Shared build workflows unchanged.
+- Docs: MOD.md (build, package, Add from File, release setup, settings/save paths, updating).
+
+Verified (Linux): the package from a static build and from the dynamic `build/` has exactly the
+paths and modes of the official `extract_mod_build_unix.sh` output, identical `data/`; extracted
+binaries run (`gk --version`, `--help`, launcher-style `gk` arguments); forbidden content is
+rejected; archives are reproducible; workflows pass PyYAML and actionlint (only template
+warnings left in the copied pipeline); `metadata.json` validates with ajv-cli and jsonschema.
+
+Not verified: a release run on GitHub, an install in the launcher, Windows packaging with real
+binaries, the game itself.
 
 ## 2026-10-09: saves, in-game toggle, review fixes (compiles, not playtested)
 
