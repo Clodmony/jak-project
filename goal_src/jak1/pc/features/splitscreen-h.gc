@@ -36,6 +36,7 @@
    (top-bottom?       symbol) ;; menu toggle for layout (on-off options edit symbols)
    (nearest-world?    symbol) ;; world processes use the context of the closest player
    (leash?            symbol) ;; teleport a player that strays too far back to the other one
+   (every-ring?       symbol) ;; race rings: each ring counts only once both players flew through it
    (leash-distance    meters) ;; max distance between players before the catch-up teleport
    (near-hysteresis   meters) ;; a world process only switches player when the other is this much closer
    (respawn-delay     time-frame) ;; dead player waits this long before respawning next to the survivor
@@ -54,6 +55,7 @@
        :top-bottom? #f
        :nearest-world? #t
        :leash? #t
+       :every-ring? #f
        :leash-distance (meters 60)
        ;; small: interactions have small radii (the fisherman's boat 1.5 m), a big margin left the closer
        ;; player unable to use an object the other player had touched
