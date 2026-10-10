@@ -332,6 +332,7 @@
 (define-extern coop-racer-note-death (function target none))
 (define-extern coop-player-in-play? (function target basic))
 (define-extern coop-powerup-player-near (function vector float pickup-type target))
+(define-extern coop-ring-crossed? (function process cylinder-flat vector symbol))
 (define-extern coop-kill-camera-processes (function none))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
