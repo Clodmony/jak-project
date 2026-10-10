@@ -650,6 +650,44 @@
 (defun gorge-trans ()
   (none))
 
+;; og:preserve-this coop: in co-op the gorge race is one race for both players. It starts when the
+;; first one leaves the start, is called off only when both are back at the start, and is finished
+;; once both crossed the finish line (the time is the second player's).
+(defun gorge-pos-in-front ((arg0 gorge) (pos vector))
+  (let ((s5-0 (new-stack-vector0)))
+    (vector-matrix*! s5-0 pos (-> arg0 coord))
+    (and (< (fabs (-> s5-0 x)) (-> arg0 radius))
+         (< (-> s5-0 y) (-> arg0 radius))
+         (< 0.0 (-> s5-0 y))
+         (< 0.0 (-> s5-0 z))
+         (< (-> s5-0 z) (-> arg0 thickness)))))
+
+(define *coop-gorge-done* 0) ;; bit per player that crossed the finish line of the running race
+
+(defun gorge-all-in-front ((arg0 gorge))
+  "Are all players in front of (at) this line? Without co-op gorge-in-front."
+  (if (not (coop-active?))
+    (return (gorge-in-front arg0)))
+  (dotimes (i 2)
+    (let ((tgt (coop-player-target i)))
+      (if (and tgt (not (gorge-pos-in-front arg0 (-> tgt control trans))))
+        (return #f))))
+  #t)
+
+(defun gorge-finish-all-done ((arg0 gorge))
+  "Has every player crossed the finish line (remembered per player)? Without co-op gorge-in-front."
+  (if (not (coop-active?))
+    (return (gorge-in-front arg0)))
+  (let ((all #t))
+    (dotimes (i 2)
+      (let ((tgt (coop-player-target i)))
+        (when tgt
+          (if (gorge-pos-in-front arg0 (-> tgt control trans))
+            (set! *coop-gorge-done* (logior *coop-gorge-done* (ash 1 i))))
+          (if (not (logtest? *coop-gorge-done* (ash 1 i)))
+            (set! all #f)))))
+    all))
+
 (defstate gorge-abort-idle (gorge-abort)
   :trans gorge-trans
   :code
@@ -671,12 +709,13 @@
     (behavior ()
       (loop
         (suspend)
-        (if (gorge-in-front self) (send-event (ppointer->process (-> self parent)) 'finished)))))
+        (if (gorge-finish-all-done self) (send-event (ppointer->process (-> self parent)) 'finished))))) ;; og:preserve-this coop
 
 (defbehavior gorge-finish-init-by-other gorge-finish ((arg0 vector) (arg1 vector) (arg2 float))
   (set! (-> self root) (the-as collide-shape-moving (new 'process 'trsqv)))
   (set! (-> self root trans quad) (-> arg0 quad))
   (gorge-init arg0 arg1 arg2 20480.0)
+  (set! *coop-gorge-done* 0) ;; og:preserve-this coop
   (go gorge-finish-idle)
   (none))
 
@@ -861,7 +900,7 @@
         (completed? (-> self ticker))
         (gorge-start-draw-time #f #f)
         (suspend)
-        (if (or (not *target*) (gorge-in-front self)) (go gorge-start-ready)))))
+        (if (or (not *target*) (gorge-all-in-front self)) (go gorge-start-ready))))) ;; og:preserve-this coop: both back at the start
 
 (defstate gorge-start-ready (gorge-start)
   :trans gorge-trans
