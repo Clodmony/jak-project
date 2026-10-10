@@ -1,0 +1,138 @@
+# Adapted from OpenGOAL-Mods/OG-Mod-Base .github/workflows/cut-release.yaml (commit 2c4ee857,
+# ISC licence, OpenGOAL Team). Changes for this fork (AI-assisted):
+# - The binaries are always built from this repository. The co-op mod changes the C++ runtime, so
+#   the template's "vanilla" and "modbase" binary sources (prebuilt upstream binaries) were removed.
+# - Releases can only be cut from the branches in ALLOWED_BRANCHES, and those branches are passed to
+#   the pipeline as `releaseBranches` (otherwise github-tag-action treats every branch except
+#   master/main as a pre-release branch and tags v0.0.1-<branch>.N).
+# - A release stops if REQUIRE_MERGED_BRANCH (the co-op development branch) has commits that the
+#   release commit does not contain, so a release cannot miss fixes made there.
+# - The version is computed here from the highest vX.Y.Z tag and the chosen bump, and passed to the
+#   pipeline as `customTag`. github-tag-action would otherwise let commit messages since the last
+#   tag (fix:, feat:, BREAKING CHANGE) override the chosen bump (its src/action.ts: `bump ||
+#   defaultBump`).
+# The "Run workflow" button only appears while this file is on the repository's default branch.
+# See docs/splitscreen/MOD.md.
+name: Cut Mod Release ⭐
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Semver Bump Type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      jak1:
+        description: 'Supports Jak 1?'
+        required: true
+        default: 'true'
+        type: boolean
+      jak2:
+        description: 'Supports Jak 2?'
+        required: true
+        default: 'false'
+        type: boolean
+      jak3:
+        description: 'Supports Jak 3?'
+        required: true
+        default: 'false'
+        type: boolean
+      jakx:
+        description: 'Supports Jak X?'
+        required: true
+        default: 'false'
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  prep_vars:
+    name: "Prep Variables"
+    runs-on: ubuntu-latest
+    outputs:
+      supported_games: ${{ steps.prep-vars.outputs.GAMES }}
+      release_branches: ${{ steps.prep-vars.outputs.RELEASE_BRANCHES }}
+      new_version: ${{ steps.prep-vars.outputs.NEW_VERSION }}
+    steps:
+      - name: Checkout (all branches and tags)
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Prep Variables
+        id: prep-vars
+        env:
+          # Branches a release may be cut from (exact names, space separated).
+          ALLOWED_BRANCHES: "master feature/jak1-local-splitscreen"
+          # The co-op development branch: its commits must all be in the release commit. Merge it
+          # into the release branch before releasing. Set to "" to turn this check off.
+          REQUIRE_MERGED_BRANCH: "feature/jak1-local-splitscreen"
+          CURRENT_BRANCH: ${{ github.ref_name }}
+          BUMP: ${{ inputs.bump }}
+        run: |
+          GAMES=
+          if [[ ${{ inputs.jak1 }} == "true" ]]; then GAMES+=jak1,; fi
+          if [[ ${{ inputs.jak2 }} == "true" ]]; then GAMES+=jak2,; fi
+          if [[ ${{ inputs.jak3 }} == "true" ]]; then GAMES+=jak3,; fi
+          if [[ ${{ inputs.jakx }} == "true" ]]; then GAMES+=jakx,; fi
+          GAMES=${GAMES%?}
+          echo "GAMES=$GAMES" >> "$GITHUB_OUTPUT"
+
+          RELEASE_BRANCHES=
+          ON_RELEASE_BRANCH=false
+          for BRANCH in $ALLOWED_BRANCHES; do
+            RELEASE_BRANCHES+="^${BRANCH}\$,"
+            if [[ "$BRANCH" == "$CURRENT_BRANCH" ]]; then ON_RELEASE_BRANCH=true; fi
+          done
+          RELEASE_BRANCHES=${RELEASE_BRANCHES%?}
+          if [[ "$ON_RELEASE_BRANCH" != "true" ]]; then
+            echo "::error::Releases can only be cut from: $ALLOWED_BRANCHES (this run is on '$CURRENT_BRANCH')"
+            exit 1
+          fi
+          echo "RELEASE_BRANCHES=$RELEASE_BRANCHES" >> "$GITHUB_OUTPUT"
+
+          if [[ -n "$REQUIRE_MERGED_BRANCH" && "$REQUIRE_MERGED_BRANCH" != "$CURRENT_BRANCH" ]]; then
+            REF="refs/remotes/origin/$REQUIRE_MERGED_BRANCH"
+            if git rev-parse -q --verify "$REF" > /dev/null; then
+              if ! git merge-base --is-ancestor "$REF" HEAD; then
+                MISSING=$(git rev-list --count "HEAD..$REF")
+                echo "::error::'$CURRENT_BRANCH' is missing $MISSING commit(s) of '$REQUIRE_MERGED_BRANCH'. Merge it into '$CURRENT_BRANCH', push, and run the release again (or empty REQUIRE_MERGED_BRANCH in cut-release.yaml)."
+                exit 1
+              fi
+            else
+              echo "::warning::Branch '$REQUIRE_MERGED_BRANCH' not found, skipping the merge check."
+            fi
+          fi
+
+          # Highest vX.Y.Z tag (pre-release tags ignored, as github-tag-action does), then the bump.
+          LATEST=$(git tag --list 'v*' | grep -E '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' | sort -V | tail -n 1 || true)
+          IFS=. read -r MAJOR MINOR PATCH <<< "${LATEST:-v0.0.0}"
+          MAJOR=${MAJOR#v}
+          case "$BUMP" in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+            *) echo "::error::Unknown bump '$BUMP'"; exit 1 ;;
+          esac
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+          echo "Latest release tag: ${LATEST:-none}; $BUMP bump: v$NEW_VERSION"
+          echo "NEW_VERSION=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+
+  cut_mod_release:
+    name: "Cut Mod Release"
+    needs: prep_vars
+    uses: ./.github/workflows/mod-release-pipeline.yml
+    with:
+      semverBump: ${{ inputs.bump }}
+      metadataSupportedGames: ${{ needs.prep_vars.outputs.supported_games }}
+      releaseBranches: ${{ needs.prep_vars.outputs.release_branches }}
+      customTag: ${{ needs.prep_vars.outputs.new_version }}
+      buildBinaries: true
+    secrets:
+      token: ${{ secrets.GITHUB_TOKEN }}
