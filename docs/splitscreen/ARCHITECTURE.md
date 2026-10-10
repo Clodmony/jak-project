@@ -56,7 +56,7 @@ Consequences, by design:
   cache, player 2 respawn next to player 1 after `respawn-delay`, distance leash
   (`leash-distance`, 60 m).
 - In-game options (all builds, so it works for a launcher mod): Options > Game Options > Misc Options
-  > "Local co-op" (on/off), "Co-op split top/bottom", "Co-op assign devices", "Co-op: every ring for both" (race rings count only once both players flew through them; off by default)
+  > "Local co-op" (on/off), "Co-op split top/bottom", "Co-op assign devices", "Co-op: every ring for both" (race rings count only once both players flew through them; off by default), "Co-op: friendly fire" (on by default)
   (`goal_src/jak1/pc/progress-pc.gc`). Co-op is never saved as on: every session starts single player.
 - Debug menu "Local Co-op" (`goal_src/jak1/pc/debug/coop-menu.gc`, debug builds only): start/stop,
   layout, device join, respawn, leash, info overlay.
@@ -142,9 +142,23 @@ the same behaviour as the existing PC "force actors" option, without changing th
   respawns at the other player's last safe ground with full health). If both are down, the original
   single checkpoint reload runs once. If co-op is stopped while a player waits to respawn, that
   player finishes the original death (checkpoint reload).
-- Friendly fire is off: a player's touch-tracker (red-eco or flut flop) never attacks the other
-  player (`touch-tracker-idle`, `generic-obs.gc`). Player 2's attack ids start at `#x40000000`, so
-  enemies that de-duplicate hits by id don't drop one player's hit.
+- Players collide and can hit each other (`coop-contact-update`, once per tick). While both are in
+  play and free (not held, on a zoomer, in a minigame, spawning, warping, hidden for a cinematic or
+  frozen), the `target` kind is in the collide-with of each player's root and body spheres: the
+  players are solid to each other (blocking, standing on a head), and their overlaps reach each
+  other's attack handlers. It only turns on while their bodies don't overlap (after a respawn or a
+  cutscene). A player walking into the other one adds up to 4 m/s to the other's own movement
+  (pushing; walls and edges still stop them). The three collide-cache fills skip the probing
+  process in the player list (`collide-cache.gc`): many target probes pass `proc #f` and would
+  otherwise hit their own body (stuck ducking, edge grabs).
+- Friendly fire: `target-send-attack` and the touch-tracker (red eco flop, flut flut flop) send an
+  attack meant for the other player to `coop-player-attack`, which hits them like an enemy
+  (`'generic`, 2 m back, 1.5 m up, one point of health; a knocked-out player respawns next to the
+  other) and returns `'die`, so a punch stops at the victim. Attacking bodies have the higher
+  collide offense and pass through softer ones, so collision stays off for 0.6 s after a hit (it
+  would block the knockback). Option "Co-op: friendly fire" (`*coop* friendly-fire?`, on by
+  default) turns the hits off; collision stays. Player 2's attack ids start at `#x40000000`, so
+  enemies that de-duplicate hits by id don't drop one player's hit; hits between players carry no id.
 - `process-grab?`/`process-release?` (cutscenes, talks, elevators) hold and release both players. The
   grab and the release can name different players (the grabber's `*target*` can change in between),
   so the pair is recorded and releasing either player releases both. Only one pair is tracked.
