@@ -2,6 +2,21 @@
 
 > Written with AI assistance (AI-assisted). Newest first.
 
+## 2026-10-10: launcher mod packaging, review fixes (branch `feature/jak1-coop-launcher-mod`)
+
+- `package_mod.py` now refuses (each with an `--allow-...` override): binaries older than their
+  C/C++ sources; staged-but-uncommitted, untracked or deleted files in the packaged folders;
+  archives missing custom assets that game.gp builds. Linking is judged from the binaries (ELF
+  libraries and RUNPATH, PE imports including delay-loaded DLLs, Mach-O dylibs), not from
+  CMakeCache; Linux builds report their minimum glibc/libstdc++ (this machine's build needs glibc
+  2.38 and `GLIBCXX_3.4.32`, more than Ubuntu 22.04 has). More game disc names are denied;
+  `--check` reports a corrupt archive instead of a Python traceback.
+- Cut Mod Release: refuses a release that misses commits of `feature/jak1-local-splitscreen`, and
+  computes the version from the chosen bump (passed as `custom_tag`, so commit messages no longer
+  override it).
+- Not done: merging `feature/jak1-local-splitscreen` (10 commits ahead, including the respawn HUD
+  crash fix) into this branch; steps in MOD.md.
+
 ## 2026-10-09: launcher mod packaging (branch `feature/jak1-coop-launcher-mod`)
 
 - `scripts/coop-mod/package_mod.py`: packages a local build as an OpenGOAL Launcher mod for
