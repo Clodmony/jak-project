@@ -15,7 +15,7 @@ adapted yet; until their issues are closed, player 2's behaviour there is undefi
 
 | Gap | Effect | Where | Issue |
 | --- | --- | --- | --- |
-| Vehicles | Zoomer: both players get their own zoomer at a pad, a player who dies goes back to the last checkpoint alone, a finish pad waits for both (tested in Fire Canyon only). Flut flut not adapted | `levels/racer_common`, `coop-racer-*` in `splitscreen.gc`, `levels/flut_common` | #16, #17 |
+| Vehicles | Zoomer: both players get their own zoomer at a pad, a player who dies goes back to their own last checkpoint alone, a finish pad waits for both, Lava Tube's energy doors stay open until both are through (tested in Fire Canyon and Lava Tube; Precursor Basin and Mountain Pass not adapted yet). Flut flut not adapted | `levels/racer_common`, `coop-racer-*` in `splitscreen.gc`, `levels/flut_common` | #16, #17 |
 | Fuel-cell pickup cutscene | Plays on the player who touched the cell (interaction latch). If both touch it in the same frame, it can play on the second one | `engine/common-obs/collectables.gc`, `coop-context-for-event` | #36 |
 | Overlapping grabs | One grab pair is tracked; an NPC talk that overlaps an elevator ride may leave the partner held until the next grab/release | `coop-grab-other-player` | #30 |
 | Shared player tuning objects | `*run-attack-mods*`, `*wade-surface*` and `*target-shadow-control*` are shared: one player's dash or wading depth can affect the other's, and a `shadow` event toggles both shadows | `engine/target/target.gc`, `engine/target/logic-target.gc` | #28 |
