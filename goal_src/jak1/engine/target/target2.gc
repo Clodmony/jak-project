@@ -1622,7 +1622,7 @@
          (set! (-> self attack-info attacker) (the-as handle #f))
          (go target-death 'target-hit-ground-hard))
         (else
-         (cpad-set-buzz! (coop-player-cpad) 1 255 (seconds 0.1))
+         (cpad-set-buzz! (coop-player-cpad) 1 255 (seconds 0.1)) ;; og:preserve-this coop
          (ja-channel-push! 1 1)
          (ja :group! eichar-painful-land-ja :num! min)
          (until (and (ja-done? 0) (= (-> self skel root-channel 0) (-> self skel channel)))
