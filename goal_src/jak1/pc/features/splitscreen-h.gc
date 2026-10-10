@@ -373,6 +373,11 @@
 (define-extern coop-lowest-health (function float))
 (define-extern coop-send-to-cameras (function symbol object none))
 (define-extern coop-boss-hits (function int int))
+(define-extern coop-boss-phase-health (function float int float))
+(define-extern coop-send-to-players (function symbol object none))
+(define-extern coop-boss-eats (function process process none))
+(define-extern coop-pin-alone-like (function process process none))
+(define-extern coop-solo-cam-player (function process int))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; water volumes

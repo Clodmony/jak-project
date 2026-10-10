@@ -269,7 +269,8 @@
   ((count    int32)
    (proc     handle 4)
    (player   int32 4)
-   (minigame symbol 4)))
+   (minigame symbol 4)
+   (alone    symbol 4))) ;; the pin doesn't cover the process's children
 
 (define *coop-pins* (new 'global 'coop-pins))
 
@@ -288,7 +289,7 @@
         (let ((p (handle->process (-> *coop-pins* proc i))))
           (cond
             ((not p) (set! (-> *coop-pins* proc i) (the-as handle #f)))
-            ((or (= p proc) (= p parent)) (return (-> *coop-pins* player i)))
+            ((or (= p proc) (and (= p parent) (not (-> *coop-pins* alone i)))) (return (-> *coop-pins* player i)))
             (else (+! live 1)))))
       (set! (-> *coop-pins* count) live)))
   -1)
@@ -318,6 +319,7 @@
           (set! (-> *coop-pins* proc slot) (process->handle proc))
           (set! (-> *coop-pins* player slot) player)
           (set! (-> *coop-pins* minigame slot) #f)
+          (set! (-> *coop-pins* alone slot) #f)
           (+! (-> *coop-pins* count) 1)
           (set! wrong (!= player *coop-player*))
           (format 0 "[coop] player ~D takes ~A~%" (+ player 1) (-> proc name)))))
@@ -330,6 +332,14 @@
   (coop-pin-to-player proc by)
   (dotimes (i 4)
     (if (= (handle->process (-> *coop-pins* proc i)) proc) (set! (-> *coop-pins* minigame i) #t)))
+  (none))
+
+(defun coop-pin-alone ((proc process) (by handle))
+  "Like coop-pin-to-player, but proc's children keep following the nearest player (a boss's
+   minions keep going after the player who is still fighting)."
+  (coop-pin-to-player proc by)
+  (dotimes (i 4)
+    (if (= (handle->process (-> *coop-pins* proc i)) proc) (set! (-> *coop-pins* alone i) #t)))
   (none))
 
 (defun coop-minigame-host? ((proc process))
@@ -1021,6 +1031,13 @@
              (format 0 "[coop] player ~D respawns next to player ~D~%" (+ 1 (coop-process-player self)) (- 2 (coop-process-player self)))))
           (reset! (-> self fact) 'health)
           (reset! (-> self fact) 'eco)
+          ;; a death that drove our root joint (eaten by the Dark Eco Plant) left it attached to the
+          ;; killer; the camera follows that joint. Back to init-target's setup, daxter on our shoulder.
+          (let ((root (-> self node-list data 0)))
+            (set! (-> root param0) cspace<-transformq+trans!)
+            (set! (-> root param1) (the-as basic (-> self control trans)))
+            (set! (-> root param2) (the-as basic (-> self control cspace-offset))))
+          (send-event (ppointer->process (-> self sidekick)) 'matrix 'normal)
           (reset-target-state #t)
           (target-exit)
           (quaternion-copy! (-> self control quat-for-control) quat)
@@ -1282,11 +1299,25 @@
            (and (-> tgt next-state)
                 (or (coop-grab-state? (-> tgt next-state name)) (coop-clone-anim-state? (-> tgt next-state name)))))))
 
+(defun coop-solo-cam-player ((cam process))
+  "An othercam pinned alone to a player while the other player is in play (the Dark Eco Plant's view
+   of eating that player): that player, else -1. Such a cinematic shows only in that player's view
+   and doesn't stop the world (no movie setting): the other player plays on."
+  (when (and cam (coop-active?) (> (-> *coop-pins* count) 0))
+    (dotimes (i 4)
+      (when (and (= (handle->process (-> *coop-pins* proc i)) cam) (-> *coop-pins* alone i))
+        (let ((player (-> *coop-pins* player i)))
+          (if (coop-player-in-play? (coop-player-target (- 1 player))) (return player))))))
+  -1)
+
 (defun coop-look-through-player ()
   "During a look-through camera (*camera-look-through-other*, e.g. the fisherman's play-again
-   screen): the player it belongs to when it is a minigame's and the other player is free, else -1
-   (then it is a cutscene for both and fills the screen)."
+   screen): the player it belongs to when it is a minigame's and the other player is free, or a
+   cinematic of one player (coop-solo-cam-player), else -1 (then it is a cutscene for both and fills
+   the screen)."
   (if (zero? *camera-look-through-other*) (return -1))
+  (let ((solo (coop-solo-cam-player (handle->process (-> *game-info* other-camera-handle)))))
+    (if (>= solo 0) (return solo)))
   (dotimes (i 2)
     (if (and (coop-player-in-minigame? (coop-player-target i)) (not (coop-held? (coop-player-target (- 1 i))))) (return i)))
   -1)
@@ -1432,6 +1463,37 @@
   "Hits a boss (phase) needs: with co-op and the option \"Co-op: tougher bosses\" half as many
    again (rounded up), else unchanged."
   (if (and (coop-active?) (-> *coop* tougher-bosses?)) (/ (+ (* hits 3) 1) 2) hits))
+
+(defun coop-boss-phase-health ((health float) (base int))
+  "A boss's health on its original scale of base hits, for what decides its phases (how many minions,
+   how many attacks in a row). With the option \"Co-op: tougher bosses\" the health starts at
+   coop-boss-hits base: the phases are spread over the extra hits. Unchanged otherwise."
+  (let ((hits (coop-boss-hits base)))
+    (if (= hits base) health (the float (the int (+ 0.5 (/ (* health (the float base)) (the float hits))))))))
+
+(defun coop-send-to-players ((msg symbol) (arg object))
+  "Send msg to *target* and, with co-op, to the other player too (a boss resets both players' eco)."
+  (send-event *target* msg arg)
+  (when (coop-active?)
+    (let ((other (coop-player-target (- 1 *coop-player*))))
+      (if other (send-event other msg arg))))
+  (none))
+
+(defun coop-boss-eats ((boss process) (victim process))
+  "A boss starts eating a player it caught (Dark Eco Plant). While the other player is in play the
+   boss runs for the victim until it calls coop-unpin: its scene's camera goes to the victim's view
+   and the end of the scene releases the victim, not the nearest player. The boss's minions keep
+   going after the other player."
+  (if (and (coop-active?) (= (-> victim type) target) (coop-other-player-alive? (the-as target victim)))
+    (coop-pin-alone boss (process->handle victim)))
+  (none))
+
+(defun coop-pin-alone-like ((proc process) (like process))
+  "Pin proc alone to the player like is pinned to, if like is pinned (a boss's eat scene camera
+   follows the boss, coop-boss-eats)."
+  (let ((player (coop-pinned-player like)))
+    (if (>= player 0) (coop-pin-alone proc (process->handle (coop-player-target player)))))
+  (none))
 
 (defun coop-send-to-cameras ((msg symbol) (arg object))
   "Send msg to the camera of the player the code runs for and, with co-op, to the other player's
