@@ -372,7 +372,8 @@
 
 (deftype coop-racer-state (structure)
   ((pad        handle)       ;; the zoomer pad the players got on at (a handle: in a structure, not a symbol)
-   (left-pad   symbol 2))) ;; has each player driven away from the pad since they last got on
+   (left-pad   symbol 2)   ;; has each player driven away from the pad since they last got on
+   (checkpoint continue-point 2))) ;; the last checkpoint each player drove past (where they respawn)
 
 (define *coop-racer* (new 'global 'coop-racer-state))
 
@@ -381,6 +382,10 @@
 (set! (-> *coop-racer* left-pad 0) #f)
 
 (set! (-> *coop-racer* left-pad 1) #f)
+
+(set! (-> *coop-racer* checkpoint 0) #f)
+
+(set! (-> *coop-racer* checkpoint 1) #f)
 
 (defun coop-player-racing? ((tgt target))
   (and tgt (logtest? (-> tgt control root-prim prim-core action) (collide-action racer))))
@@ -402,18 +407,40 @@
       (!= (-> proc type) target)
       (-> *coop-racer* left-pad (coop-process-player proc))))
 
+(defun coop-racer-checkpoint-near ((pos vector))
+  "The continue point of an active level within 30 m of pos, or #f."
+  (dotimes (i (-> *level* length))
+    (let ((lev (-> *level* level i)))
+      (when (= (-> lev status) 'active)
+        (let ((cps (-> lev info continues)))
+          (while (not (null? cps))
+            (let ((cp (the-as continue-point (car cps))))
+              (if (< (vector-vector-distance pos (-> cp trans)) (meters 30)) (return cp)))
+            (set! cps (cdr cps)))))))
+  (the-as continue-point #f))
+
+(defun coop-racer-checkpoint ((idx int))
+  "Where player idx respawns in a zoomer section: their own last checkpoint. The game's continue
+   point follows player 1 only, so it can be ahead of or behind player 2."
+  (if (-> *coop-racer* checkpoint idx) (-> *coop-racer* checkpoint idx) (-> *game-info* current-continue)))
+
 (defun coop-racer-update ()
-  "Once per tick: note which riders have driven more than 6 m away from the pad."
+  "Once per tick: note which riders have driven more than 6 m away from the pad, and the last
+   checkpoint each rider drove past."
   (let ((pad (the-as process-drawable (handle->process (-> *coop-racer* pad)))))
     (when pad
       (dotimes (i 2)
         (let ((tgt (coop-player-target i)))
           ;; only while driving: getting on moves the rider onto the pad first
-          (if (and (coop-player-racing? tgt)
-                   (!= (-> tgt state name) 'target-racing-start)
-                   (!= (-> tgt state name) 'target-racing-get-on)
-                   (< (meters 6) (vector-vector-distance (-> tgt control trans) (-> pad root trans))))
-            (set! (-> *coop-racer* left-pad i) #t))))))
+          (when (and (coop-player-racing? tgt)
+                     (!= (-> tgt state name) 'target-racing-start)
+                     (!= (-> tgt state name) 'target-racing-get-on))
+            (if (< (meters 6) (vector-vector-distance (-> tgt control trans) (-> pad root trans)))
+              (set! (-> *coop-racer* left-pad i) #t))
+            (let ((cp (coop-racer-checkpoint-near (-> tgt control trans))))
+              (when (and cp (!= cp (-> *coop-racer* checkpoint i)))
+                (set! (-> *coop-racer* checkpoint i) cp)
+                (format 0 "[coop] player ~D checkpoint ~A~%" (+ i 1) (-> cp name)))))))))
   (none))
 
 (defun coop-racer-mount-other ((pad process) (mounted target))
@@ -421,6 +448,9 @@
    race at the same time."
   (when (and (coop-active?) mounted)
     (set! (-> *coop-racer* pad) (process->handle pad))
+    ;; a new zoomer section: both start from the game's checkpoint
+    (set! (-> *coop-racer* checkpoint 0) (-> *game-info* current-continue))
+    (set! (-> *coop-racer* checkpoint 1) (-> *game-info* current-continue))
     (coop-racer-note-mount mounted)
     (let ((other (coop-other-player-target mounted)))
       (when (and other (coop-player-in-play? other) (not (coop-player-racing? other)))
@@ -436,14 +466,40 @@
       (if (coop-player-racing? other) (send-event other 'end-mode))))
   (none))
 
+(deftype coop-pad-search (structure)
+  ((pos  vector :inline)
+   (best process)
+   (dist float)))
+
+;; lambdas don't capture locals, so the nearest-pad search keeps its state here
+(define *coop-pad-search* (new 'global 'coop-pad-search))
+
+(defun coop-racer-pad-near ((pos vector) (radius float))
+  "The zoomer pad (racer) closest to pos within radius, or #f."
+  (set! (-> *coop-pad-search* pos quad) (-> pos quad))
+  (set! (-> *coop-pad-search* best) #f)
+  (set! (-> *coop-pad-search* dist) radius)
+  (iterate-process-tree *entity-pool*
+                        (lambda ((p process))
+                          (when (= (-> p type symbol) 'racer)
+                            (let ((d (vector-vector-distance (-> (the-as process-drawable p) root trans) (-> *coop-pad-search* pos))))
+                              (when (< d (-> *coop-pad-search* dist))
+                                (set! (-> *coop-pad-search* dist) d)
+                                (set! (-> *coop-pad-search* best) p))))
+                          #t)
+                        *kernel-context*)
+  (-> *coop-pad-search* best))
+
 (defun coop-racer-remount ((tgt target))
   "After a respawn, called from tgt's own code: if the other player is on a zoomer, tgt gets one too.
-   (The spawn/respawn states don't take 'change-mode events, so this switches state directly.)"
-  (let ((other (coop-other-player-target tgt))
-        (pad (handle->process (-> *coop-racer* pad))))
-    (when (and pad (coop-player-racing? other) (not (coop-player-racing? tgt)))
-      (coop-racer-note-mount tgt)
-      (go-process tgt target-racing-start (process->handle pad))))
+   Getting on moves the rider onto the pad it uses, so use the pad at the respawn point; with no pad
+   nearby the rider gets on where they stand. (The spawn/respawn states don't take 'change-mode
+   events, so this switches state directly.)"
+  (let ((other (coop-other-player-target tgt)))
+    (when (and (handle->process (-> *coop-racer* pad)) (coop-player-racing? other) (not (coop-player-racing? tgt)))
+      (let ((near-pad (coop-racer-pad-near (-> tgt control trans) (meters 30))))
+        (coop-racer-note-mount tgt)
+        (go-process tgt target-racing-start (if near-pad (process->handle near-pad) (the-as handle #f))))))
   (none))
 
 (defun coop-racer-finish-ready? ((pad process-drawable))
@@ -580,12 +636,13 @@
           (initialize! (-> self game) 'dead (the-as game-save #f) (the-as string #f))
           (set-time! (-> self state-time))
           (anim-loop))
-        (let ((pos (new 'stack-no-clear 'vector))
-              (at-checkpoint (coop-vehicle-section?)))
+        (let* ((pos (new 'stack-no-clear 'vector))
+               (at-checkpoint (coop-vehicle-section?))
+               (cp (coop-racer-checkpoint (coop-process-player self))))
           (cond
             (at-checkpoint
-             (set! (-> pos quad) (-> *game-info* current-continue trans quad))
-             (format 0 "[coop] player ~D respawns at the checkpoint ~A~%" (+ 1 (coop-process-player self)) (-> *game-info* current-continue name)))
+             (set! (-> pos quad) (-> cp trans quad))
+             (format 0 "[coop] player ~D respawns at the checkpoint ~A~%" (+ 1 (coop-process-player self)) (-> cp name)))
             (else
              (coop-safe-position-near other pos)
              (format 0 "[coop] player ~D respawns next to player ~D~%" (+ 1 (coop-process-player self)) (- 2 (coop-process-player self)))))
@@ -594,7 +651,7 @@
           (reset-target-state #t)
           (target-exit)
           (quaternion-copy! (-> self control quat-for-control)
-                            (if at-checkpoint (-> *game-info* current-continue quat) (-> other control quat-for-control)))
+                            (if at-checkpoint (-> cp quat) (-> other control quat-for-control)))
           (move-to-point! (-> self control) pos)
           (rot->dir-targ! (-> self control))
           (set! (-> self control camera-pos quad) (-> self control trans quad))

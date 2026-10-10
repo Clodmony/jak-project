@@ -324,6 +324,7 @@
 (define-extern coop-racer-dismount-other (function process none))
 (define-extern coop-racer-finish-ready? (function process-drawable symbol))
 (define-extern coop-racer-may-get-off? (function process symbol))
+(define-extern coop-player-in-play? (function target basic))
 (define-extern coop-kill-camera-processes (function none))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
