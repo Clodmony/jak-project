@@ -1284,7 +1284,10 @@
   :trans
     (behavior ()
       (set-blackout-frames (seconds 0.017))
-      (if (send-event *target* 'change-mode 'fishing self) (go fisher-playing))))
+      (when (send-event *target* 'change-mode 'fishing self)
+        ;; og:preserve-this coop: the game (its counters, the lose screen, the reward) runs for the player fishing
+        (coop-pin-to-player self (process->handle *target*))
+        (go fisher-playing))))
 
 ;; og:preserve-this pc port needs its own implementation of play-anim for cutscene skipping
 (#when PC_PORT
@@ -1407,6 +1410,7 @@
   :virtual #t
   :trans
     (behavior ()
+      (coop-unpin self) ;; og:preserve-this coop: waiting for a player again
       (call-parent-state-handler trans)
       (when (task-complete? *game-info* (-> self entity extra perm task))
         (when (nonzero? (-> *cpad-list* cpads 0 button0-rel 0))

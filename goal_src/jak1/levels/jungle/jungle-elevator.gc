@@ -22,7 +22,8 @@
       (set! (-> self draw light-index) (the-as uint 255))
       (set! (-> self bottom-height) (-> jungle bottom-height))
       (set! (-> jungle bottom-height) (-> jungleb bottom-height))
-      (send-event *target* 'reset-pickup 'eco))
+      (send-event *target* 'reset-pickup 'eco)
+      (coop-bring-onto-platform self *target*)) ;; og:preserve-this coop: the other player rides along
   :exit
     (behavior ()
       (set! (-> jungle bottom-height) (-> self bottom-height))
@@ -36,7 +37,8 @@
         (vector-! gp-0 (-> self root trans) s5-0)
         (when (< (-> self path-pos) 0.9)
           (move-by-vector! (-> *target* control) gp-0)
-          (send-event *target* 'reset-height)))
+          (send-event *target* 'reset-height)
+          (coop-move-other-rider self gp-0))) ;; og:preserve-this coop: and the other player on it
       (if (and (>= (-> self path-pos) 0.2) (not (time-elapsed? (-> self state-time) (seconds 0.2))))
         (load-commands-set! *level* (load-command-get-index *level* 'jungle 0)))))
 

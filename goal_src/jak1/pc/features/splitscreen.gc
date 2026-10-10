@@ -220,14 +220,16 @@
   (set! (-> *coop-pins* proc i) (the-as handle #f)))
 
 (defun coop-pinned-player ((proc process))
-  "The player proc is pinned to, or -1."
+  "The player proc, or its parent, is pinned to, or -1. A pinned process's children (e.g. the one
+   drawing a minigame's counters) run for the same player."
   (when (> (-> *coop-pins* count) 0)
-    (let ((live 0))
+    (let ((live 0)
+          (parent (if (-> proc parent) (ppointer->process (-> proc parent)))))
       (dotimes (i 4)
         (let ((p (handle->process (-> *coop-pins* proc i))))
           (cond
             ((not p) (set! (-> *coop-pins* proc i) (the-as handle #f)))
-            ((= p proc) (return (-> *coop-pins* player i)))
+            ((or (= p proc) (= p parent)) (return (-> *coop-pins* player i)))
             (else (+! live 1)))))
       (set! (-> *coop-pins* count) live)))
   -1)
@@ -250,6 +252,15 @@
           (set! wrong (!= player *coop-player*))
           (format 0 "[coop] player ~D takes ~A~%" (+ player 1) (-> proc name)))))
     wrong))
+
+(defun coop-unpin ((proc process))
+  "End proc's pin before proc ends (a minigame host that goes back to waiting for a player)."
+  (when (> (-> *coop-pins* count) 0)
+    (dotimes (i 4)
+      (when (= (handle->process (-> *coop-pins* proc i)) proc)
+        (set! (-> *coop-pins* proc i) (the-as handle #f))
+        (+! (-> *coop-pins* count) -1))))
+  (none))
 
 (defun coop-player-for-process ((proc process))
   (let ((owner (coop-owner-player proc)))
@@ -725,6 +736,42 @@
                          (not (logtest? (-> tgt control status) (cshape-moving-flags onsurf))))))
         (return #t))))
   #f)
+
+(defun coop-bring-onto-platform ((plat process-drawable) (tgt target))
+  "A ride that takes one player where the other can't follow (the jungle elevator down to the plant
+   boss): the other player, if in play and not on the platform already, is put onto it on the far
+   side from tgt, and loses their eco like tgt does."
+  (when (and (coop-active?) tgt)
+    (let ((other (coop-other-player-target tgt)))
+      (when (and (coop-player-in-play? other)
+                 (or (< (meters 4) (vector-vector-xz-distance (-> other control trans) (-> plat root trans)))
+                     (< (meters 2.5) (fabs (- (-> other control trans y) (-> plat root trans y))))))
+        (let ((pos (new 'stack-no-clear 'vector)))
+          (vector-! pos (-> plat root trans) (-> tgt control trans))
+          (set! (-> pos y) 0.0)
+          (if (< (vector-length pos) (meters 0.5))
+            (set-vector! pos (meters 1.5) 0.0 0.0 1.0)
+            (vector-normalize! pos (meters 1.5)))
+          (vector+! pos pos (-> plat root trans))
+          (+! (-> pos y) (meters 1))
+          (set! (-> other control transv quad) (the-as uint128 0))
+          (move-to-point! (-> other control) pos)
+          (set! (-> other control highest-jump-mark quad) (-> pos quad))
+          (format 0 "[coop] player ~D rides along on ~A~%" (+ 1 (coop-process-player other)) (-> plat name))))
+      (if (coop-player-in-play? other) (send-event other 'reset-pickup 'eco))))
+  (none))
+
+(defun coop-move-other-rider ((plat process-drawable) (delta vector))
+  "A platform that moves *target* with it by hand (the jungle elevator, too fast for riding) moves the
+   other player standing on it by the same amount."
+  (when (coop-active?)
+    (let ((other (coop-player-target (- 1 *coop-player*))))
+      (when (and (coop-player-in-play? other)
+                 (>= (meters 5) (vector-vector-xz-distance (-> other control trans) (-> plat root trans)))
+                 (>= (meters 4) (fabs (- (-> other control trans y) (-> plat root trans y)))))
+        (move-by-vector! (-> other control) delta)
+        (send-event other 'reset-height))))
+  (none))
 
 (defun coop-flut-cell-ready? ((cell process-drawable))
   "In a flut flut section a power cell waits for both players: it can be taken once every player in
