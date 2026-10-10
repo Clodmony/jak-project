@@ -3,7 +3,8 @@
 Check that the local co-op change set stays a clean add-on on top of upstream OpenGOAL.
 Written with AI assistance (AI-assisted).
 
-Compares HEAD with its merge base on upstream (upstream/master, else master) and checks:
+Compares the working tree (committed or not) with its merge base on upstream (upstream/master,
+else master) and checks:
 
   1. Files other games compile must be identical to upstream:
      - everything under goal_src/ outside goal_src/jak1/ (goal-lib.gc, common/, jak2/, jak3/, jakx/)
@@ -62,7 +63,7 @@ def jak1_files_reused_by_other_games():
 
 def changed_files(base):
     out = {}
-    for line in git("diff", "--name-status", base, "HEAD").splitlines():
+    for line in git("diff", "--name-status", base).splitlines():
         status, *paths = line.split("\t")
         out[paths[-1]] = status[0]
     return out
@@ -76,7 +77,7 @@ def unmarked_hunks(base, path):
     except StopIteration:
         return []
     bad = []
-    for m in re.finditer(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@", git("diff", "-U0", base, "HEAD", "--", path), re.M):
+    for m in re.finditer(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@", git("diff", "-U0", base, "--", path), re.M):
         start, count = int(m.group(1)), int(m.group(2) or "1")
         if count == 0 or start <= decomp_start:
             continue  # pure deletion (judged with its replacement) or before the decompiled code

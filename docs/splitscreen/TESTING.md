@@ -141,6 +141,7 @@ menus, unplugging) went through the pads. No keyboard input was injected: the de
 | 33 | Partly: player 2's hit on a dark vine 55 m from player 1 registers; the puff is not clearly visible in a still screenshot, #13 |
 | Water | Pass after fix: player 2 swims, both players in one water volume, leaving clears only that player, deadly water kills player 2 and not player 1 |
 | NPCs | Pass after fix: player 2 talks to an NPC with their own pad, the prompt shows in player 2's view, player 1's button doesn't trigger it, both are released afterwards |
+| Zoomer (#16) | Fire Canyon: either player mounting at the pad gives both their own zoomer (own pad, camera, speed/heat HUD); a zoomer death sends only that player back to the checkpoint onto a new zoomer, also when both die a few seconds apart; both dead in the same moment reloads the checkpoint; the end pad's power cell appears only once both are within 30 m; taking it plays the cinematic and both get off. Driving back to the start pad gets both off. Precursor Basin, Mountain Pass, Lava Tube untested |
 
 ## Performance
 
