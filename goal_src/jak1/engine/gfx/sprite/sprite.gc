@@ -525,6 +525,10 @@
     (&+! (-> dma-buff base) (* s5-0 16)))
   (none))
 
+;; og:preserve-this coop: set while local co-op runs. Adds a chunk of screen sprites (the HUD) for the
+;; view being drawn, without the other player's, and returns #t; #f when the frame isn't split.
+(define *coop-hud-sprite-hook* (the-as (function dma-buffer pointer int int symbol) #f))
+
 (defun sprite-add-2d-chunk ((sprites sprite-array-2d) (start-sprite-idx int) (num-sprites int) (dma-buff dma-buffer) (mscal-addr int))
   "Upload sprite data from elements in the array."
   ;; first packet is just the header
@@ -539,11 +543,15 @@
   ;; second packet is vector data (3 qw / sprite)
   (let ((qwc-pkt2 (* 3 num-sprites)))
     ;; we do a ref to the vec-data and don't actually copy it into the dma-buffer
-    (dma-buffer-add-ref-vif2 dma-buff
-                             qwc-pkt2
-                             (&+ (-> sprites vec-data) (* 48 start-sprite-idx))
-                             (new 'static 'vif-tag :cmd (vif-cmd nop))
-                             (new 'static 'vif-tag :cmd (vif-cmd unpack-v4-32) :num qwc-pkt2 :imm (new 'static 'vif-unpack-imm :flg 1 :addr 1))))
+    ;; og:preserve-this coop: except for the HUD group on split frames, each view gets its own copy
+    (if (not (and (= mscal-addr 109)
+                  *coop-hud-sprite-hook*
+                  (*coop-hud-sprite-hook* dma-buff (&+ (-> sprites vec-data) (* 48 start-sprite-idx)) start-sprite-idx num-sprites)))
+      (dma-buffer-add-ref-vif2 dma-buff
+                               qwc-pkt2
+                               (&+ (-> sprites vec-data) (* 48 start-sprite-idx))
+                               (new 'static 'vif-tag :cmd (vif-cmd nop))
+                               (new 'static 'vif-tag :cmd (vif-cmd unpack-v4-32) :num qwc-pkt2 :imm (new 'static 'vif-unpack-imm :flg 1 :addr 1)))))
   #|
   ;(when (= mscal-addr 3)
     (dotimes (i num-sprites)

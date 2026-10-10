@@ -1286,7 +1286,7 @@
       (set-blackout-frames (seconds 0.017))
       (when (send-event *target* 'change-mode 'fishing self)
         ;; og:preserve-this coop: the game (its counters, the lose screen, the reward) runs for the player fishing
-        (coop-pin-to-player self (process->handle *target*))
+        (coop-pin-minigame self (process->handle *target*))
         (go fisher-playing))))
 
 ;; og:preserve-this pc port needs its own implementation of play-anim for cutscene skipping

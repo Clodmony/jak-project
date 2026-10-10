@@ -1071,6 +1071,7 @@
                     (set! (-> s2-2 flags) (font-flags shadow kerning large))
                     (print-game-text (lookup-text! *common-text* (text-id press-to-use) #f) s2-2 #f 128 22))
                   (when (cpad-pressed? (target-cpad-idx) circle) ;; og:preserve-this coop: pad of the player using it
+                    (coop-pin-minigame self (process->handle *target*)) ;; og:preserve-this coop: stays with this player
                     (set! (-> self grips-moving?) #f)
                     (loop
                       (send-event *target* 'change-mode 'periscope self)
@@ -1234,6 +1235,7 @@
                  (set! *camera-init-mat* (-> self old-camera-matrix))
                  (send-event *camera* 'change-state *camera-base-mode* 0)
                  (set! *camera-init-mat* #f)))
+              (coop-unpin self) ;; og:preserve-this coop
               (if (and (-> self entity) (logtest? (-> self entity extra perm status) (entity-perm-status complete)))
                 (go periscope-power-on)
                 (go periscope-wait-for-player)))
