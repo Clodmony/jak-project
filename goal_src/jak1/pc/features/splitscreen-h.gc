@@ -332,6 +332,7 @@
 (define-extern coop-racer-finish-ready? (function process-drawable symbol))
 (define-extern coop-racer-may-get-off? (function process symbol))
 (define-extern coop-racer-note-death (function target none))
+(define-extern coop-pin-to-player (function process handle symbol))
 (define-extern coop-player-in-play? (function target basic))
 (define-extern coop-powerup-player-near (function vector float pickup-type target))
 (define-extern coop-ring-crossed? (function process cylinder-flat vector symbol))
