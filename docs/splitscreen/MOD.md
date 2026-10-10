@@ -261,10 +261,9 @@ git merge origin/feature/jak1-local-splitscreen   # resolve conflicts, then: git
 git push origin feature/jak1-coop-launcher-mod
 ```
 
-When this was written (2026-10-10), `feature/jak1-coop-launcher-mod` (`5832b8e1`) was 10 commits
-behind `origin/feature/jak1-local-splitscreen` (`ee509d24`), among them `cfff95aa` "fix HUD crash
-on respawn"; a trial merge (`git merge-tree`) conflicted only in `docs/splitscreen/PROGRESS.md`
-(both sides added entries at the top: keep both). The workflow enforces this: "Prep Variables"
+Last merged on 2026-10-10 (co-op branch at `ee509d24`). The usual conflict is
+`docs/splitscreen/PROGRESS.md`, where both branches add entries at the top: keep both. The workflow
+enforces the merge: "Prep Variables"
 stops with "is missing N commit(s) of 'feature/jak1-local-splitscreen'" when the release commit
 does not contain the whole co-op branch. To release without it on purpose, set
 `REQUIRE_MERGED_BRANCH: ""` in `cut-release.yaml`.

@@ -19,6 +19,18 @@ TEST(CoopSlots, AutoAssignTwoControllers) {
   EXPECT_EQ(a.keyboard_slot(), -1);
 }
 
+TEST(CoopSlots, AutoAssignKeepsCurrentPlayer1Pad) {
+  // the pad that is player 1 in single player stays player 1 when co-op starts
+  SlotAssigner a;
+  a.auto_assign({{10, kXbox}, {11, kXbox}, {12, kDs4}}, 11);
+  EXPECT_EQ(a.slot(0).instance_id, 11);
+  EXPECT_EQ(a.slot(1).instance_id, 10);
+  // unknown or no preference: connection order
+  a.auto_assign({{10, kXbox}, {11, kXbox}}, 99);
+  EXPECT_EQ(a.slot(0).instance_id, 10);
+  EXPECT_EQ(a.slot(1).instance_id, 11);
+}
+
 TEST(CoopSlots, AutoAssignKeyboardAndOneController) {
   SlotAssigner a;
   a.auto_assign({{10, kXbox}});
