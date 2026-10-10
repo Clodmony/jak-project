@@ -111,6 +111,9 @@
       (suspend)
       0
       (send-event *target* 'attack-invinc #f (static-attack-info ((mode 'instant-death))))
+      ;; og:preserve-this coop: the race is lost for both players, both go back to the checkpoint
+      (if (and (coop-active?) *target*)
+        (send-event (coop-other-player-target *target*) 'attack-invinc #f (static-attack-info ((mode 'instant-death)))))
       (cleanup-for-death self)
       (deactivate self)
       (loop
