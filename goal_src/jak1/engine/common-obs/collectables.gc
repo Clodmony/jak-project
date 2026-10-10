@@ -956,6 +956,7 @@
             (send-event *camera* 'teleport-to-other-start-string)))))
   :code
     (behavior ((arg0 object) (arg1 handle))
+      (if (coop-pin-to-player self arg1) (suspend)) ;; og:preserve-this coop: the victory plays on the player who took the cell
       (sound-play "pu-powercell")
       (clear-collide-with-as (-> self root))
       (logclear! (-> self mask) (process-mask actor-pause))

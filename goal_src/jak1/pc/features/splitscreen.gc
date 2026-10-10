@@ -205,10 +205,57 @@
     ((logtest? (-> proc mask) (process-mask target sidekick camera)) 0)
     (else -1)))
 
+;; world processes pinned to one player for a while: a power cell's victory runs for the player who
+;; took it, even if the other player is (or moves) nearer. A pin ends with its process.
+(deftype coop-pins (structure)
+  ((count  int32)
+   (proc   handle 4)
+   (player int32 4)))
+
+(define *coop-pins* (new 'global 'coop-pins))
+
+(set! (-> *coop-pins* count) 0)
+
+(dotimes (i 4)
+  (set! (-> *coop-pins* proc i) (the-as handle #f)))
+
+(defun coop-pinned-player ((proc process))
+  "The player proc is pinned to, or -1."
+  (when (> (-> *coop-pins* count) 0)
+    (let ((live 0))
+      (dotimes (i 4)
+        (let ((p (handle->process (-> *coop-pins* proc i))))
+          (cond
+            ((not p) (set! (-> *coop-pins* proc i) (the-as handle #f)))
+            ((= p proc) (return (-> *coop-pins* player i)))
+            (else (+! live 1)))))
+      (set! (-> *coop-pins* count) live)))
+  -1)
+
+(defun coop-pin-to-player ((proc process) (by handle))
+  "Pin proc to the player by is (a target handle), until proc ends. Nothing for anything else.
+   Returns #t when proc currently runs in the other player's context: it should (suspend) once, its
+   next run is in the right one (switching here would outlive this run of proc)."
+  (let ((tgt (handle->process by))
+        (wrong #f))
+    (when (and (coop-active?) tgt (= (-> tgt type) target))
+      (let ((player (coop-process-player tgt))
+            (slot -1))
+        (dotimes (i 4)
+          (if (and (< slot 0) (not (handle->process (-> *coop-pins* proc i)))) (set! slot i)))
+        (when (>= slot 0)
+          (set! (-> *coop-pins* proc slot) (process->handle proc))
+          (set! (-> *coop-pins* player slot) player)
+          (+! (-> *coop-pins* count) 1)
+          (set! wrong (!= player *coop-player*))
+          (format 0 "[coop] player ~D takes ~A~%" (+ player 1) (-> proc name)))))
+    wrong))
+
 (defun coop-player-for-process ((proc process))
   (let ((owner (coop-owner-player proc)))
     (cond
       ((>= owner 0) owner)
+      ((>= (coop-pinned-player proc) 0) (coop-pinned-player proc))
       ((and (-> *coop* nearest-world?) (type-type? (-> proc type) process-drawable)) (coop-nearest-player-for (the-as process-drawable proc)))
       (else 0))))
 
