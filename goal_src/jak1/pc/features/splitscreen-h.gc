@@ -96,7 +96,10 @@
   "Co-op: a process that a player spawns into a shared pool (like *dproc*) belongs to that player.
    Returns spawned (a (pointer process) or #f)."
   `(let ((coop-adopt-pp ,spawned))
-     (if (and coop-adopt-pp (process-mask? (-> ,owner mask) player2)) (logior! (-> coop-adopt-pp 0 mask) (process-mask player2)))
+     (when (and coop-adopt-pp (coop-active?))
+       (if (process-mask? (-> ,owner mask) player2)
+         (logior! (-> coop-adopt-pp 0 mask) (process-mask player2))
+         (logior! (-> coop-adopt-pp 0 mask) (process-mask coop-p1))))
      coop-adopt-pp))
 
 (defmacro coop-camera-cpad ()
@@ -269,6 +272,16 @@
   "Is name a state a grabbed player waits in: on foot, on the zoomer or on the flut flut."
   (or (= name 'target-grab) (= name 'target-racing-grab) (= name 'target-flut-grab)))
 
+(define-extern coop-minigame-host? (function process symbol))
+
+(defun coop-player-in-minigame? ((tgt target))
+  "Is tgt playing a minigame (fisherman, Billy's frogs, a periscope or the Misty cannon)? The other
+   player stays free meanwhile, and the minigame stays with tgt."
+  (and tgt
+       (-> tgt state)
+       (let ((name (-> tgt state name)))
+         (or (= name 'target-fishing) (= name 'target-billy-game) (= name 'target-periscope)))))
+
 (defun coop-grab-other-player ((proc process) (grab symbol))
   "Co-op: cutscenes, conversations and elevators that grab a player hold the other player too.
    The grabber may later release either player (its *target* can be the other one by then), so a
@@ -281,8 +294,12 @@
          ;; success is judged by the state the other player is going to, not by the event's return
          ;; value: some states (target-stance-ambient) go to target-grab but return #f, which left the
          ;; other player held forever.
+         ;; a player in a minigame isn't pulled out of it by the other one's talk or cutscene, and a
+         ;; minigame's own grabs (its play-again question) hold only its player
          (when (and other
                     (not (logtest? (-> other state-flags) (state-flags grabbed dying)))
+                    (not (coop-player-in-minigame? other))
+                    (not (with-pp (coop-minigame-host? pp)))
                     (begin
                       (send-event other 'change-mode 'grab)
                       (coop-grab-state? (-> other next-state name))))
@@ -340,6 +357,7 @@
 (define-extern coop-move-other-rider (function process-drawable vector none))
 (define-extern coop-pin-to-player (function process handle symbol))
 (define-extern coop-unpin (function process none))
+(define-extern coop-pin-minigame (function process handle none))
 (define-extern coop-player-in-play? (function target basic))
 (define-extern coop-powerup-player-near (function vector float pickup-type target))
 (define-extern coop-ring-crossed? (function process cylinder-flat vector symbol))

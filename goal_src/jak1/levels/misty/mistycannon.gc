@@ -1120,6 +1120,7 @@
               (set! (-> gp-0 flags) (font-flags shadow kerning large))
               (print-game-text (lookup-text! *common-text* (text-id press-to-use) #f) gp-0 #f 128 22))
             (when (cpad-pressed? (target-cpad-idx) circle) ;; og:preserve-this coop: pad of the player using it
+              (coop-pin-minigame self (process->handle *target*)) ;; og:preserve-this coop: stays with this player
               (loop
                 (send-event *target* 'change-mode 'periscope self)
                 (suspend)
@@ -1186,6 +1187,7 @@
               (when (send-event *target* 'end-mode)
                 (send-event *camera* 'change-state *camera-base-mode* 0)
                 (process-entity-status! self (entity-perm-status bit-3) #f)
+                (coop-unpin self) ;; og:preserve-this coop
                 (go mistycannon-waiting-for-player-to-fuck-off))
               (suspend)))
           (let ((v1-45 (and (cpad-hold? (target-cpad-idx) x) (time-elapsed? (-> self state-time) (seconds 1))))) ;; og:preserve-this coop: pad of the player using it
