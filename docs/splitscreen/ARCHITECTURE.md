@@ -53,8 +53,8 @@ Consequences, by design:
   player's rig while co-op runs.
 - Manager process `coop-manager` (default pool, once per frame, also while paused so menus get a
   single full-screen view): split decision and listener; in game mode also the player position
-  cache, player 2 respawn next to player 1 after `respawn-delay`, distance leash
-  (`leash-distance`, 60 m).
+  cache, player 2 respawn next to player 1 after `respawn-delay`, hold-backs that had to wait, the
+  distance leash (`leash-distance`, 1000 m, a safety net since #69).
 - In-game options (all builds, so it works for a launcher mod): Options > Game Options > Misc Options
   > "Local co-op" (on/off), "Co-op split top/bottom", "Co-op assign devices", "Co-op: every ring for both" (race rings count only once both players flew through them; off by default), "Co-op: friendly fire" (on by default), "Co-op: tougher bosses" (bosses need 1.5x the hits, `coop-boss-hits`; off by default)
   (`goal_src/jak1/pc/progress-pc.gc`). Co-op is never saved as on: every session starts single player.
@@ -122,12 +122,26 @@ them. GOAL API: `pc-coop-*` in `kernel-defs.gc`.
 
 ## Streaming and world simulation
 
-Level loading, vis and the continue point stay driven by player 1 (camera position,
-`level-distance`, `*load-boundary-target*`). Jak 1 holds two levels; player 2 can't make the game load
-a third. So:
-- distance leash (60 m): player 2 is brought back next to player 1;
-- residency guard: right before a level is discarded or hidden (`load-state update!`,
-  `level.gc`), `coop-on-level-leaving` brings player 2 to player 1 if player 2 stands in it;
+Jak 1 holds two levels. Load boundaries (`load-boundary-data.gc`) switch them as the camera or the
+player crosses: `(load a b)`, `(display a on/off)`, `(vis a)`, `(checkpt name)`. With co-op both
+players cross them (#69):
+- player 1's crossings use the original points in `*load-boundary-target*`; player 2's camera and
+  position are checked in a second pass over the boundary list (`coop-check-boundaries-p2`, which
+  lends player 2's points to `check-boundary`);
+- a move of more than 10 m in one frame (respawn, warp, being held back) is not a crossing
+  (`coop-boundary-skip-jumps`);
+- every crossing command goes through `coop-boundary-command-ok?`: a load may not drop a displayed
+  level whose boxes contain the other player (boxes overlap near borders, so a player can be in two:
+  all of them must stay, `coop-level-keeps-player?`). Such a load is not done and the crossing
+  player is held back: put next to the other player (`coop-hold-back`, retried each tick while that
+  can't happen yet). Turning off the display of the other player's level is ignored. Vis and
+  checkpoints follow player 1 only;
+- the continue point, `level-distance`, vis, music, ambients and the sound listener stay with player 1.
+So two players can be anywhere in the same level or two neighbouring levels. Safety nets:
+- residency guard: right before a level is discarded or hidden (`load-state update!`, `level.gc`),
+  `coop-on-level-leaving` brings player 2 to player 1 if player 2 stands in it (scripts like the
+  fisherman's boat or a warp gate still switch levels for both);
+- distance leash, now 1000 m (`leash-distance`);
 - player 2's current level (endless-fall height, level-enter events) comes from its own position
   (`level-get-target-inside`), not from the continue point or player 1's camera;
 - `level-activate`/`level-deactivate` events reach both players' cameras and targets.
