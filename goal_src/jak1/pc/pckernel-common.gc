@@ -187,14 +187,8 @@
   (update-discord-rpc obj)
   ;; update auto-splitter info
   (update-speedrun obj)
-  (cond
-    ((not (-> obj use-vis?)) (update-video-hacks obj))
-    ;; co-op split screen draws 2d into views with their own aspect ratio, also with game vis on.
-    ;; when the split ends, go back to the values game vis uses.
-    ((coop-split-frame?) (update-video-hacks obj) (set! *coop-video-hacks-applied* #t))
-    (*coop-video-hacks-applied*
-     (set! *coop-video-hacks-applied* #f)
-     (set-aspect-ratio (-> *setting-control* current aspect-ratio))))
+  (when (not (-> obj use-vis?))
+    (update-video-hacks obj))
   (cond
     ((not (-> obj ps2-actor-vis?))
      ;; kinda overkill.
