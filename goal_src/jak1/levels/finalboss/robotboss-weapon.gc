@@ -171,7 +171,7 @@
 (defstate darkecobomb-explode (darkecobomb)
   :code
     (behavior ((arg0 symbol))
-      (send-event *target* 'reset-pickup 'eco)
+      (coop-send-to-players 'reset-pickup 'eco) ;; og:preserve-this coop: both players
       (sound-play "explod-bomb" :position #f)
       (activate! *camera-smush-control* 819.2 37 600 1.0 0.995)
       (send-event (ppointer->process (-> self parent)) 'flash 255.0)
@@ -188,6 +188,11 @@
                      *entity-pool*)
       (logior! (-> self draw status) (draw-status hidden))
       (cond
+        ;; og:preserve-this coop: a player out of the blast fights on, the blast knocks out the others
+        ;; (they respawn next to the survivor) and the boss is told the bomb is done
+        ((coop-blast-survivor? (+ 40960.0 (-> self entity extra trans y)) arg0)
+         (coop-blast-players (+ 40960.0 (-> self entity extra trans y)) arg0)
+         (send-event (ppointer->process (-> self parent)) 'bomb-done))
         ((or arg0 (and *target* (< (-> (target-pos 0) y) (+ 40960.0 (-> self entity extra trans y)))))
          (if *target* (logior! (-> *target* mask) (process-mask sleep)))
          (send-event (ppointer->process (-> self parent)) 'bomb-going)
@@ -209,7 +214,8 @@
     (('touch 'attack) (go darkecobomb-explode #t))))
 
 (defbehavior darkecobomb-explode-if-player-high-enough darkecobomb ()
-  (if (and (not (movie?)) *target* (< (+ 409600.0 (-> self entity extra trans y)) (-> (target-pos 0) y)))
+  ;; og:preserve-this coop: once every player escaped upward
+  (if (and (not (movie?)) *target* (< (+ 409600.0 (-> self entity extra trans y)) (coop-lowest-player-y)))
     (go darkecobomb-explode #f))
   (none))
 
@@ -467,11 +473,12 @@
   :trans
     (behavior ()
       (set! (-> self ring radius-primary) (* 204.8 (the float (- (-> *display* game-frame-counter) (-> self state-time)))))
-      (let ((gp-0 (new 'stack-no-clear 'vector)))
-        (when (torus-method-11 (-> self ring) gp-0)
-          (vector-normalize! gp-0 16384.0)
-          (send-event *target* 'attack #f (static-attack-info ((vector gp-0))))
-          (send-event (ppointer->process (-> self parent)) 'hit-jak)))
+      (coop-for-each-player-context ;; og:preserve-this coop: the ring hits each player it reaches
+        (let ((gp-0 (new 'stack-no-clear 'vector)))
+          (when (torus-method-11 (-> self ring) gp-0)
+            (vector-normalize! gp-0 16384.0)
+            (send-event *target* 'attack #f (static-attack-info ((vector gp-0))))
+            (send-event (ppointer->process (-> self parent)) 'hit-jak))))
       (dotimes (gp-1 5)
         (let ((s5-0 (new 'stack-no-clear 'vector))) (torus-method-12 (-> self ring) s5-0) (spawn (-> self test-particle) s5-0)))
       (let ((f0-3 (fmin 1.0 (* 0.006666667 (the float (- (seconds 2) (- (-> *display* game-frame-counter) (-> self state-time))))))))
