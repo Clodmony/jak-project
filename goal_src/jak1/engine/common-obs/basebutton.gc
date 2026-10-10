@@ -329,6 +329,12 @@
           (set! (-> s4-0 param 1) (the-as uint v1-9)))
         (set! (-> s4-0 param 2) (the-as uint (target-pos 0)))
         (send-event-function *target* s4-0))
+      ;; og:preserve-this coop: the other player jumps into the gate too
+      (let ((other (if (coop-active?) (coop-other-player-target *target*))))
+        (when (and other (coop-player-in-play? other))
+          (let ((v (new 'static 'vector)))
+            (set! (-> v quad) (-> self root trans quad))
+            (send-event other 'change-state target-warp-out v (-> other control trans)))))
       ;; og:preserve-this
       ;; NOTE : added case for "training" here. in the original game, the training level does NOT come
       ;; with its own code for warp gates and buttons, and uses the villagep-obs imported from village1
