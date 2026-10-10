@@ -748,8 +748,8 @@
       (set! (-> self control transv quad) (the-as uint128 0))
       (set! (-> self control ctrl-xz-vel) 0.0)
       (set! (-> self post-hook) target-no-stick-post)
-      ;; og:preserve-this coop: the other player is still driving: respawn next to them on a zoomer
-      (if (coop-other-player-alive? self) (go target-coop-respawn))
+      ;; og:preserve-this coop: the other player is still in play: respawn at the checkpoint on a zoomer
+      (when (coop-other-player-alive? self) (coop-racer-note-death self) (go target-coop-respawn))
       (initialize! (-> self game) 'dead (the-as game-save #f) (the-as string #f))
       (set-time! (-> self state-time))
       (until v1-154

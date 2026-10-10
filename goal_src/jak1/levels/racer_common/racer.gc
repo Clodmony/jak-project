@@ -230,8 +230,9 @@
   :virtual #t
   :event
     (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
-      (when (and (or (= message 'touch) (= message 'attack)) (coop-racer-may-get-off? proc) (and (!= (-> self condition) 4) (send-event *target* 'end-mode))) ;; og:preserve-this coop: not right after a (re)mount
-        (coop-racer-dismount-other *target*) ;; og:preserve-this coop: both players get off
+      ;; og:preserve-this coop: not right after a (re)mount. Each player gets off when they reach the pad,
+      ;; the other one races on until they get there too.
+      (when (and (or (= message 'touch) (= message 'attack)) (coop-racer-may-get-off? proc) (and (!= (-> self condition) 4) (send-event *target* 'end-mode)))
         (go-virtual pickup (the-as (state collectable) (method-of-object self idle))))
       (cond
         ((= message 'trans) (vector+! (the-as vector (-> block param 0)) (-> self root trans) (-> self extra-trans)))
