@@ -55,7 +55,7 @@ Consequences, by design:
   cache, player 2 respawn next to player 1 after `respawn-delay`, distance leash
   (`leash-distance`, 60 m).
 - In-game options (all builds, so it works for a launcher mod): Options > Game Options > Misc Options
-  > "Local co-op" (on/off), "Co-op split top/bottom", "Co-op assign devices"
+  > "Local co-op" (on/off), "Co-op split top/bottom", "Co-op assign devices", "Co-op: every ring for both" (race rings count only once both players flew through them; off by default)
   (`goal_src/jak1/pc/progress-pc.gc`). Co-op is never saved as on: every session starts single player.
 - Debug menu "Local Co-op" (`goal_src/jak1/pc/debug/coop-menu.gc`, debug builds only): start/stop,
   layout, device join, respawn, leash, info overlay.

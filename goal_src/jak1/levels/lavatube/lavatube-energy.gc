@@ -358,6 +358,29 @@
     (quaternion->matrix s5-0 (-> self root quat))
     (vector-dot gp-0 (-> s5-0 vector 0))))
 
+;; og:preserve-this coop: the signed distance of one of the players in play, by mode:
+;; 'lead the one furthest through, 'trail the one furthest behind, 'waiting the one closest to the
+;; door on the near side (or a very large negative number if nobody is before it).
+;; The door opens for whoever comes near and only shuts once both players are through, so the
+;; trailing player isn't locked out. Without co-op this is energydoor-player-dist.
+(defbehavior energydoor-coop-dist energydoor ((mode symbol))
+  (if (not (coop-active?))
+    (energydoor-player-dist)
+    (let ((result (if (= mode 'trail) 4096000000.0 -4096000000.0))
+          (any #f)
+          (s5-0 (new 'stack-no-clear 'matrix)))
+      (quaternion->matrix s5-0 (-> self root quat))
+      (dotimes (i 2)
+        (let ((tgt (coop-player-target i)))
+          (when (and tgt (coop-player-in-play? tgt))
+            (let ((d (vector-dot (vector-! (new 'stack-no-clear 'vector) (-> tgt control trans) (-> self root trans)) (-> s5-0 vector 0))))
+              (set! any #t)
+              (case mode
+                (('trail) (set! result (fmin result d)))
+                (('waiting) (if (< d 0.0) (set! result (fmax result d))))
+                (else (set! result (fmax result d))))))))
+      (if any result (energydoor-player-dist)))))
+
 (defbehavior energydoor-open-handler energydoor ((arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
   (case arg2
     (('open?) #t)))
@@ -375,7 +398,7 @@
       (until (ja-done? 0)
         (suspend)
         (ja :num! (seek! 0.0)))
-      (if (or (task-closed? (-> self entity extra perm task) (task-status need-resolution)) (< (energydoor-player-dist) 0.0))
+      (if (or (task-closed? (-> self entity extra perm task) (task-status need-resolution)) (< (energydoor-coop-dist 'trail) 0.0)) ;; og:preserve-this coop
         (go energydoor-closed-till-near)
         (go energydoor-closed-till-task)))
   :post transform-post)
@@ -384,9 +407,9 @@
   :event energydoor-open-handler
   :trans
     (behavior ()
-      (let ((f30-0 (energydoor-player-dist)))
+      (let ((f30-0 (energydoor-coop-dist 'trail))) ;; og:preserve-this coop: trailing player for "passed"
         (cond
-          ((< f30-0 -450560.0) (go energydoor-closing))
+          ((< (energydoor-coop-dist 'lead) -450560.0) (go energydoor-closing)) ;; og:preserve-this coop: everyone far before it
           ((and (not (task-closed? (-> self entity extra perm task) (task-status need-resolution)))
                 (< 61440.0 f30-0)
                 (let ((a1-1 (new 'stack-no-clear 'event-message-block)))
@@ -421,6 +444,8 @@
     (behavior ()
       (cond
         ((task-closed? (-> self entity extra perm task) (task-status need-resolution)) (go energydoor-opening))
+        ;; og:preserve-this coop: a player who respawned at a checkpoint before the door gets through again
+        ((and (coop-active?) (< -409600.0 (energydoor-coop-dist 'waiting))) (go energydoor-opening))
         ((let ((a1-1 (new 'stack-no-clear 'event-message-block)))
            (set! (-> a1-1 from) self)
            (set! (-> a1-1 num-params) 0)
@@ -440,7 +465,7 @@
   :event energydoor-closed-handler
   :trans
     (behavior ()
-      (if (< -409600.0 (energydoor-player-dist)) (go energydoor-opening)))
+      (if (< -409600.0 (energydoor-coop-dist 'lead)) (go energydoor-opening))) ;; og:preserve-this coop: anyone near
   :code
     (behavior ()
       (ja :num-func num-func-identity :frame-num 0.0)
@@ -470,7 +495,7 @@
     (set! (-> this root pause-adjust-distance) 245760.0)
     (set! (-> this alt-actor) (entity-actor-lookup arg0 'alt-actor 0))
     (cond
-      ((< (energydoor-player-dist) -409600.0) (go energydoor-closed-till-near))
+      ((< (energydoor-coop-dist 'lead) -409600.0) (go energydoor-closed-till-near)) ;; og:preserve-this coop
       ((task-closed? (-> this entity extra perm task) (task-status need-resolution)) (go energydoor-opened))
       (else
        (let ((a1-9 (new 'stack-no-clear 'event-message-block)))
@@ -481,7 +506,7 @@
                (v1-25 (-> this alt-actor)))
            (cond
              ((t9-12 (if v1-25 (-> v1-25 extra process)) a1-9) (go energydoor-opened))
-             ((< 0.0 (energydoor-player-dist)) (go energydoor-closed-till-task))
+             ((< 0.0 (energydoor-coop-dist 'trail)) (go energydoor-closed-till-task)) ;; og:preserve-this coop
              (else (go energydoor-opened)))))))
     (none)))
 

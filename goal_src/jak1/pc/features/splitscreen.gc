@@ -25,7 +25,8 @@
    (target-dead-pool        dead-pool)
    (camera-dead-pool        dead-pool)
    (camera-master-dead-pool dead-pool)
-   (dead-pool-16k           dead-pool)))
+   (dead-pool-16k           dead-pool)
+   (dead-pool-8k            dead-pool))) ;; the zoomer model (one process per player)
 
 (define *coop-context-p1* (new 'global 'coop-player-context))
 
@@ -67,6 +68,8 @@
 
 (define *coop-p2-16k-dead-pool* (new 'global 'dead-pool 1 (* 16 1024) '*coop-p2-16k-dead-pool*))
 
+(define *coop-p2-8k-dead-pool* (new 'global 'dead-pool 1 (* 8 1024) '*coop-p2-8k-dead-pool*))
+
 (defun coop-init-p2-context ()
   "Reset player 2's context to a fresh player with no processes."
   (let ((ctx *coop-context-p2*))
@@ -92,7 +95,8 @@
     (set! (-> ctx target-dead-pool) *coop-p2-target-dead-pool*)
     (set! (-> ctx camera-dead-pool) *coop-p2-camera-dead-pool*)
     (set! (-> ctx camera-master-dead-pool) *coop-p2-camera-master-dead-pool*)
-    (set! (-> ctx dead-pool-16k) *coop-p2-16k-dead-pool*))
+    (set! (-> ctx dead-pool-16k) *coop-p2-16k-dead-pool*)
+    (set! (-> ctx dead-pool-8k) *coop-p2-8k-dead-pool*))
   (none))
 
 (defmacro coop-process-handle (proc)
@@ -117,6 +121,7 @@
   (set! (-> ctx camera-dead-pool) *camera-dead-pool*)
   (set! (-> ctx camera-master-dead-pool) *camera-master-dead-pool*)
   (set! (-> ctx dead-pool-16k) *16k-dead-pool*)
+  (set! (-> ctx dead-pool-8k) *8k-dead-pool*)
   (none))
 
 (defun coop-load-context ((ctx coop-player-context))
@@ -137,6 +142,7 @@
   (set! *camera-dead-pool* (-> ctx camera-dead-pool))
   (set! *camera-master-dead-pool* (-> ctx camera-master-dead-pool))
   (set! *16k-dead-pool* (-> ctx dead-pool-16k))
+  (set! *8k-dead-pool* (-> ctx dead-pool-8k))
   (none))
 
 (defun coop-switch-context ((idx int))
@@ -358,6 +364,243 @@
 
 ;; player 2's spawn: a light version of target-continue that doesn't touch session state
 ;; (load state, continue point, settings, player 1's camera).
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; zoomer (racer): both players drive their own, progress needs both
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(define-extern coop-player-in-play? (function target basic))
+
+(deftype coop-racer-state (structure)
+  ((pad        handle)       ;; the zoomer pad the players got on at (a handle: in a structure, not a symbol)
+   (left-pad   symbol 2)   ;; has each player driven away from the pad since they last got on
+   (checkpoint continue-point 2)   ;; the last checkpoint each player drove past (where they respawn)
+   (died-racing symbol 2)))        ;; did each player's last death happen on a zoomer
+
+(define *coop-racer* (new 'global 'coop-racer-state))
+
+(set! (-> *coop-racer* pad) (the-as handle #f))
+
+(set! (-> *coop-racer* left-pad 0) #f)
+
+(set! (-> *coop-racer* left-pad 1) #f)
+
+(set! (-> *coop-racer* checkpoint 0) #f)
+
+(set! (-> *coop-racer* checkpoint 1) #f)
+
+(set! (-> *coop-racer* died-racing 0) #f)
+
+(set! (-> *coop-racer* died-racing 1) #f)
+
+(defun coop-player-racing? ((tgt target))
+  (and tgt (logtest? (-> tgt control root-prim prim-core action) (collide-action racer))))
+
+(defun coop-vehicle-section? ()
+  "Is a zoomer section going on (a player drives a zoomer from the pad they got on at)?"
+  (and (handle->process (-> *coop-racer* pad))
+       (or (coop-player-racing? (coop-player-target 0)) (coop-player-racing? (coop-player-target 1)))))
+
+(defun coop-racer-note-mount ((tgt target))
+  (if tgt (set! (-> *coop-racer* left-pad (coop-process-player tgt)) #f))
+  (none))
+
+(defun coop-racer-may-get-off? ((proc process))
+  "May the zoomer pad end proc's ride? Only once the rider has driven away from it since getting on
+   (like the pad's own pickup state): a respawn puts the rider back onto the pad they got on at."
+  (or (not (coop-active?))
+      (not proc)
+      (!= (-> proc type) target)
+      (-> *coop-racer* left-pad (coop-process-player proc))))
+
+(defun coop-racer-checkpoint-near ((pos vector))
+  "The continue point of an active level within 30 m of pos, or #f."
+  (dotimes (i (-> *level* length))
+    (let ((lev (-> *level* level i)))
+      (when (= (-> lev status) 'active)
+        (let ((cps (-> lev info continues)))
+          (while (not (null? cps))
+            (let ((cp (the-as continue-point (car cps))))
+              (if (< (vector-vector-distance pos (-> cp trans)) (meters 30)) (return cp)))
+            (set! cps (cdr cps)))))))
+  (the-as continue-point #f))
+
+(defun coop-racer-checkpoint ((idx int))
+  "Where player idx respawns in a zoomer section: their own last checkpoint. The game's continue
+   point follows player 1 only, so it can be ahead of or behind player 2."
+  (if (-> *coop-racer* checkpoint idx) (-> *coop-racer* checkpoint idx) (-> *game-info* current-continue)))
+
+(defun coop-racer-update ()
+  "Once per tick: note which riders have driven more than 6 m away from the pad, and the last
+   checkpoint each rider drove past."
+  (let ((pad (the-as process-drawable (handle->process (-> *coop-racer* pad)))))
+    (when pad
+      (dotimes (i 2)
+        (let ((tgt (coop-player-target i)))
+          ;; only while driving: getting on moves the rider onto the pad first
+          (when (and (coop-player-racing? tgt)
+                     (!= (-> tgt state name) 'target-racing-start)
+                     (!= (-> tgt state name) 'target-racing-get-on))
+            (if (< (meters 6) (vector-vector-distance (-> tgt control trans) (-> pad root trans)))
+              (set! (-> *coop-racer* left-pad i) #t))
+            (let ((cp (coop-racer-checkpoint-near (-> tgt control trans))))
+              (when (and cp (!= cp (-> *coop-racer* checkpoint i)))
+                (set! (-> *coop-racer* checkpoint i) cp)
+                (format 0 "[coop] player ~D checkpoint ~A~%" (+ i 1) (-> cp name)))))))))
+  (none))
+
+(defun coop-racer-mount-other ((pad process) (mounted target))
+  "A player got on a zoomer at pad: the other player gets their own zoomer next to them, so both
+   race at the same time."
+  (when (and (coop-active?) mounted)
+    (set! (-> *coop-racer* pad) (process->handle pad))
+    ;; a new zoomer section: both start from the game's checkpoint
+    (set! (-> *coop-racer* checkpoint 0) (-> *game-info* current-continue))
+    (set! (-> *coop-racer* checkpoint 1) (-> *game-info* current-continue))
+    (coop-racer-note-mount mounted)
+    (let ((other (coop-other-player-target mounted)))
+      (when (and other (coop-player-in-play? other) (not (coop-player-racing? other)))
+        (move-to-point! (-> other control) (coop-safe-position-near mounted (new 'stack-no-clear 'vector)))
+        (coop-racer-note-mount other)
+        (send-event other 'change-mode 'racing pad))))
+  (none))
+
+(defun coop-racer-dismount-other ((dismounted process))
+  "A player got off at a zoomer pad (end of a zoomer section): the other player gets off too."
+  (when (and (coop-active?) dismounted (= (-> dismounted type) target))
+    (let ((other (coop-other-player-target dismounted)))
+      (if (coop-player-racing? other) (send-event other 'end-mode))))
+  (none))
+
+(deftype coop-pad-search (structure)
+  ((pos  vector :inline)
+   (best process)
+   (dist float)))
+
+;; lambdas don't capture locals, so the nearest-pad search keeps its state here
+(define *coop-pad-search* (new 'global 'coop-pad-search))
+
+(defun coop-powerup-player-near ((pos vector) (radius float) (kind pickup-type))
+  "A player within radius of pos who has the powerup kind (e.g. blue eco), or #f. Without co-op
+   only *target* counts. For world objects that react to the player carrying an eco: the one
+   nearest to them (*target* in their context) may not be the one carrying it."
+  (dotimes (i (if (coop-active?) 2 1))
+    (let ((tgt (if (coop-active?) (coop-player-target i) *target*)))
+      (if (and tgt
+               (>= radius (vector-vector-distance pos (-> tgt control trans)))
+               (send-event tgt 'query 'powerup kind))
+        (return tgt))))
+  (the-as target #f))
+
+;; per race ring: player 2's hips last frame (the ring itself keeps player 1's) and, for the
+;; every-ring option, which players flew through it since it lit up
+(deftype coop-ring-hips (structure)
+  ((owner  process 8)
+   (next   int32)
+   (passed uint8 8)       ;; bit per player
+   (lit    time-frame 8)  ;; the ring's state-time when the bits were recorded (it lit up again: reset)
+   (hips   vector 8 :inline)))
+
+(define *coop-ring-hips* (new 'global 'coop-ring-hips))
+
+(dotimes (i 8)
+  (set! (-> *coop-ring-hips* owner i) (the-as process #f)))
+
+(set! (-> *coop-ring-hips* next) 0)
+
+(defun coop-ring-slot ((ring process))
+  "The slot of this ring (a new one starts with player 2 far away, so their first frame doesn't count)."
+  (dotimes (i 8)
+    (if (= (-> *coop-ring-hips* owner i) ring)
+      (return i)))
+  (let ((i (-> *coop-ring-hips* next)))
+    (set! (-> *coop-ring-hips* next) (mod (+ i 1) 8))
+    (set! (-> *coop-ring-hips* owner i) ring)
+    (set! (-> *coop-ring-hips* passed i) (the-as uint 0))
+    (set! (-> *coop-ring-hips* lit i) (-> (the-as process-drawable ring) state-time))
+    (set-vector! (-> *coop-ring-hips* hips i) 0.0 (meters 100000) 0.0 1.0)
+    i))
+
+(defun coop-ring-crossed? ((ring process) (cyl cylinder-flat) (hips0 vector))
+  "Race rings: does the ring count as flown through this frame? hips0 holds player 1's hips from the
+   last frame (the ring's own field), player 2's are kept here; both are updated. Each player's own
+   path is checked: with one position for both, a switch between the players drew a line from one
+   to the other that could cross the ring. A jump of more than 10 m (a respawn) doesn't count.
+   By default either player flying through counts. With the every-ring option the ring counts once
+   every player in play flew through it since it lit up. Without co-op only *target*, in hips0."
+  (let* ((coop (coop-active?))
+         (slot (if coop (coop-ring-slot ring) 0))
+         (hips1 (if coop (-> *coop-ring-hips* hips slot) hips0))
+         (crossed #f))
+    (when (and coop (!= (-> *coop-ring-hips* lit slot) (-> (the-as process-drawable ring) state-time)))
+      (set! (-> *coop-ring-hips* lit slot) (-> (the-as process-drawable ring) state-time))
+      (set! (-> *coop-ring-hips* passed slot) (the-as uint 0)))
+    (dotimes (i (if coop 2 1))
+      (let ((tgt (if coop (coop-player-target i) *target*))
+            (hips (if (zero? i) hips0 hips1)))
+        (when tgt
+          (let ((dir (new 'stack-no-clear 'vector)))
+            (set! (-> dir quad) (-> hips quad))
+            (vector<-cspace! hips (-> tgt node-list data 26))
+            (vector-! dir dir hips)
+            (when (and (< (vector-length dir) (meters 10)) (>= (ray-flat-cyl-intersect cyl hips dir) 0.0))
+              (set! crossed #t)
+              (when (and coop (not (logtest? (-> *coop-ring-hips* passed slot) (ash 1 i))))
+                (logior! (-> *coop-ring-hips* passed slot) (ash 1 i))
+                (when (-> *coop* every-ring?)
+                  (sound-play "close-racering")
+                  (format 0 "[coop] player ~D flew through ~A~%" (+ i 1) (-> ring name)))))))))
+    (when (and coop (-> *coop* every-ring?))
+      ;; every player in play must have flown through (a player waiting to respawn doesn't hold it up)
+      (set! crossed (nonzero? (-> *coop-ring-hips* passed slot)))
+      (dotimes (i 2)
+        (let ((tgt (coop-player-target i)))
+          (if (and (coop-player-in-play? tgt) (not (logtest? (-> *coop-ring-hips* passed slot) (ash 1 i))))
+            (set! crossed #f)))))
+    crossed))
+
+(defun coop-racer-pad-near ((pos vector) (radius float))
+  "The zoomer pad (racer) closest to pos within radius, or #f."
+  (set! (-> *coop-pad-search* pos quad) (-> pos quad))
+  (set! (-> *coop-pad-search* best) #f)
+  (set! (-> *coop-pad-search* dist) radius)
+  (iterate-process-tree *entity-pool*
+                        (lambda ((p process))
+                          (when (= (-> p type symbol) 'racer)
+                            (let ((d (vector-vector-distance (-> (the-as process-drawable p) root trans) (-> *coop-pad-search* pos))))
+                              (when (< d (-> *coop-pad-search* dist))
+                                (set! (-> *coop-pad-search* dist) d)
+                                (set! (-> *coop-pad-search* best) p))))
+                          #t)
+                        *kernel-context*)
+  (-> *coop-pad-search* best))
+
+(defun coop-racer-note-death ((tgt target))
+  "tgt died on a zoomer while the other player drives on: the respawn puts them back on one."
+  (set! (-> *coop-racer* died-racing (coop-process-player tgt)) #t)
+  (none))
+
+(defun coop-racer-remount ((tgt target) (always symbol))
+  "After a spawn or a zoomer death, called from tgt's own code: if the other player is on a zoomer
+   (or always, after a zoomer death), tgt gets one too.
+   Getting on moves the rider onto the pad it uses, so use the pad at the respawn point; with no pad
+   nearby the rider gets on where they stand. (The spawn/respawn states don't take 'change-mode
+   events, so this switches state directly.)"
+  (let ((other (coop-other-player-target tgt)))
+    (when (and (or always (and (handle->process (-> *coop-racer* pad)) (coop-player-racing? other))) (not (coop-player-racing? tgt)))
+      (let ((near-pad (coop-racer-pad-near (-> tgt control trans) (meters 30))))
+        (coop-racer-note-mount tgt)
+        (go-process tgt target-racing-start (if near-pad (process->handle near-pad) (the-as handle #f))))))
+  (none))
+
+(defun coop-racer-finish-ready? ((pad process-drawable))
+  "A zoomer finish pad only hands out its reward once every player has arrived (within 30 m)."
+  (or (not (coop-active?))
+      (let ((ready #t))
+        (dotimes (i 2)
+          (let ((tgt (coop-player-target i)))
+            (if (and tgt (< (meters 30) (vector-vector-distance (-> tgt control trans) (-> pad root trans)))) (set! ready #f))))
+        ready)))
+
 (defstate target-coop-spawn (target)
   :event target-generic-event-handler
   :exit
@@ -395,6 +638,7 @@
       (ja :group! eichar-stance-loop-ja)
       (suspend)
       (logior! (-> self control status) (cshape-moving-flags onsurf onground tsurf))
+      (coop-racer-remount self #f)
       (go target-stance)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -470,9 +714,11 @@
       (clear-collide-with-as (-> self control))
       (set! (-> self control transv quad) (the-as uint128 0))
       (suspend-for (-> *coop* respawn-delay))
-      ;; wait for the other player to stand somewhere safe
-      (let ((other (coop-other-player-target self)))
-        (until (or (not (coop-active?)) (coop-target-ready? other))
+      ;; wait for the other player to stand somewhere safe (not after a zoomer death or in a zoomer
+      ;; section: there the dead player goes back to their last checkpoint alone and races that part again)
+      (let ((other (coop-other-player-target self))
+            (racing-death (-> *coop-racer* died-racing (coop-process-player self))))
+        (until (or (not (coop-active?)) racing-death (coop-vehicle-section?) (coop-target-ready? other))
           (suspend)
           (set! other (coop-other-player-target self)))
         ;; co-op was stopped while we waited: finish the original single player death
@@ -481,13 +727,22 @@
           (initialize! (-> self game) 'dead (the-as game-save #f) (the-as string #f))
           (set-time! (-> self state-time))
           (anim-loop))
-        (let ((pos (coop-safe-position-near other (new 'stack-no-clear 'vector))))
-          (format 0 "[coop] player ~D respawns next to player ~D~%" (+ 1 (coop-process-player self)) (- 2 (coop-process-player self)))
+        (let* ((pos (new 'stack-no-clear 'vector))
+               (at-checkpoint (or racing-death (coop-vehicle-section?)))
+               (cp (coop-racer-checkpoint (coop-process-player self))))
+          (cond
+            (at-checkpoint
+             (set! (-> pos quad) (-> cp trans quad))
+             (format 0 "[coop] player ~D respawns at the checkpoint ~A~%" (+ 1 (coop-process-player self)) (-> cp name)))
+            (else
+             (coop-safe-position-near other pos)
+             (format 0 "[coop] player ~D respawns next to player ~D~%" (+ 1 (coop-process-player self)) (- 2 (coop-process-player self)))))
           (reset! (-> self fact) 'health)
           (reset! (-> self fact) 'eco)
           (reset-target-state #t)
           (target-exit)
-          (quaternion-copy! (-> self control quat-for-control) (-> other control quat-for-control))
+          (quaternion-copy! (-> self control quat-for-control)
+                            (if at-checkpoint (-> cp quat) (-> other control quat-for-control)))
           (move-to-point! (-> self control) pos)
           (rot->dir-targ! (-> self control))
           (set! (-> self control camera-pos quad) (-> self control trans quad))
@@ -502,6 +757,11 @@
       (ja :group! eichar-stance-loop-ja)
       (suspend)
       (logior! (-> self control status) (cshape-moving-flags onsurf onground tsurf))
+      ;; back on a zoomer only after a zoomer death (also when the other player got off meanwhile):
+      ;; a player who got off at a pad and died on foot stays on foot
+      (when (-> *coop-racer* died-racing (coop-process-player self))
+        (set! (-> *coop-racer* died-racing (coop-process-player self)) #f)
+        (coop-racer-remount self #t))
       (go target-stance))
   :post target-no-stick-post)
 
@@ -661,6 +921,9 @@
 ;; bit per player hidden by coop-update for the length of a cinematic about the other player
 (define *coop-movie-hidden* 0)
 
+;; bit per player frozen by coop-update because a cinematic froze the other player
+(define *coop-movie-slept* 0)
+
 (define *coop-ear* (new 'global 'vector))
 
 (defun coop-player-in-play? ((tgt target))
@@ -669,6 +932,11 @@
        (-> tgt state)
        (!= (-> tgt state name) 'target-death)
        (!= (-> tgt state name) 'target-coop-respawn)))
+
+(defun coop-clone-anim-state? ((name symbol))
+  "Is name a state a player is in while a cinematic animates them: on foot, on the zoomer or on the
+   flut flut."
+  (or (= name 'target-clone-anim) (= name 'target-racing-clone-anim) (= name 'target-flut-clone-anim)))
 
 (defun coop-update ()
   "Once per frame: split decision and listener. In game mode also player positions, player 2 respawn
@@ -699,18 +967,43 @@
               other
               (movie?)
               (coop-player-in-play? me)
-              (= (-> other state name) 'target-clone-anim)
-              (!= (-> me state name) 'target-clone-anim))
+              (coop-clone-anim-state? (-> other state name))
+              (not (coop-clone-anim-state? (-> me state name))))
+         ;; hidden and frozen: they can't drive or walk away unseen (e.g. into lava on the zoomer)
          (when (zero? (logand *coop-movie-hidden* bit))
            (coop-set-hidden me #t)
+           (logior! (-> me mask) (process-mask sleep))
            (logior! *coop-movie-hidden* bit)))
         ((nonzero? (logand *coop-movie-hidden* bit))
-         (if me (coop-set-hidden me #f))
+         (when me
+           (coop-set-hidden me #f)
+           (logclear! (-> me mask) (process-mask sleep)))
          (logclear! *coop-movie-hidden* bit)))))
   (pc-set-splitscreen-layout! (the-as int (-> *coop* layout)))
   ;; the rest is gameplay: nothing moves while paused or in a menu
   (if (!= *master-mode* 'game) (return #f))
   (+! (-> *coop* sim-ticks) 1)
+  ;; some cinematics freeze the player with process-mask sleep instead of a grab (power cell plants,
+  ;; the last race ring, lightning moles): freeze the other player for as long too
+  (dotimes (i 2)
+    (let ((me (coop-player-target i))
+          (other (coop-player-target (- 1 i)))
+          (bit (ash 1 i)))
+      (cond
+        ((and me
+              other
+              (or (movie?) (nonzero? *camera-look-through-other*))
+              (logtest? (-> other mask) (process-mask sleep))
+              (zero? (logand *coop-movie-slept* (ash 1 (- 1 i))))
+              (zero? (logand *coop-movie-hidden* (ash 1 (- 1 i))))
+              (not (logtest? (-> me mask) (process-mask sleep))))
+         (logior! (-> me mask) (process-mask sleep))
+         (logior! *coop-movie-slept* bit))
+        ((and (nonzero? (logand *coop-movie-slept* bit))
+              (not (and other (logtest? (-> other mask) (process-mask sleep)))))
+         (if me (logclear! (-> me mask) (process-mask sleep)))
+         (logclear! *coop-movie-slept* bit)))))
+  (coop-racer-update)
   ;; actors near player 2 must exist and run even when player 1's camera is far away or can't see
   ;; them. Same as the "force actors" PC option, without touching the saved setting.
   ;; (pc-settings update may lower these again after the frame; actor birth and pause happen
@@ -738,8 +1031,12 @@
       (else
        (set! (-> *coop-timers* p2-missing) 0)
        ;; distance leash: level streaming follows player 1, so player 2 can't go far.
+       ;; no leash in a zoomer section: they race the level at their own pace, and a player who died
+       ;; starts again from the checkpoint
        (when (and (-> *coop* leash?)
+                  (not (coop-vehicle-section?))
                   (coop-target-ready? p1)
+                  (coop-player-in-play? p2)
                   (< (-> *coop* leash-distance) (vector-vector-distance (-> p1 control trans) (-> p2 control trans))))
          (format 0 "[coop] player 2 is too far from player 1, bringing them back~%")
          (coop-despawn-player2)
@@ -814,8 +1111,15 @@
     (coop-despawn-player2)
     ;; stopped during a cinematic about player 2: show player 1 again
     (when (logtest? *coop-movie-hidden* 1)
-      (let ((p1 (coop-player-target 0))) (if p1 (coop-set-hidden p1 #f))))
+      (let ((p1 (coop-player-target 0)))
+        (when p1
+          (coop-set-hidden p1 #f)
+          (logclear! (-> p1 mask) (process-mask sleep)))))
     (set! *coop-movie-hidden* 0)
+    (dotimes (i 2)
+      (let ((tgt (coop-player-target i)))
+        (if (and tgt (logtest? *coop-movie-slept* (ash 1 i))) (logclear! (-> tgt mask) (process-mask sleep)))))
+    (set! *coop-movie-slept* 0)
     (set! *player-context-for-process* #f)
     (set! *player-context-for-event* #f)
     (set! *player-context-restore* #f)
