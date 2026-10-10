@@ -206,11 +206,13 @@
     (else -1)))
 
 ;; world processes pinned to one player for a while: a power cell's victory runs for the player who
-;; took it, even if the other player is (or moves) nearer. A pin ends with its process.
+;; took it, a minigame for the player playing it, even if the other player is (or moves) nearer.
+;; A pin ends with its process or with coop-unpin.
 (deftype coop-pins (structure)
-  ((count  int32)
-   (proc   handle 4)
-   (player int32 4)))
+  ((count    int32)
+   (proc     handle 4)
+   (player   int32 4)
+   (minigame symbol 4)))
 
 (define *coop-pins* (new 'global 'coop-pins))
 
@@ -234,25 +236,6 @@
       (set! (-> *coop-pins* count) live)))
   -1)
 
-(defun coop-pin-to-player ((proc process) (by handle))
-  "Pin proc to the player by is (a target handle), until proc ends. Nothing for anything else.
-   Returns #t when proc currently runs in the other player's context: it should (suspend) once, its
-   next run is in the right one (switching here would outlive this run of proc)."
-  (let ((tgt (handle->process by))
-        (wrong #f))
-    (when (and (coop-active?) tgt (= (-> tgt type) target))
-      (let ((player (coop-process-player tgt))
-            (slot -1))
-        (dotimes (i 4)
-          (if (and (< slot 0) (not (handle->process (-> *coop-pins* proc i)))) (set! slot i)))
-        (when (>= slot 0)
-          (set! (-> *coop-pins* proc slot) (process->handle proc))
-          (set! (-> *coop-pins* player slot) player)
-          (+! (-> *coop-pins* count) 1)
-          (set! wrong (!= player *coop-player*))
-          (format 0 "[coop] player ~D takes ~A~%" (+ player 1) (-> proc name)))))
-    wrong))
-
 (defun coop-unpin ((proc process))
   "End proc's pin before proc ends (a minigame host that goes back to waiting for a player)."
   (when (> (-> *coop-pins* count) 0)
@@ -261,6 +244,43 @@
         (set! (-> *coop-pins* proc i) (the-as handle #f))
         (+! (-> *coop-pins* count) -1))))
   (none))
+
+(defun coop-pin-to-player ((proc process) (by handle))
+  "Pin proc to the player by is (a target handle), until proc ends. Nothing for anything else.
+   Returns #t when proc currently runs in the other player's context: it should (suspend) once, its
+   next run is in the right one (switching here would outlive this run of proc)."
+  (let ((tgt (handle->process by))
+        (wrong #f))
+    (when (and (coop-active?) tgt (= (-> tgt type) target))
+      (coop-unpin proc) ;; a new pin replaces an old one
+      (let ((player (coop-process-player tgt))
+            (slot -1))
+        (dotimes (i 4)
+          (if (and (< slot 0) (not (handle->process (-> *coop-pins* proc i)))) (set! slot i)))
+        (when (>= slot 0)
+          (set! (-> *coop-pins* proc slot) (process->handle proc))
+          (set! (-> *coop-pins* player slot) player)
+          (set! (-> *coop-pins* minigame slot) #f)
+          (+! (-> *coop-pins* count) 1)
+          (set! wrong (!= player *coop-player*))
+          (format 0 "[coop] player ~D takes ~A~%" (+ player 1) (-> proc name)))))
+    wrong))
+
+(defun coop-pin-minigame ((proc process) (by handle))
+  "Pin a minigame host (fisherman, Billy, a periscope, the Misty cannon) to the player who starts it.
+   Besides running for that player, its grabs (the play-again questions) hold only that player: the
+   other one stays free."
+  (coop-pin-to-player proc by)
+  (dotimes (i 4)
+    (if (= (handle->process (-> *coop-pins* proc i)) proc) (set! (-> *coop-pins* minigame i) #t)))
+  (none))
+
+(defun coop-minigame-host? ((proc process))
+  "Is proc a minigame host pinned to its player (coop-pin-minigame)?"
+  (when (and proc (> (-> *coop-pins* count) 0))
+    (dotimes (i 4)
+      (if (= (handle->process (-> *coop-pins* proc i)) proc) (return (-> *coop-pins* minigame i)))))
+  #f)
 
 (defun coop-player-for-process ((proc process))
   (let ((owner (coop-owner-player proc)))
@@ -979,6 +999,55 @@
 ;; player 2's view
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(defmacro coop-goal-address? (ptr)
+  "Is ptr an address inside the game's memory (so it can be read without crashing)?"
+  `(let ((coop-addr (the-as uint ,ptr)))
+     (and (>= coop-addr #x10000) (< coop-addr #x8000000))))
+
+(defun coop-sprite-owner ((info sparticle-cpuinfo))
+  "The player a 2d particle belongs to (0 or 1), or -1: the player bit of its launcher's process, or
+   the pin of that process or its parent (a minigame host and its children). Read-only and careful:
+   a particle can outlive its launcher's process, whose memory may hold something else by now, so
+   every pointer is range-checked before it is followed and nothing is called on the process."
+  (let ((key (-> info key)))
+    (when (and (-> info valid) (coop-goal-address? key))
+      (let ((proc (-> key proc)))
+        (when (coop-goal-address? proc)
+          (let ((mask (-> proc mask)))
+            (cond
+              ((logtest? mask (process-mask player2)) (return 1))
+              ((logtest? mask (process-mask target sidekick camera coop-p1)) (return 0))))
+          (when (> (-> *coop-pins* count) 0)
+            (let ((parent (-> proc parent))
+                  (parent-node (the-as process-tree #f)))
+              (if (coop-goal-address? parent) (set! parent-node (-> parent 0)))
+              (dotimes (i 4)
+                (let ((p (handle->process (-> *coop-pins* proc i))))
+                  (if (and p (or (= p proc) (= p parent-node))) (return (-> *coop-pins* player i))))))))))
+    -1))
+
+(defun coop-add-hud-sprite-data ((dma-buff dma-buffer) (data pointer) (start int) (count int))
+  "*coop-hud-sprite-hook*: screen sprites (HUD particles: health, the periscope's binocular mask, the
+   frog game's crosshair) are simulated once and normally referenced by both views. On split frames
+   each view gets a copy instead, with the other player's sprites shrunk to nothing (coop-sprite-owner;
+   sprites of world processes stay in both views). Sprite k is particle k of the 2d particle system."
+  (when (coop-split-frame?)
+    (let ((qwc (* 3 count))
+          (pkt (the-as dma-packet (-> dma-buff base))))
+      (set! (-> pkt dma) (new 'static 'dma-tag :id (dma-tag-id cnt) :qwc qwc))
+      (set! (-> pkt vif0) (new 'static 'vif-tag :cmd (vif-cmd nop)))
+      (set! (-> pkt vif1) (new 'static 'vif-tag :cmd (vif-cmd unpack-v4-32) :num qwc :imm (new 'static 'vif-unpack-imm :flg 1 :addr 1)))
+      (&+! (-> dma-buff base) 16)
+      (let ((copy (the-as (inline-array sprite-vec-data-2d) (-> dma-buff base))))
+        (quad-copy! (-> dma-buff base) data qwc)
+        (dotimes (i count)
+          (let ((owner (coop-sprite-owner (-> *sp-particle-system-2d* cpuinfo-table (+ start i)))))
+            (when (and (>= owner 0) (!= owner *coop-view*))
+              (set! (-> copy i sx) 0.0)
+              (set! (-> copy i sy) 0.0)))))
+      (&+! (-> dma-buff base) (* qwc 16))
+      #t)))
+
 (defun coop-draw-view-only ()
   "The view dependent part of real-main-draw-hook, for player 2's view.
    Nothing here may advance the simulation: touching events, actors-update, time of day, ocean
@@ -1203,6 +1272,7 @@
               other
               (movie?)
               (coop-player-in-play? me)
+              (not (coop-player-in-minigame? me))
               (coop-clone-anim-state? (-> other state name))
               (not (coop-clone-anim-state? (-> me state name))))
          ;; hidden and frozen: they can't drive or walk away unseen (e.g. into lava on the zoomer)
@@ -1231,6 +1301,7 @@
               other
               (or (movie?) (nonzero? *camera-look-through-other*))
               (logtest? (-> other mask) (process-mask sleep))
+              (not (coop-player-in-minigame? me))
               (zero? (logand *coop-movie-slept* (ash 1 (- 1 i))))
               (zero? (logand *coop-movie-hidden* (ash 1 (- 1 i))))
               (not (logtest? (-> me mask) (process-mask sleep))))
@@ -1274,12 +1345,23 @@
        ;; starts again from the checkpoint
        (when (and (-> *coop* leash?)
                   (not (coop-vehicle-section?))
-                  (coop-target-ready? p1)
+                  (coop-player-in-play? p1)
                   (coop-player-in-play? p2)
                   (< (-> *coop* leash-distance) (vector-vector-distance (-> p1 control trans) (-> p2 control trans))))
-         (format 0 "[coop] player 2 is too far from player 1, bringing them back~%")
-         (coop-despawn-player2)
-         (coop-spawn-player2 (coop-safe-position-near p1 (new 'stack-no-clear 'vector))))))))
+         (cond
+           ;; player 2 plays a minigame: it stays with them, player 1 is the one brought back
+           ((coop-player-in-minigame? p2)
+            (when (coop-target-ready? p1)
+              (format 0 "[coop] player 1 is too far from player 2's minigame, bringing them back~%")
+              (let ((pos (coop-safe-position-near p2 (new 'stack-no-clear 'vector))))
+                (set! (-> p1 control transv quad) (the-as uint128 0))
+                (move-to-point! (-> p1 control) pos)
+                (set! (-> p1 control highest-jump-mark quad) (-> pos quad))
+                (send-event *camera* 'teleport))))
+           ((coop-target-ready? p1)
+            (format 0 "[coop] player 2 is too far from player 1, bringing them back~%")
+            (coop-despawn-player2)
+            (coop-spawn-player2 (coop-safe-position-near p1 (new 'stack-no-clear 'vector))))))))))
 
 (define-extern coop-print-info (function none))
 
@@ -1328,6 +1410,7 @@
     (set! *player-context-for-process* coop-context-for-process)
     (set! *player-context-for-event* coop-context-for-event)
     (set! *player-context-restore* coop-context-restore)
+    (set! *coop-hud-sprite-hook* coop-add-hud-sprite-data)
     (set! (-> *coop* active?) #t)
     (set! (-> *coop* enabled?) #t)
     ;; player 2's pad buzzes like player 1's
@@ -1362,6 +1445,7 @@
     (set! *player-context-for-process* #f)
     (set! *player-context-for-event* #f)
     (set! *player-context-restore* #f)
+    (set! *coop-hud-sprite-hook* #f)
     (set! (-> *coop* active?) #f)
     (set! (-> *coop* enabled?) #f)
     (set! (-> *coop* split?) #f)
