@@ -60,7 +60,7 @@
        :every-ring? #f
        :friendly-fire? #t
        :tougher-bosses? #f
-       :leash-distance (meters 60)
+       :leash-distance (meters 1000)
        ;; small: interactions have small radii (the fisherman's boat 1.5 m), a big margin left the closer
        ;; player unable to use an object the other player had touched
        :near-hysteresis (meters 0.25)
@@ -380,6 +380,9 @@
 (define-extern coop-send-to-cameras (function symbol object none))
 (define-extern coop-put-other-player-near (function target vector none))
 (define-extern coop-lowest-player-y (function float))
+(define-extern coop-boundary-skip-jumps (function object none))
+(define-extern coop-boundary-command-ok? (function object symbol))
+(define-extern coop-check-boundaries-p2 (function none))
 (define-extern coop-send-to-other-camera (function process symbol object none))
 (define-extern coop-blast-survivor? (function float symbol symbol))
 (define-extern coop-blast-players (function float symbol none))
