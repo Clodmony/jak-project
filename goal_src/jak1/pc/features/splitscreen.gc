@@ -491,6 +491,51 @@
         (return tgt))))
   (the-as target #f))
 
+;; player 2's hips last frame for each race ring (the ring itself keeps player 1's)
+(deftype coop-ring-hips (structure)
+  ((owner process 8)
+   (next  int32)
+   (hips  vector 8 :inline)))
+
+(define *coop-ring-hips* (new 'global 'coop-ring-hips))
+
+(dotimes (i 8)
+  (set! (-> *coop-ring-hips* owner i) (the-as process #f)))
+
+(set! (-> *coop-ring-hips* next) 0)
+
+(defun coop-ring-p2-hips ((ring process))
+  "Player 2's last hips position for this ring (a new slot starts far away, so the first frame
+   doesn't count)."
+  (dotimes (i 8)
+    (if (= (-> *coop-ring-hips* owner i) ring)
+      (return (-> *coop-ring-hips* hips i))))
+  (let ((i (-> *coop-ring-hips* next)))
+    (set! (-> *coop-ring-hips* next) (mod (+ i 1) 8))
+    (set! (-> *coop-ring-hips* owner i) ring)
+    (set-vector! (-> *coop-ring-hips* hips i) 0.0 (meters 100000) 0.0 1.0)
+    (-> *coop-ring-hips* hips i)))
+
+(defun coop-ring-crossed? ((ring process) (cyl cylinder-flat) (hips0 vector))
+  "Race rings: did a player's hips go through cyl since the last frame? hips0 holds player 1's hips
+   from the last frame (the ring's own field), player 2's are kept here; both are updated. With one
+   position for both, a switch between the players drew a line from one to the other that could
+   cross the ring. A jump of more than 10 m (a respawn) doesn't count. Without co-op only *target*,
+   in hips0."
+  (let ((crossed #f)
+        (hips1 (if (coop-active?) (coop-ring-p2-hips ring) hips0)))
+    (dotimes (i (if (coop-active?) 2 1))
+      (let ((tgt (if (coop-active?) (coop-player-target i) *target*))
+            (hips (if (zero? i) hips0 hips1)))
+        (when tgt
+          (let ((dir (new 'stack-no-clear 'vector)))
+            (set! (-> dir quad) (-> hips quad))
+            (vector<-cspace! hips (-> tgt node-list data 26))
+            (vector-! dir dir hips)
+            (if (and (< (vector-length dir) (meters 10)) (>= (ray-flat-cyl-intersect cyl hips dir) 0.0))
+              (set! crossed #t))))))
+    crossed))
+
 (defun coop-racer-pad-near ((pos vector) (radius float))
   "The zoomer pad (racer) closest to pos within radius, or #f."
   (set! (-> *coop-pad-search* pos quad) (-> pos quad))
@@ -854,6 +899,9 @@
 ;; bit per player hidden by coop-update for the length of a cinematic about the other player
 (define *coop-movie-hidden* 0)
 
+;; bit per player frozen by coop-update because a cinematic froze the other player
+(define *coop-movie-slept* 0)
+
 (define *coop-ear* (new 'global 'vector))
 
 (defun coop-player-in-play? ((tgt target))
@@ -904,6 +952,25 @@
   ;; the rest is gameplay: nothing moves while paused or in a menu
   (if (!= *master-mode* 'game) (return #f))
   (+! (-> *coop* sim-ticks) 1)
+  ;; some cinematics freeze the player with process-mask sleep instead of a grab (power cell plants,
+  ;; the last race ring, lightning moles): freeze the other player for as long too
+  (dotimes (i 2)
+    (let ((me (coop-player-target i))
+          (other (coop-player-target (- 1 i)))
+          (bit (ash 1 i)))
+      (cond
+        ((and me
+              other
+              (or (movie?) (nonzero? *camera-look-through-other*))
+              (logtest? (-> other mask) (process-mask sleep))
+              (zero? (logand *coop-movie-slept* (ash 1 (- 1 i))))
+              (not (logtest? (-> me mask) (process-mask sleep))))
+         (logior! (-> me mask) (process-mask sleep))
+         (logior! *coop-movie-slept* bit))
+        ((and (nonzero? (logand *coop-movie-slept* bit))
+              (not (and other (logtest? (-> other mask) (process-mask sleep)))))
+         (if me (logclear! (-> me mask) (process-mask sleep)))
+         (logclear! *coop-movie-slept* bit)))))
   (coop-racer-update)
   ;; actors near player 2 must exist and run even when player 1's camera is far away or can't see
   ;; them. Same as the "force actors" PC option, without touching the saved setting.
@@ -1014,6 +1081,10 @@
     (when (logtest? *coop-movie-hidden* 1)
       (let ((p1 (coop-player-target 0))) (if p1 (coop-set-hidden p1 #f))))
     (set! *coop-movie-hidden* 0)
+    (dotimes (i 2)
+      (let ((tgt (coop-player-target i)))
+        (if (and tgt (logtest? *coop-movie-slept* (ash 1 i))) (logclear! (-> tgt mask) (process-mask sleep)))))
+    (set! *coop-movie-slept* 0)
     (set! *player-context-for-process* #f)
     (set! *player-context-for-event* #f)
     (set! *player-context-restore* #f)
