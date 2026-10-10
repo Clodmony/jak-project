@@ -229,13 +229,16 @@
       ((-> target-grab event) proc argc message block))
   :enter
     (behavior ((arg0 basic) (arg1 handle))
-      (send-event *camera* 'change-to-entity-by-name "camera-403")
+      (coop-send-to-cameras 'change-to-entity-by-name "camera-403") ;; og:preserve-this coop: both views
+      (coop-grab-other-player self #t) ;; og:preserve-this coop: the other player is held too
       (set! (-> self control mod-surface) *empty-mods*)
       (logior! (-> self state-flags) (state-flags invulnerable grabbed))
       (set-setting! 'allow-progress #f 0.0 0))
   :exit
     (behavior ()
       (send-event *camera* 'change-state *camera-base-mode* (seconds 0.2))
+      ;; og:preserve-this coop: the other player's view too
+      (if (coop-active?) (coop-send-to-other-camera self 'change-state *camera-base-mode*))
       (logclear! (-> self state-flags) (state-flags invulnerable grabbed))
       (target-exit)
       (remove-setting! 'allow-progress))
@@ -248,6 +251,7 @@
       (move-to-point! (-> self control) (new 'static 'vector :x 11368946.0 :y 2215900.2 :z -19405602.0 :w 1.0))
       (set-quaternion! (-> self control) (the-as quaternion (new 'static 'vector :y -0.8472 :w 0.5312)))
       (rot->dir-targ! (-> self control))
+      (coop-put-other-player-near self (-> self control trans)) ;; og:preserve-this coop: next to the door too
       (transform-post)
       (ja-channel-push! 1 (seconds 0.2))
       (ja-no-eval :group! eichar-shocked-ja :num! (seek! (ja-aframe 18.0 0)) :frame-num 0.0)

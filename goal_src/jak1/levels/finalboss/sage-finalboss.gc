@@ -106,7 +106,7 @@
       (if (< (vector-vector-distance (-> self root trans) (ear-trans)) 81920.0)
         (sound-play "eco-plat-hover" :id (-> self sound-id) :position (the-as symbol (-> self root trans))))
       (plat-trans)
-      (when (send-event *target* 'query 'powerup (pickup-type eco-yellow))
+      (when (coop-powerup-player-near (-> self root trans) (meters 100000) (pickup-type eco-yellow)) ;; og:preserve-this coop: either player
         (process-entity-status! self (entity-perm-status complete) #t)
         (set! (-> self force-dest) 0.0))))
 
@@ -481,6 +481,9 @@
         (else (set-blackout-frames (seconds 100))))
       (dotimes (v1-84 9)
         (set! (-> self particle v1-84 active) #f))
+      ;; og:preserve-this coop: the second ending scene leaves the player at the big door, the other one goes too
+      (if (and *target* (= (current-status (-> self tasks)) (task-status need-reminder)))
+        (coop-put-other-player-near *target* (-> self old-target-pos trans)))
       ((-> (method-of-type process-taskable play-anim) exit)))
   :trans
     (behavior ()
@@ -610,7 +613,8 @@
             (if (and (or *cheat-mode* (-> *pc-settings* speedrunner-mode?)) (cpad-pressed? 0 triangle)) (set! s5-0 #t))
             (cond
               ((paused?))
-              ((and (< 1300.0 f30-0) (cpad-hold? (target-cpad-idx) circle x)) ;; og:preserve-this coop: pad of the player using it
+              ;; og:preserve-this coop: either player's pad speeds the credits up
+              ((and (< 1300.0 f30-0) (or (cpad-hold? 0 circle x) (and (coop-active?) (cpad-hold? (-> *coop* p2-pad) circle x))))
                (set! f28-0 (seek f28-0 16.0 (* 4.0 (seconds-per-frame))))
                (+! f30-0 (* f28-0 (-> *display* time-adjust-ratio))))
               (else (set! f28-0 (seek f28-0 0.5 (* 16.0 (seconds-per-frame)))) (+! f30-0 (* f28-0 (-> *display* time-adjust-ratio)))))

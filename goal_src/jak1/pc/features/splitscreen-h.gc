@@ -371,13 +371,29 @@
 (define-extern coop-player-attack (function process process object symbol symbol))
 (define-extern coop-continue (function continue-point none))
 (define-extern coop-lowest-health (function float))
-(define-extern coop-send-to-cameras (function symbol object none))
 (define-extern coop-boss-hits (function int int))
 (define-extern coop-boss-phase-health (function float int float))
 (define-extern coop-send-to-players (function symbol object none))
 (define-extern coop-boss-eats (function process process none))
 (define-extern coop-pin-alone-like (function process process none))
 (define-extern coop-solo-cam-player (function process int))
+(define-extern coop-send-to-cameras (function symbol object none))
+(define-extern coop-put-other-player-near (function target vector none))
+(define-extern coop-lowest-player-y (function float))
+(define-extern coop-send-to-other-camera (function process symbol object none))
+(define-extern coop-blast-survivor? (function float symbol symbol))
+(define-extern coop-blast-players (function float symbol none))
+
+(defmacro coop-for-each-player-context (&rest body)
+  "Run body once for each player in play, in that player's context (*target*, *camera* are theirs),
+   then switch back. Without co-op body runs once, unchanged. For world code that checks or steers
+   the player (a boss's camera control, a shot that hits whoever it touches). body must not leave
+   with go or return (the context wouldn't be switched back)."
+  `(dotimes (coop-i (if (coop-active?) 2 1))
+    (let ((coop-prev (if (coop-active?) (coop-switch-context coop-i) -1)))
+      (when (or (< coop-prev 0) (coop-player-in-play? *target*))
+        ,@body)
+      (if (>= coop-prev 0) (coop-switch-context coop-prev)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; water volumes
