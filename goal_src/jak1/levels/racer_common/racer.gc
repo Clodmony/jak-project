@@ -119,11 +119,12 @@
          (cond
            ((and (task-complete? *game-info* (-> self entity extra perm task)) (not (handle->process (-> self cell))))
             (when (and (-> self auto-get-off) (send-event *target* 'end-mode))
+              (coop-racer-dismount-other *target*) ;; og:preserve-this coop: both players get off
               (set! (-> self auto-get-off) #f)
               (go-virtual pickup (the-as (state collectable) (method-of-object self idle))))
             (set! (-> self auto-get-off) #f)
             (goto cfg-77))
-           ((not (handle->process (-> self cell)))
+           ((and (not (handle->process (-> self cell))) (coop-racer-finish-ready? self)) ;; og:preserve-this coop: the finish waits for both players
             (set! (-> self cell)
                   (ppointer->handle (birth-pickup-at-point (vector+! (new 'stack-no-clear 'vector) (-> self root trans) (new 'static 'vector :y 8192.0 :w 1.0))
                                                            (pickup-type fuel-cell)
@@ -176,7 +177,8 @@
                 (set-height! gp-0 80)
                 (set! (-> gp-0 flags) (font-flags shadow kerning large))
                 (print-game-text (lookup-text! *common-text* (text-id press-to-use) #f) gp-0 #f 128 22))
-              (if (and (or (cpad-pressed? (target-cpad-idx) circle) (= (-> self condition) 4)) (send-event *target* 'change-mode 'racing self)) ;; og:preserve-this coop: pad of the player using it
+              (when (and (or (cpad-pressed? (target-cpad-idx) circle) (= (-> self condition) 4)) (send-event *target* 'change-mode 'racing self)) ;; og:preserve-this coop: pad of the player using it
+                (coop-racer-mount-other self *target*) ;; og:preserve-this coop: the other player gets their own zoomer
                 (go-virtual pickup (the-as (state collectable) (method-of-object self wait-for-return))))))
           (racer-effect)
           (suspend))))
@@ -228,7 +230,8 @@
   :virtual #t
   :event
     (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
-      (if (and (or (= message 'touch) (= message 'attack)) (and (!= (-> self condition) 4) (send-event *target* 'end-mode)))
+      (when (and (or (= message 'touch) (= message 'attack)) (coop-racer-may-get-off? proc) (and (!= (-> self condition) 4) (send-event *target* 'end-mode))) ;; og:preserve-this coop: not right after a (re)mount
+        (coop-racer-dismount-other *target*) ;; og:preserve-this coop: both players get off
         (go-virtual pickup (the-as (state collectable) (method-of-object self idle))))
       (cond
         ((= message 'trans) (vector+! (the-as vector (-> block param 0)) (-> self root trans) (-> self extra-trans)))
