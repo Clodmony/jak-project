@@ -1289,7 +1289,7 @@
   0)
 
 (defun start ((arg0 symbol) (arg1 continue-point))
-  (with-coop-player 0
+  (with-coop-player 0 ;; og:preserve-this coop
     (set! (-> *level* border?) #f)
     (set! (-> *setting-control* default border-mode) #f)
     (stop arg0)

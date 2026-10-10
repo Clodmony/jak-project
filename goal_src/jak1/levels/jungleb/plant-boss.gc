@@ -819,7 +819,7 @@
         (until (ja-done? 0)
           (suspend)
           (ja :num! (seek!)))
-        (when (and *cheat-mode* (not (coop-active?)) (cpad-hold? 1 r3))
+        (when (and *cheat-mode* (not (coop-active?)) (cpad-hold? 1 r3)) ;; og:preserve-this coop
           (ja-no-eval :group! plant-boss-main-idle-ja :num! (seek!) :frame-num 0.0)
           (go plant-boss-vulnerable))
         (when (rand-vu-percent? (the-as float 0.2))

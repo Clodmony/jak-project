@@ -972,12 +972,12 @@
                 (else
                  (if (send-event (handle->process (-> this target)) 'attack #f (static-attack-info ((mode v1-18))))
                    (send-event this 'notify 'attack))))))))))
-    ((and tgt
+    ((and tgt ;; og:preserve-this coop
           (and (not (handle->process (-> tgt water volume))) (point-in-vol? (-> this vol) (-> tgt control trans))))
      (let ((s5-0 (-> tgt water)))
        (process-entity-status! this (entity-perm-status bit-3) #t)
        (set! (-> s5-0 volume) (process->handle this))
-       (set! (-> this target) (process->handle tgt))
+       (set! (-> this target) (process->handle tgt)) ;; og:preserve-this coop
        (logior! (-> s5-0 flag) (water-flag active))
        (set! (-> s5-0 base-height) (-> this water-height))
        (set! (-> s5-0 ocean-offset) 0.0)

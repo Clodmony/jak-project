@@ -453,7 +453,7 @@ It type checks the arguments for the entry function.
         (set! pp (the process proc))
         (let ((result ((-> (the process proc) event-hook) (-> msg from) (-> msg num-params) (-> msg message) msg)))
           (set! pp pp-backup)
-          (if (>= prev-context 0) (*player-context-restore* prev-context))
+          (if (>= prev-context 0) (*player-context-restore* prev-context)) ;; og:preserve-this coop
           result)))))
 
 (defmacro send-event (proc msg &key (from (with-pp pp)) &rest params)

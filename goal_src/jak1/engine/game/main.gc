@@ -315,7 +315,7 @@
       (with-dma-buffer-add-bucket ((dma-buff (if *debug-segment* (-> (current-frame) debug-buf) (-> (current-frame) global-buf))) (bucket-id debug))
         (show-iop-memory dma-buff)))
     ;; push triangle to see level info
-    (if (and (not (coop-active?)) (cpad-pressed? 1 triangle)) (not! *display-level-border*)))
+    (if (and (not (coop-active?)) (cpad-pressed? 1 triangle)) (not! *display-level-border*))) ;; og:preserve-this coop
   ;; handle timeouts
   (when (!= *kernel-boot-message* 'play) ;; not regular game mode?
     (let ((timeout (scf-get-timeout))

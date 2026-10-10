@@ -1345,7 +1345,7 @@
 ;; main third-person camera
 (defbehavior cam-string-joystick camera-slave ()
   (logand! (-> self options) -257)
-  (let ((f28-0 (cam-dist-analog-input (the-as int (-> (coop-camera-cpad) righty)) (the-as float 0.05)))
+  (let ((f28-0 (cam-dist-analog-input (the-as int (-> (coop-camera-cpad) righty)) (the-as float 0.05))) ;; og:preserve-this coop
         (f0-2 (/ (- (vector-length (-> self view-flat)) (-> self string-min-val z))
                  (- (-> self string-max-val z) (-> self string-min-val z))))
         (f30-0 (-> self view-off-param)))
@@ -1388,7 +1388,7 @@
     (if (-> *camera* being-attacked) (set! (-> self view-off-param) f30-0)))
   (when *camera-read-analog*
     (let ((f0-29 (analog-input-horizontal-third ;; changed for pc port
-                   (the-as int (-> (coop-camera-cpad) rightx))
+                   (the-as int (-> (coop-camera-cpad) rightx)) ;; og:preserve-this coop
                    (the-as float 128.0)
                    (the-as float 32.0)
                    (the-as float 110.0)

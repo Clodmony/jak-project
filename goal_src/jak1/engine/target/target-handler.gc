@@ -171,7 +171,7 @@
     (set! (-> s5-0 angle)
           (if (not (logtest? (logior (-> self control status) (-> self control old-status)) (cshape-moving-flags onsurf))) 'air 'shove))
     (set! (-> s5-0 mask) (attack-mask attacker shove-back shove-up angle))
-    (cpad-set-buzz! (coop-player-cpad) 1 255 (seconds 0.1))
+    (cpad-set-buzz! (coop-player-cpad) 1 255 (seconds 0.1)) ;; og:preserve-this coop
     (go arg3 'shove s5-0)))
 
 (defun get-intersect-point ((arg0 vector) (arg1 touching-prims-entry) (arg2 control-info) (arg3 touching-shapes-entry))
@@ -226,7 +226,7 @@
                                     (-> self attack-info-rec invinc-time)
                                     (-> *TARGET-bank* hit-invulnerable-timeout))
                                   self)
-       (cpad-set-buzz! (coop-player-cpad) 0 255 (seconds 0.5))
+       (cpad-set-buzz! (coop-player-cpad) 0 255 (seconds 0.5)) ;; og:preserve-this coop
        (sound-play "oof")
        #t)
       (else
@@ -269,7 +269,7 @@
                                        74
                                        #f
                                        (static-sound-name "spin-hit"))
-             (cpad-set-buzz! (coop-player-cpad) 1 127 (seconds 0.2)))
+             (cpad-set-buzz! (coop-player-cpad) 1 127 (seconds 0.2))) ;; og:preserve-this coop
             ((= v1-5 'punch)
              (let ((sv-128 (prims-touching? arg2 (-> self control) (the-as uint 64))))
                (cond
@@ -303,7 +303,7 @@
                                        23
                                        #f
                                        (static-sound-name "punch-hit"))
-             (cpad-set-buzz! (coop-player-cpad) 1 178 (seconds 0.1)))
+             (cpad-set-buzz! (coop-player-cpad) 1 178 (seconds 0.1))) ;; og:preserve-this coop
             ((= v1-5 'flip)
              (effect-control-method-12 (-> self skel effect)
                                        (-> self control danger-mode)
@@ -311,7 +311,7 @@
                                        74
                                        #f
                                        (static-sound-name "punch-hit"))
-             (cpad-set-buzz! (coop-player-cpad) 1 127 (seconds 0.1)))
+             (cpad-set-buzz! (coop-player-cpad) 1 127 (seconds 0.1))) ;; og:preserve-this coop
             ((= v1-5 'uppercut)
              (let ((sv-176 (prims-touching? arg2 (-> self control) (the-as uint 64))))
                (cond
@@ -346,7 +346,7 @@
                                        23
                                        #f
                                        (static-sound-name "uppercut-hit"))
-             (cpad-set-buzz! (coop-player-cpad) 1 178 (seconds 0.1)))
+             (cpad-set-buzz! (coop-player-cpad) 1 178 (seconds 0.1))) ;; og:preserve-this coop
             ((or (= v1-5 'flop) (= v1-5 'flop-down))
              (effect-control-method-10 (-> self skel effect) 'group-flop-hit (the-as float -1.0) 23)
              (effect-control-method-10 (-> self skel effect) 'group-flop-hit (the-as float -1.0) 17)
@@ -356,7 +356,7 @@
                                        23
                                        #f
                                        (static-sound-name "flop-hit"))
-             (cpad-set-buzz! (coop-player-cpad) 1 178 (seconds 0.1)))
+             (cpad-set-buzz! (coop-player-cpad) 1 178 (seconds 0.1))) ;; og:preserve-this coop
             ((= v1-5 'flut-attack)
              (effect-control-method-12 (-> self skel effect)
                                        (-> self control danger-mode)
@@ -364,7 +364,7 @@
                                        23
                                        #f
                                        (static-sound-name "punch-hit"))
-             (cpad-set-buzz! (coop-player-cpad) 1 255 (seconds 0.2))))))
+             (cpad-set-buzz! (coop-player-cpad) 1 255 (seconds 0.2)))))) ;; og:preserve-this coop
       (the-as symbol gp-0))))
 
 (defbehavior target-apply-tongue target ((arg0 vector))

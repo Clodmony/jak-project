@@ -558,7 +558,7 @@
        (let ((v1-168 (rand-vu-int-range 3 (+ (-> self node-list length) -1))))
          (launch-particles (-> *part-id-table* 260)
                            (vector<-cspace! (new 'stack-no-clear 'vector) (-> self node-list data v1-168))))
-       (cpad-set-buzz! (coop-player-cpad) 0 1 (seconds 0.1)))
+       (cpad-set-buzz! (coop-player-cpad) 0 1 (seconds 0.1))) ;; og:preserve-this coop
       (((pickup-type eco-green))
        (change-sound! (-> self sound) (static-sound-name "green-eco-jak"))
        (let ((s4-8 (rand-vu-int-range 3 (+ (-> self node-list length) -1))))

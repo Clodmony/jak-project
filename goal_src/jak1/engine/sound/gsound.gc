@@ -593,7 +593,7 @@
   "Return the trans for the game ear"
   (cond
     ((or (movie?) *external-cam-mode*) (math-camera-pos))
-    (*ear-trans-override* *ear-trans-override*)
+    (*ear-trans-override* *ear-trans-override*) ;; og:preserve-this coop
     (*target* (target-pos 0))
     (else (camera-pos))))
 

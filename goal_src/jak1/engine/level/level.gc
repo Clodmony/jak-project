@@ -612,7 +612,7 @@
        ;;(load-dbg "send activate~%")
        ;; note: this isn't a great name - the level isn't actually activated, just alive.
        (send-event *camera* 'level-activate (-> this name))
-       (send-event *target* 'level-activate (-> this name))
+       (send-event *target* 'level-activate (-> this name)) ;; og:preserve-this coop
        (if (coop-active?) (coop-send-to-other-player 'level-activate (-> this name))))))
   this)
 
@@ -632,7 +632,7 @@
            (update-perm! (-> ent extra perm) 'game (the-as entity-perm-status 1919)))))
      (send-event *camera* 'level-deactivate (-> this name))
      (send-event *target* 'level-deactivate (-> this name))
-     (if (coop-active?) (coop-send-to-other-player 'level-deactivate (-> this name)))
+     (if (coop-active?) (coop-send-to-other-player 'level-deactivate (-> this name))) ;; og:preserve-this coop
      ;; remove this BSP from the engine. This will stop us from being drawn.
      (remove-by-param1 *background-draw-engine* (-> this bsp))
      ;; track down all the entities and kill them

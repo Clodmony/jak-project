@@ -57,7 +57,7 @@ Open for B: HUD particle callbacks (player 1's context), keyboard steps of the t
 Area by area, see COMPATIBILITY.md. Vehicles (zoomer, flut flut), bosses and minigames need individual
 work; until validated they are listed as unsupported.
 
-## Shipping as a mod (researched, not done)
+## Shipping as a mod
 
 OpenGOAL has no plugin loader: a launcher "mod" is a complete jak-project build (own `gk`, `goalc`,
 `extractor`, `data/`). A fork with C++ changes is a normal mod.
@@ -76,12 +76,29 @@ OpenGOAL has no plugin loader: a launcher "mod" is a complete jak-project build 
   (the latter ignores `--config-path`).
 - Not verified end to end (no release run, no launcher install).
 
-Keeping it rebaseable: co-op code lives in new files (`goal_src/jak1/pc/features/splitscreen*.gc`,
-`goal_src/jak1/pc/debug/coop-menu.gc`, `game/system/hid/coop_slots.*`,
-`game/graphics/opengl_renderer/SplitscreenLayout.h`). Hooks in upstream files are short and marked
-`og:preserve-this coop:`; `git grep "coop:"` lists them. Merge `upstream/master` periodically.
+## Staying an add-on
+
+The co-op is maintained as a change set on top of upstream OpenGOAL, never a diverging copy:
+
+- Co-op code lives in new files (`goal_src/jak1/pc/features/splitscreen*.gc`,
+  `goal_src/jak1/pc/debug/coop-menu.gc`, `game/system/hid/coop_slots.*`,
+  `game/graphics/opengl_renderer/SplitscreenLayout.h`). Edits to upstream files are short hooks.
+- With co-op off, Jak 1 behaves like upstream (the kernel hooks are `#f`, every co-op branch is
+  skipped), and Jak 2/3/X are not affected at all.
+- Files other games compile stay byte-identical to upstream: everything under `goal_src/` outside
+  `goal_src/jak1/`, plus the Jak 1 files Jak 2/3/X reuse (`pckernel-h`, `pckernel-common`,
+  `pc-debug-common`).
+- Every hand edit in a decompiled file carries `og:preserve-this` (upstream's CI then flags any
+  regeneration that would drop it).
+- Shared C++ runtime changes only take effect when Jak 1 turns co-op on.
+
+Tools:
+- `scripts/splitscreen/check_upstream_compat.py`: checks the first two file rules against the merge
+  base with upstream and lists the shared C++ files to review. Run it before every push.
+- `scripts/splitscreen/sync_upstream.sh`: merges `upstream/master`, builds, compiles all Jak 1 code,
+  runs `test.sh` (includes the Jak 2/3/X compile and type checks) and the compatibility check.
+  `--preview` only lists conflicting files.
 
 ## Next concrete task
 
-Run the prototype with real game assets (TESTING.md, "Manual test plan"), starting with steps 1-6,
-and fix what breaks before adding features.
+Tracked as GitHub issues on the fork, not in these files.
