@@ -1711,6 +1711,7 @@
   (local-coop-auto-assign #x1702)
   (local-coop-every-ring #x1703)
   (local-coop-friendly-fire #x1704)
+  (local-coop-tougher-bosses #x1705)
 ;; GAME-TEXT-ID ENUM ENDS
   )
 
