@@ -119,8 +119,20 @@
   "Is the frame being built a split-screen frame?"
   `(> (-> *coop-frame* views) 1))
 
-;; pc-settings applied the split-screen view aspect to the 2d scale (see pc-settings update)
+;; the split-screen view aspect was applied to the 2d scale (see coop-update-video-hacks)
 (define *coop-video-hacks-applied* #f)
+
+(defmacro coop-update-video-hacks ()
+  "Right after the pc-settings update. pc-settings only applies the 2d aspect hacks without game vis;
+   split screen draws 2d into views with their own aspect ratio, so apply them with game vis too, and
+   go back to the values game vis uses when the split ends. (Kept out of pckernel-common.gc, which is
+   compiled for every game.)"
+  `(when (-> *pc-settings* use-vis?)
+     (cond
+       ((coop-split-frame?) (update-video-hacks *pc-settings*) (set! *coop-video-hacks-applied* #t))
+       (*coop-video-hacks-applied*
+        (set! *coop-video-hacks-applied* #f)
+        (set-aspect-ratio (-> *setting-control* current aspect-ratio))))))
 
 (defun coop-view-aspect ((aspect float))
   "The aspect ratio of one view, from the aspect ratio of the whole game area."
