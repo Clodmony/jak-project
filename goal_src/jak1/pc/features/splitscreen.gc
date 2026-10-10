@@ -1101,6 +1101,32 @@
    flut flut."
   (or (= name 'target-clone-anim) (= name 'target-racing-clone-anim) (= name 'target-flut-clone-anim)))
 
+(defun coop-held? ((tgt target))
+  "Is tgt held by a cutscene, talk or ride: grabbed, or about to be (a grab takes effect when tgt
+   next runs)?"
+  (and tgt
+       (or (logtest? (-> tgt state-flags) (state-flags grabbed))
+           (and (-> tgt next-state)
+                (or (coop-grab-state? (-> tgt next-state name)) (coop-clone-anim-state? (-> tgt next-state name)))))))
+
+(defun coop-grab-watch ()
+  "Once per tick: when one player of the recorded grab pair is no longer held, the other one is
+   released too and the pair is forgotten. Catches releases that don't go through
+   coop-grab-other-player (a grabber ending a zoomer or flut flut grab with 'end-mode, a player
+   leaving a cutscene on their own, a grabber that went away), so a partner is never left held and
+   a stale pair can't swallow the next grab's release."
+  (let ((main (the-as target (handle->process (-> *coop-grab* main))))
+        (partner (the-as target (handle->process (-> *coop-grab* partner)))))
+    (when (and (or main partner) (not (and (coop-held? main) (coop-held? partner))))
+      (set! (-> *coop-grab* main) (the-as handle #f))
+      (set! (-> *coop-grab* partner) (the-as handle #f))
+      (let ((still-held (if (coop-held? main) main partner)))
+        ;; only a plain grab is ours to end; a cutscene animating the player ends it itself
+        (when (and still-held (coop-grab-state? (the-as symbol (send-event still-held 'query 'mode))))
+          (format 0 "[coop] the other player was released, releasing player ~D too~%" (+ 1 (coop-process-player still-held)))
+          (send-event still-held 'end-mode)))))
+  (none))
+
 (defun coop-update ()
   "Once per frame: split decision and listener. In game mode also player positions, player 2 respawn
    and the distance leash."
@@ -1146,6 +1172,7 @@
   ;; the rest is gameplay: nothing moves while paused or in a menu
   (if (!= *master-mode* 'game) (return #f))
   (+! (-> *coop* sim-ticks) 1)
+  (coop-grab-watch)
   ;; some cinematics freeze the player with process-mask sleep instead of a grab (power cell plants,
   ;; the last race ring, lightning moles): freeze the other player for as long too
   (dotimes (i 2)
