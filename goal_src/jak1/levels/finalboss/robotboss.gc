@@ -71,25 +71,8 @@
          (+! (-> self valid-frames) 1)))))
   (none))
 
-(defbehavior robotboss-always-trans robotboss ((arg0 (state robotboss)))
-  (when (-> self blue-smoke)
-    (let ((s5-0 (new 'stack-no-clear 'vector)))
-      (vector<-cspace! s5-0 (joint-node robotboss-basic-lod0-jg blue_eco_piece))
-      (spawn (-> self particle 2) s5-0)))
-  (when (-> self red-smoke)
-    (let ((s5-1 (new 'stack-no-clear 'vector)))
-      (vector<-cspace! s5-1 (joint-node robotboss-basic-lod0-jg rArmTopWireC))
-      (spawn (-> self particle 3) s5-1)
-      (vector<-cspace! s5-1 (joint-node robotboss-basic-lod0-jg rArmBotWireC))
-      (spawn (-> self particle 3) s5-1)))
-  (when (-> self yellow-smoke)
-    (let ((s5-2 (new 'stack-no-clear 'vector)))
-      (vector<-cspace! s5-2 (joint-node robotboss-basic-lod0-jg Lyellow_ecoTubeA))
-      (spawn (-> self particle 4) s5-2)))
-  (let* ((f0-1 (- 0.0 (-> self palette-val)))
-         (f0-2 (if (< 0.0 f0-1) (fmin 0.1 f0-1) (fmax -0.1 f0-1))))
-    (+! (-> self palette-val) f0-2))
-  (set! (-> *palette-fade-controls* control 2 fade) (-> self palette-val))
+;; og:preserve-this coop: moved out of robotboss-always-trans, runs once per player (for their camera)
+(defbehavior robotboss-camera-trans robotboss ()
   (b! (not (-> self ignore-camera)) cfg-11 :delay (empty-form))
   (b! #t cfg-66 :delay (nop!))
   (label cfg-11)
@@ -152,6 +135,28 @@
      (let ((s5-10 (new 'stack-no-clear 'vector)))
        (vector<-cspace! s5-10 (joint-node robotboss-basic-lod0-jg interesting))
        (send-event *camera* 'point-of-interest s5-10))))
+  (none))
+
+(defbehavior robotboss-always-trans robotboss ((arg0 (state robotboss)))
+  (when (-> self blue-smoke)
+    (let ((s5-0 (new 'stack-no-clear 'vector)))
+      (vector<-cspace! s5-0 (joint-node robotboss-basic-lod0-jg blue_eco_piece))
+      (spawn (-> self particle 2) s5-0)))
+  (when (-> self red-smoke)
+    (let ((s5-1 (new 'stack-no-clear 'vector)))
+      (vector<-cspace! s5-1 (joint-node robotboss-basic-lod0-jg rArmTopWireC))
+      (spawn (-> self particle 3) s5-1)
+      (vector<-cspace! s5-1 (joint-node robotboss-basic-lod0-jg rArmBotWireC))
+      (spawn (-> self particle 3) s5-1)))
+  (when (-> self yellow-smoke)
+    (let ((s5-2 (new 'stack-no-clear 'vector)))
+      (vector<-cspace! s5-2 (joint-node robotboss-basic-lod0-jg Lyellow_ecoTubeA))
+      (spawn (-> self particle 4) s5-2)))
+  (let* ((f0-1 (- 0.0 (-> self palette-val)))
+         (f0-2 (if (< 0.0 f0-1) (fmin 0.1 f0-1) (fmax -0.1 f0-1))))
+    (+! (-> self palette-val) f0-2))
+  (set! (-> *palette-fade-controls* control 2 fade) (-> self palette-val))
+  (coop-for-each-player-context (robotboss-camera-trans)) ;; og:preserve-this coop: each player's camera
   (when (and arg0 *debug-segment* (cpad-pressed? 0 l3)) ;; og:preserve-this changed from (cpad-pressed? 1 x)
     (cpad-clear! 0 l3)
     (go arg0))
@@ -165,7 +170,7 @@
 
 (defbehavior robotboss-setup-for-hits robotboss ((arg0 int) (arg1 int))
   (set! (-> self took-hit) #f)
-  (set! (-> self hits-to-go) arg1)
+  (set! (-> self hits-to-go) (coop-boss-hits arg1)) ;; og:preserve-this coop: tougher bosses
   (set! (-> self vulnerable) arg0)
   (let ((gp-0 (new 'stack 'sphere)))
     (set! (-> gp-0 w) 4096.0)
@@ -223,7 +228,7 @@
     (vector-normalize! gp-0 (the-as float 204800.0))
     (set! (-> gp-0 y) 32768.0)
     (vector+! gp-0 gp-0 s5-0)
-    (send-event *camera* 'set-pivot gp-0))
+    (coop-send-to-cameras 'set-pivot gp-0)) ;; og:preserve-this coop: both cameras
   (when (-> self alts 6)
     (let ((a0-16 (-> self alts 6 extra process))
           (f0-10 (+ (-> self entity extra trans y) (-> self desired-pool-y))))
@@ -642,7 +647,7 @@
       (set! (-> (the-as collide-shape-prim-group (-> self root root-prim)) prims 3 collide-with) (collide-kind))
       (set! (-> (the-as collide-shape-prim-group (-> self root root-prim)) prims 3 prim-core collide-as) (collide-kind))
       (set! (-> self use-interesting) #f)
-      (send-event *camera* 'point-of-interest #f)
+      (coop-send-to-cameras 'point-of-interest #f) ;; og:preserve-this coop: both cameras
       (if (nonzero? (-> self yellow-gun)) (set-mode! (-> self yellow-gun) (joint-mod-handler-mode flex-blend)))
       (robotboss-yellow-eco-off)
       (robotboss-cut-cam-exit)
@@ -1519,22 +1524,25 @@
        (spawn (-> self particle 0) s4-0)
        (when (and arg1 (nonzero? (-> self looping-sound 0)))
          (update! (-> self looping-sound 0))
-         (when (and *target*
-                    (not (logtest? (-> *target* state-flags)
-                                   (state-flags being-attacked invulnerable timed-invulnerable invuln-powerup do-not-notice dying))))
-           (let ((t2-0 (new 'stack-no-clear 'collide-tri-result))
-                 (a2-0 (new 'stack-no-clear 'vector)))
-             (vector-! a2-0 gp-0 s4-0)
-             (if (>= (fill-and-probe-using-line-sphere *collide-cache*
-                                                       s4-0
-                                                       a2-0
-                                                       (the-as float 4096.0)
-                                                       (collide-kind target)
-                                                       self
-                                                       t2-0
-                                                       (new 'static 'pat-surface :noentity #x1))
-                     0.0)
-               (send-event *target* 'attack #f (static-attack-info ((shove-up (meters 2.5)) (shove-back (meters 7.5))))))))))
+         ;; og:preserve-this coop: the beam hits the player it touches (the probe finds either player)
+         (coop-for-each-player-context
+           (when (and *target*
+                      (not (logtest? (-> *target* state-flags)
+                                     (state-flags being-attacked invulnerable timed-invulnerable invuln-powerup do-not-notice dying))))
+             (let ((t2-0 (new 'stack-no-clear 'collide-tri-result))
+                   (a2-0 (new 'stack-no-clear 'vector)))
+               (vector-! a2-0 gp-0 s4-0)
+               (if (and (>= (fill-and-probe-using-line-sphere *collide-cache*
+                                                               s4-0
+                                                               a2-0
+                                                               (the-as float 4096.0)
+                                                               (collide-kind target)
+                                                               self
+                                                               t2-0
+                                                               (new 'static 'pat-surface :noentity #x1))
+                            0.0)
+                        (or (not (coop-active?)) (>= (meters 3) (vector-vector-distance (-> t2-0 intersect) (-> *target* control trans)))))
+                 (send-event *target* 'attack #f (static-attack-info ((shove-up (meters 2.5)) (shove-back (meters 7.5)))))))))))
       ((nonzero? (-> self looping-sound 0)) (stop! (-> self looping-sound 0))))
     (cond
       ((and (>= (- (-> *display* game-frame-counter) (-> self state-time)) (seconds 1.4))
@@ -1542,11 +1550,12 @@
        (spawn (-> self particle 1) gp-0)
        (when (and arg1 (nonzero? (-> self looping-sound 1)))
          (update! (-> self looping-sound 1))
-         (if (and *target*
-                  (not (logtest? (-> *target* state-flags)
-                                 (state-flags being-attacked invulnerable timed-invulnerable invuln-powerup do-not-notice dying)))
-                  (>= 8192.0 (vector-vector-distance gp-0 (target-pos 0))))
-           (send-event *target* 'attack #f (static-attack-info ((shove-up (meters 2.5)) (shove-back (meters 7.5))))))))
+         (coop-for-each-player-context ;; og:preserve-this coop: each player standing in it
+           (if (and *target*
+                    (not (logtest? (-> *target* state-flags)
+                                   (state-flags being-attacked invulnerable timed-invulnerable invuln-powerup do-not-notice dying)))
+                    (>= 8192.0 (vector-vector-distance gp-0 (target-pos 0))))
+             (send-event *target* 'attack #f (static-attack-info ((shove-up (meters 2.5)) (shove-back (meters 7.5)))))))))
       ((nonzero? (-> self looping-sound 1)) (stop! (-> self looping-sound 1)))))
   (none))
 
@@ -1660,7 +1669,7 @@
       (set! (-> (the-as collide-shape-prim-group (-> self root root-prim)) prims 0 collide-with) (collide-kind))
       (set! (-> (the-as collide-shape-prim-group (-> self root root-prim)) prims 0 prim-core collide-as) (collide-kind))
       (set! (-> self use-interesting) #f)
-      (send-event *camera* 'point-of-interest #f)
+      (coop-send-to-cameras 'point-of-interest #f) ;; og:preserve-this coop: both cameras
       (robotboss-blue-done)
       (if (nonzero? (-> self looping-sound 0)) (stop! (-> self looping-sound 0)))
       (if (nonzero? (-> self looping-sound 1)) (stop! (-> self looping-sound 1)))

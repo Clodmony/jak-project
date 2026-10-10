@@ -1495,6 +1495,68 @@
     (if (>= player 0) (coop-pin-alone proc (process->handle (coop-player-target player)))))
   (none))
 
+(defun coop-lowest-player-y ()
+  "Height of the lowest player in play (a boss's bomb waits until every player escaped upward).
+   *target*'s height without co-op."
+  (let ((y (-> (target-pos 0) y)))
+    (when (coop-active?)
+      (dotimes (i 2)
+        (let ((tgt (coop-player-target i)))
+          (if (and (coop-player-in-play? tgt) (< (-> tgt control trans y) y)) (set! y (-> tgt control trans y))))))
+    y))
+
+(defun coop-in-blast? ((tgt target) (y float) (touched symbol))
+  "Does a blast that reaches up to height y get tgt? touched: the player who touched the bomb
+   (*target* in its context) is in it anyway."
+  (or (< (-> tgt control trans y) y) (and touched (= tgt *target*))))
+
+(defun coop-blast-survivor? ((y float) (touched symbol))
+  "Co-op, a bomb goes off (Gol and Maia's dark eco bombs): is a player in play out of its reach?
+   Then the others are knocked out by it (coop-blast-players) and the fight goes on; if none is,
+   the original death of the whole party runs. Always #f without co-op."
+  (let ((found #f))
+    (when (coop-active?)
+      (dotimes (i 2)
+        (let ((tgt (coop-player-target i)))
+          (if (and (coop-player-in-play? tgt) (not (coop-in-blast? tgt y touched))) (set! found #t)))))
+    found))
+
+(defun coop-blast-players ((y float) (touched symbol))
+  "Knock out every player in play a blast up to height y reaches (coop-in-blast?)."
+  (dotimes (i 2)
+    (let ((tgt (coop-player-target i)))
+      (when (and (coop-player-in-play? tgt) (coop-in-blast? tgt y touched))
+        (format 0 "[coop] the blast gets player ~D~%" (+ i 1))
+        (send-event tgt 'attack-invinc #f (static-attack-info ((mode 'instant-death)))))))
+  (none))
+
+(defun coop-put-other-player-near ((tgt target) (pos vector))
+  "A script moves tgt far away (the final boss's ending puts the player at the big door): the other
+   player is put 1.5 m beside pos, their camera jumps along."
+  (when (coop-active?)
+    (let ((other (coop-other-player-target tgt)))
+      (when (and other (not (logtest? (-> other state-flags) (state-flags dying))))
+        (let ((dest (new 'stack-no-clear 'vector)))
+          (set! (-> dest quad) (-> pos quad))
+          (+! (-> dest x) (meters 1.5))
+          (set! (-> other control transv quad) (the-as uint128 0))
+          (move-to-point! (-> other control) dest)
+          (set! (-> other control camera-pos quad) (-> dest quad))
+          (set! (-> other control last-known-safe-ground quad) (-> dest quad))
+          (set! (-> other control highest-jump-mark quad) (-> dest quad))
+          (let ((cam (handle->process (-> (coop-context (coop-process-player other)) camera-handle))))
+            (if (and cam (!= (coop-process-player other) *coop-player*)) (send-event cam 'teleport)))
+          (if (= (coop-process-player other) *coop-player*) (send-event *camera* 'teleport))
+          (format 0 "[coop] player ~D is put next to player ~D~%" (+ 1 (coop-process-player other)) (+ 1 (coop-process-player tgt)))))))
+  (none))
+
+(defun coop-send-to-other-camera ((proc process) (msg symbol) (arg object))
+  "Send msg to the camera of the player who doesn't own proc (with co-op)."
+  (when (coop-active?)
+    (let ((cam (handle->process (-> (coop-context (- 1 (coop-process-player proc))) camera-handle))))
+      (if cam (send-event cam msg arg))))
+  (none))
+
 (defun coop-send-to-cameras ((msg symbol) (arg object))
   "Send msg to the camera of the player the code runs for and, with co-op, to the other player's
    camera too (a boss's point of interest belongs in both views)."
