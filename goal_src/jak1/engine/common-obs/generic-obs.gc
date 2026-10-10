@@ -1328,8 +1328,9 @@
              (cond
                ((= (-> self event) 'attack)
                 (cond
-                  ;; og:preserve-this coop: no friendly fire between players
-                  ((and (= (-> proc type) target) (= (-> v1-1 type) target)) #f)
+                  ;; og:preserve-this coop: one player's red eco or flut flut flop hits the other like an enemy
+                  ((and (= (-> proc type) target) (= (-> v1-1 type) target))
+                   (coop-player-attack proc (the-as process v1-1) (-> block param 0) (the-as symbol (-> self event-mode))))
                   ((= (-> proc type) target)
                    (send-event proc
                                (-> self event)

@@ -1315,6 +1315,118 @@
           (send-event still-held 'end-mode)))))
   (none))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; the players touching each other: collision, pushing, friendly fire
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; a player walking into the other one pushes them along at up to this speed
+(defconstant COOP_PUSH_SPEED (meters 4))
+
+;; is collision between the two players on? It only turns on while their bodies don't overlap (after
+;; a respawn or a cutscene they can stand in each other), then stays on while both may collide.
+(define *coop-contact?* #f)
+
+;; after a friendly-fire hit, collision between the players stays off until this time: an attacking
+;; body has the higher offense and moves through what it hits (as with enemies), and would then
+;; stand in the way of the knockback
+(define *coop-contact-off-until* (the-as time-frame 0))
+
+(defun coop-player-collides? ((tgt target))
+  "May tgt bump into, stand on and hit the other player right now? Not while held (cutscene, talk,
+   ride), on a zoomer, playing a minigame, spawning, warping, waiting to respawn, hidden or frozen,
+   or while the game has switched tgt's collision off."
+  (and (coop-player-in-play? tgt)
+       (not (coop-held? tgt))
+       (not (coop-player-racing? tgt))
+       (not (coop-player-in-minigame? tgt))
+       ;; hidden for a cinematic about the other player (not the draw flag: it blinks after a hit)
+       (zero? (logand *coop-movie-hidden* (ash 1 (coop-process-player tgt))))
+       (not (logtest? (-> tgt mask) (process-mask sleep)))
+       (logtest? (-> tgt control root-prim collide-with) (collide-kind background))
+       (case (-> tgt state name)
+         (('target-coop-spawn 'target-warp-out 'target-warp-in) #f)
+         (else #t))))
+
+(defun coop-set-player-contact ((tgt target) (on symbol))
+  "Make tgt solid to the other player, or not: the target kind in the collide-with of tgt's root and
+   body spheres. The overlaps found through it also bring the other player's attacks to tgt.
+   Collision the game switched off (death, cutscenes) stays off."
+  (let ((root (-> tgt control root-prim)))
+    (cond
+      ((and on (logtest? (-> root collide-with) (collide-kind background)))
+       (logior! (-> root collide-with) (collide-kind target))
+       (dotimes (i 3)
+         (logior! (-> tgt control unknown-sphere-array00 i collide-with) (collide-kind target))))
+      (else
+       (logclear! (-> root collide-with) (collide-kind target))
+       (dotimes (i 3)
+         (logclear! (-> tgt control unknown-sphere-array00 i collide-with) (collide-kind target))))))
+  (none))
+
+(defun coop-players-overlap? ((a target) (b target))
+  "Do the two players' bodies overlap (0.7 m spheres up to 2.8 m high)?"
+  (let ((d (vector-! (new 'stack-no-clear 'vector) (-> b control trans) (-> a control trans))))
+    (and (< (fabs (-> d y)) (meters 2.8)) (< (vector-xz-length d) (meters 1.4)))))
+
+(defun coop-push-player ((pusher target) (pushed target))
+  "pusher walks into pushed (same height, touching, facing them): pushed is moved along at up to
+   COOP_PUSH_SPEED. The speed goes into their own movement, so walls and edges work as usual."
+  (let ((d (vector-! (new 'stack-no-clear 'vector) (-> pushed control trans) (-> pusher control trans)))
+        (facing (vector-z-quaternion! (new 'stack-no-clear 'vector) (-> pusher control quat-for-control))))
+    (when (and (or (= (-> pusher state name) 'target-walk) (= (-> pusher state name) 'target-flut-walk))
+               (< (fabs (-> d y)) (meters 1))
+               (< (vector-xz-length d) (meters 1.6))
+               (logtest? (-> pushed control status) (cshape-moving-flags onsurf))
+               (not (logtest? (-> pushed state-flags) (state-flags dangerous being-attacked))))
+      (set! (-> d y) 0.0)
+      (vector-normalize! d 1.0)
+      (set! (-> facing y) 0.0)
+      (vector-normalize! facing 1.0)
+      (when (< 0.6 (vector-dot d facing))
+        (let ((speed (* (-> pusher control pad-magnitude) COOP_PUSH_SPEED))
+              (along (vector-dot (-> pushed control transv) d)))
+          (if (< along speed) (vector+float*! (-> pushed control transv) (-> pushed control transv) d (- speed along)))))))
+  (none))
+
+(defun coop-contact-update ()
+  "Once per tick: collision between the players on or off, and pushing."
+  (let* ((p1 (coop-player-target 0))
+         (p2 (coop-player-target 1))
+         (both (and p1 p2 (coop-player-collides? p1) (coop-player-collides? p2) (< *coop-contact-off-until* (current-time)))))
+    (set! *coop-contact?* (if (and both (or *coop-contact?* (not (coop-players-overlap? p1 p2)))) #t #f))
+    (if p1 (coop-set-player-contact p1 *coop-contact?*))
+    (if p2 (coop-set-player-contact p2 *coop-contact?*))
+    (when *coop-contact?*
+      (coop-push-player p1 p2)
+      (coop-push-player p2 p1)))
+  (none))
+
+(defun coop-player-attack ((victim process) (attacker process) (touch object) (mode symbol))
+  "One player's attack (punch, spin, flop, red eco, the flut flut's, a long fall onto their head)
+   touched the other player. With friendly fire on, the victim is hit like by an enemy: knocked back
+   away from the attacker, one point of health (a player killed this way respawns next to the other
+   one as usual). The hit has no attack id, so enemies' de-duplication of player attacks isn't
+   involved. Returns 'die when the hit landed (as an enemy that was knocked out: a punch stops its
+   lunge there instead of running through the other player), else #f."
+  (let ((v (the-as target victim))
+        (a (the-as target attacker)))
+    (when (and (-> *coop* friendly-fire?) *coop-contact?* (coop-player-collides? v) (coop-player-collides? a))
+      (let ((info (new 'stack 'attack-info))
+            (dir (vector-! (new 'stack-no-clear 'vector) (-> v control trans) (-> a control trans))))
+        (if (< (vector-xz-length dir) (meters 0.1)) (vector-z-quaternion! dir (-> a control quat-for-control)))
+        (vector-xz-normalize! dir (meters 2))
+        (set! (-> dir y) (meters 1.5))
+        (set! (-> info vector quad) (-> dir quad))
+        (set! (-> info mode) 'generic)
+        (set! (-> info shove-back) (meters 2))
+        (set! (-> info shove-up) (meters 1.5))
+        (set! (-> info attacker) (process->handle a))
+        (set! (-> info mask) (attack-mask vector mode shove-back shove-up attacker))
+        (when (send-event v 'attack touch info)
+          (set! *coop-contact-off-until* (+ (current-time) (seconds 0.6)))
+          (format 0 "[coop] player ~D's ~A hits player ~D~%" (+ 1 (coop-process-player a)) mode (+ 1 (coop-process-player v)))
+          'die)))))
+
 (defun coop-update ()
   "Once per frame: split decision and listener. In game mode also player positions, player 2 respawn
    and the distance leash."
@@ -1362,6 +1474,7 @@
   (if (!= *master-mode* 'game) (return #f))
   (+! (-> *coop* sim-ticks) 1)
   (coop-grab-watch)
+  (coop-contact-update)
   ;; some cinematics freeze the player with process-mask sleep instead of a grab (power cell plants,
   ;; the last race ring, lightning moles): freeze the other player for as long too
   (dotimes (i 2)
@@ -1503,6 +1616,8 @@
   (when (coop-active?)
     (coop-switch-context 0)
     (coop-despawn-player2)
+    (set! *coop-contact?* #f)
+    (if (coop-player-target 0) (coop-set-player-contact (coop-player-target 0) #f))
     ;; stopped during a cinematic about player 2: show player 1 again
     (when (logtest? *coop-movie-hidden* 1)
       (let ((p1 (coop-player-target 0)))
