@@ -664,6 +664,21 @@
 
 (define *coop-gorge-done* 0) ;; bit per player that crossed the finish line of the running race
 
+(defun gorge-pos-behind ((arg0 gorge) (pos vector))
+  (let ((gp-0 (new-stack-vector0)))
+    (vector-matrix*! gp-0 pos (-> arg0 coord))
+    (and (< (fabs (-> gp-0 x)) (-> arg0 radius)) (< (-> gp-0 y) (-> arg0 radius)) (< 0.0 (-> gp-0 y)) (< (-> gp-0 z) 0.0))))
+
+(defun gorge-any-behind ((arg0 gorge))
+  "Is any player past (behind) this line? Without co-op gorge-behind."
+  (if (not (coop-active?))
+    (return (gorge-behind arg0)))
+  (dotimes (i 2)
+    (let ((tgt (coop-player-target i)))
+      (if (and tgt (gorge-pos-behind arg0 (-> tgt control trans)))
+        (return #t))))
+  #f)
+
 (defun gorge-all-in-front ((arg0 gorge))
   "Are all players in front of (at) this line? Without co-op gorge-in-front."
   (if (not (coop-active?))
@@ -925,8 +940,8 @@
           (send-event (ppointer->process (-> *hud-parts* money)) 'enable))
         (gorge-start-draw-time #f #f)
         (cond
+          ((gorge-any-behind self) (go gorge-start-racing)) ;; og:preserve-this coop: the first player to leave starts it
           ((gorge-in-front self))
-          ((gorge-behind self) (go gorge-start-racing))
           (else (go gorge-start-idle))))))
 
 (defstate gorge-start-idle (gorge-start)
