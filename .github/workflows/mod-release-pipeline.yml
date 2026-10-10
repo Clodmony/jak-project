@@ -1,6 +1,7 @@
 # Copied from OpenGOAL-Mods/OG-Mod-Base (commit 2c4ee857, ISC licence, OpenGOAL Team).
 # Changes for this fork (AI-assisted): actions/checkout, upload-artifact and download-artifact
-# use the same versions as the other workflows in this repository. Everything else is unchanged.
+# use the same versions as the other workflows in this repository, and the optional `customTag`
+# input is passed to github-tag-action as `custom_tag`. Everything else is unchanged.
 # Called by cut-release.yaml; see docs/splitscreen/MOD.md.
 name: "Mod Release Pipeline"
 on:
@@ -25,6 +26,11 @@ on:
         description: "Comma separated list of branches (JavaScript regular expression accepted) that will generate the release tags. You probably want your default branch in this list."
         required: false
         default: "master,main"
+        type: "string"
+      customTag:
+        description: "Exact version to tag, without the `v` prefix (e.g. `0.1.0`). When set it replaces `semverBump` and the commit-message analysis. Defaults to empty (not used)."
+        required: false
+        default: ""
         type: "string"
       buildBinaries:
         description: "Whether to build binaries from source. Defaults to `false`, pulling binaries from `toolingRepo` instead."
@@ -106,6 +112,7 @@ jobs:
           tag_prefix: v
           default_bump: ${{ inputs.semverBump }}
           release_branches: ${{ inputs.releaseBranches }}
+          custom_tag: ${{ inputs.customTag }}
 
       - name: Create Release
         env:
