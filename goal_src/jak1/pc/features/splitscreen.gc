@@ -1592,6 +1592,145 @@
           (format 0 "[coop] player ~D's ~A hits player ~D~%" (+ 1 (coop-process-player a)) mode (+ 1 (coop-process-player v)))
           'die)))))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; level streaming for both players (#69)
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; Jak 1 keeps two levels. Load boundaries (load-boundary-data.gc) switch them as the camera or the
+;; player crosses: (load a b), (display a #t/#f), (vis a), (checkpt name). With co-op both players'
+;; cameras and positions cross them, and a crossing may only load a pair that keeps the level the
+;; other player is in. A player heading for a third level is held back: put next to the other player.
+;; Vis and checkpoints follow player 1 (as the continue point, music and the listener do).
+
+;; player 2's load boundary points, as *load-boundary-target*: 0 camera, 1 player, 2 and 3 the same
+;; one frame earlier
+(define *coop-p2-boundary* (the-as (inline-array lbvtx) (malloc 'global 64)))
+
+;; player 1's points while player 2's crossings are checked
+(define *coop-p1-boundary-save* (the-as (inline-array lbvtx) (malloc 'global 64)))
+
+(define *coop-p2-boundary-valid?* #f)
+
+;; whose crossings check-boundary looks at (0 player 1, 1 player 2)
+(define *coop-boundary-player* 0)
+
+;; a move longer than this in one frame is a teleport (respawn, warp, being held back): no crossing
+(defconstant COOP_BOUNDARY_JUMP (meters 10))
+
+(defun coop-level-keeps-player? ((tgt target) (lev symbol) (on symbol))
+  "Would tgt still have their level if the displayed levels became the ones named lev (and on, may be
+   #f)? Every displayed level whose boxes contain tgt must stay (level boxes overlap near borders, so
+   a player can be inside two); inside none, the nearest level must stay."
+  (let ((inside-any #f))
+    (dotimes (i (-> *level* length))
+      (let ((l (-> *level* level i)))
+        (when (and (= (-> l status) 'active) (point-in-boxes? l (-> tgt control trans)))
+          (set! inside-any #t)
+          (if (not (or (= (-> l name) lev) (= (-> l name) on))) (return #f)))))
+    (or inside-any
+        (let ((near (coop-level-containing *level* (-> tgt control trans) (the-as level #f))))
+          (or (not near) (= (-> near name) lev) (= (-> near name) on))))))
+
+(defun coop-boundary-skip-jumps ((points object))
+  "A teleport since the last frame isn't a crossing: the old points (as *load-boundary-target*) become
+   the new ones."
+  (let ((pts (the-as (inline-array lbvtx) points)))
+  (if (< COOP_BOUNDARY_JUMP (vector-vector-distance (-> pts 0 v) (-> pts 2 v))) (set! (-> pts 2 quad) (-> pts 0 quad)))
+    (if (< COOP_BOUNDARY_JUMP (vector-vector-distance (-> pts 1 v) (-> pts 3 v))) (set! (-> pts 3 quad) (-> pts 1 quad))))
+  (none))
+
+(define *coop-hold-back-pending* 0)
+
+(defun coop-hold-back ((idx int))
+  "Player idx heads for a third level: they are put next to the other player instead. If that can't
+   happen now (the other player is out of play, or idx is held by a cutscene), it happens as soon as
+   it can (coop-hold-back-update)."
+  (let ((me (coop-player-target idx))
+        (other (coop-player-target (- 1 idx))))
+    (cond
+      ((and me other (coop-player-in-play? other) (not (coop-held? me)))
+       (logclear! *coop-hold-back-pending* (ash 1 idx))
+       (format 0 "[coop] player ~D heads for a third level, putting them next to player ~D~%" (+ idx 1) (- 2 idx))
+       (let ((pos (coop-safe-position-near other (new 'stack-no-clear 'vector))))
+         (set! (-> me control transv quad) (the-as uint128 0))
+         (move-to-point! (-> me control) pos)
+         (set! (-> me control highest-jump-mark quad) (-> pos quad))
+         (set! (-> me control last-known-safe-ground quad) (-> pos quad))
+         (set! (-> me control camera-pos quad) (-> pos quad))
+         (let ((prev (coop-switch-context idx)))
+           (send-event *camera* 'teleport)
+           (coop-switch-context prev))))
+      (else (logior! *coop-hold-back-pending* (ash 1 idx)))))
+  (none))
+
+(defun coop-hold-back-update ()
+  "Once per tick: hold-backs that had to wait. A player who is out of play meanwhile (knocked out,
+   respawning) comes back next to the other one anyway."
+  (dotimes (i 2)
+    (when (logtest? *coop-hold-back-pending* (ash 1 i))
+      (if (coop-player-in-play? (coop-player-target i))
+        (coop-hold-back i)
+        (logclear! *coop-hold-back-pending* (ash 1 i)))))
+  (none))
+
+(defun coop-boundary-command-ok? ((crossing object))
+  "check-boundary hook: may this crossing's command run? Always without co-op. A load that would drop
+   the other player's level holds the crossing player back instead; turning that level's display off
+   is ignored; vis and checkpoints follow player 1."
+  (if (not (coop-active?)) (return #t))
+  (let* ((cmd (the-as load-boundary-crossing-command crossing))
+         (me *coop-boundary-player*)
+         (other (coop-player-target (- 1 me)))
+         (other? (and other (coop-player-in-play? other))))
+    (case (-> cmd cmd)
+      (((load-boundary-cmd load))
+       (cond
+         ((or (not other?) (coop-level-keeps-player? other (the-as symbol (-> cmd lev0)) (the-as symbol (-> cmd lev1)))) #t)
+         (else (coop-hold-back me) #f)))
+      ;; turning a level's display off: not while the other player is in it
+      (((load-boundary-cmd display))
+       (or (if (-> cmd lev1) #t #f)
+           (not other?)
+           (let ((keep #t))
+             (dotimes (i (-> *level* length))
+               (let ((l (-> *level* level i)))
+                 (if (and (= (-> l name) (the-as symbol (-> cmd lev0))) (= (-> l status) 'active) (point-in-boxes? l (-> other control trans)))
+                   (set! keep #f))))
+             keep)))
+      (((load-boundary-cmd vis) (load-boundary-cmd force-vis) (load-boundary-cmd checkpt)) (zero? me))
+      (else #t))))
+
+(defun coop-check-boundaries-p2 ()
+  "render-boundaries hook, after player 1's crossings: player 2's camera and position cross the load
+   boundaries too."
+  (let ((p2 (coop-player-target 1))
+        (comb (the-as camera-combiner (handle->process (-> *coop-context-p2* combiner-handle)))))
+    (cond
+      ((not (and p2 comb (coop-player-in-play? p2))) (set! *coop-p2-boundary-valid?* #f))
+      (else
+       (set! (-> *coop-p2-boundary* 2 quad) (-> *coop-p2-boundary* 0 quad))
+       (set! (-> *coop-p2-boundary* 3 quad) (-> *coop-p2-boundary* 1 quad))
+       (set! (-> *coop-p2-boundary* 0 quad) (-> comb trans quad))
+       (set! (-> *coop-p2-boundary* 1 quad) (-> p2 control trans quad))
+       (when (not *coop-p2-boundary-valid?*)
+         (set! (-> *coop-p2-boundary* 2 quad) (-> *coop-p2-boundary* 0 quad))
+         (set! (-> *coop-p2-boundary* 3 quad) (-> *coop-p2-boundary* 1 quad))
+         (set! *coop-p2-boundary-valid?* #t))
+       (coop-boundary-skip-jumps *coop-p2-boundary*)
+       ;; check-boundary reads *load-boundary-target*: lend it player 2's points
+       (dotimes (i 4)
+         (set! (-> *coop-p1-boundary-save* i quad) (-> *load-boundary-target* i quad))
+         (set! (-> *load-boundary-target* i quad) (-> *coop-p2-boundary* i quad)))
+       (set! *coop-boundary-player* 1)
+       (let ((lb *load-boundary-list*))
+         (while lb
+           (if (nonzero? (-> lb tri-cnt)) (check-boundary lb))
+           (set! lb (-> lb next))))
+       (set! *coop-boundary-player* 0)
+       (dotimes (i 4)
+         (set! (-> *load-boundary-target* i quad) (-> *coop-p1-boundary-save* i quad))))))
+  (none))
+
 (defun coop-update ()
   "Once per frame: split decision and listener. In game mode also player positions, player 2 respawn
    and the distance leash."
@@ -1639,6 +1778,7 @@
   (if (!= *master-mode* 'game) (return #f))
   (+! (-> *coop* sim-ticks) 1)
   (coop-grab-watch)
+  (coop-hold-back-update)
   (coop-contact-update)
   ;; some cinematics freeze the player with process-mask sleep instead of a grab (power cell plants,
   ;; the last race ring, lightning moles): freeze the other player for as long too
@@ -1690,7 +1830,8 @@
           (coop-spawn-player2 (coop-safe-position-near p1 (new 'stack-no-clear 'vector))))))
       (else
        (set! (-> *coop-timers* p2-missing) 0)
-       ;; distance leash: level streaming follows player 1, so player 2 can't go far.
+       ;; distance leash, a safety net only: streaming follows both players and a player heading for
+       ;; a third level is held back (coop-boundary-command-ok?).
        ;; no leash in a zoomer section: they race the level at their own pace, and a player who died
        ;; starts again from the checkpoint
        (when (and (-> *coop* leash?)
@@ -1757,6 +1898,8 @@
     (set! (-> *coop* sim-ticks) 0)
     (set! (-> *coop* render-passes) 0)
     (set! (-> *coop-timers* p2-missing) 0)
+    (set! *coop-hold-back-pending* 0)
+    (set! *coop-p2-boundary-valid?* #f)
     (set! *player-context-for-process* coop-context-for-process)
     (set! *player-context-for-event* coop-context-for-event)
     (set! *player-context-restore* coop-context-restore)
