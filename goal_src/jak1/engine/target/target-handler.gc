@@ -244,7 +244,10 @@
     (set! (-> v1-0 param 1) arg1)
     (set! (-> v1-0 param 2) (the-as uint arg3))
     (set! (-> v1-0 param 3) (the-as uint arg4))
-    (let ((gp-0 (send-event-function arg0 v1-0)))
+    ;; og:preserve-this coop: the other player is hit like by an enemy (friendly fire)
+    (let ((gp-0 (if (and (coop-active?) (= (-> arg0 type) target))
+                  (coop-player-attack arg0 self arg2 (the-as symbol arg1))
+                  (send-event-function arg0 v1-0))))
       (when (and gp-0 (!= gp-0 'push))
         (let ((v1-5 (-> self control danger-mode)))
           (cond
