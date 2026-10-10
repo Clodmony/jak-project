@@ -28,7 +28,8 @@ active is decided:
 | a view is rendered | the view's player | `coop-draw-player2-view` |
 | `start` / `stop` | always player 1 (session operations) | `logic-target.gc` |
 
-Ownership is a process-mask bit: `player2` (bit 25, `gkernel-h.gc`). `activate` copies the parent's
+Ownership is a process-mask bit: `player2` (bit 25, `gkernel-h.gc`; `coop-p1`, bit 27, marks what
+player 1 spawns into shared pools, e.g. their first-person HUD). `activate` copies the parent's
 mask into new processes, so player 2's daxter, HUD and cameras inherit it. Player 1's processes are
 recognised by the existing `target`/`sidekick`/`camera` bits. The kernel hooks are function
 pointers that stay `#f` until `coop-start`, so the single-player kernel path only pays one `#f` check.
