@@ -21,9 +21,9 @@
 | --- | --- |
 | Baseline build, GOAL compile, test suite | done (see TESTING.md) |
 | 1. Two devices feed independent player slots | implemented + unit tested; not run on hardware |
-| 2. Two real player actors in one world | implemented, compiles; not playtested |
-| 3. Two cameras rendering in one window | implemented, compiles; not playtested |
-| 4. Two views don't advance the simulation twice | by construction (render-only pass); counters in the debug overlay; not playtested |
+| 2. Two real player actors in one world | verified in game 2026-10-10 (REPL-driven, no controllers) |
+| 3. Two cameras rendering in one window | verified in game 2026-10-10, both layouts |
+| 4. Two views don't advance the simulation twice | verified in game 2026-10-10 (tick/pass/frame counters, see TESTING.md step 6) |
 
 ### B. Playable prototype
 
@@ -33,11 +33,11 @@ credit the toucher; orbs/cells/flies go to the shared `*game-info*`), per-player
 player's HUD in their own view), no friendly fire, distance leash (60 m) plus residency guard,
 debug-menu toggle, per-player death/respawn, either player can pause.
 
-Open for B:
-1. Playtest in Geyser Rock / Sandover (needs the user's game assets). Suggested area: Geyser Rock
-   (training level: small, no vehicles, one level loaded). Then Sandover village and beach.
-2. HUD text/particles in narrow views (aspect, ownership of HUD particles, see COMPATIBILITY.md).
-3. Water volumes for the second player (deep water, dark eco, lava).
+Done for B (2026-10-10, tested in game, see TESTING.md): playtest in Sandover/beach/jungle with two
+virtual pads, HUD and 2d proportions in split views, water volumes for the second player, player 2
+in menus and NPC conversations.
+
+Open for B: HUD particle callbacks (player 1's context), keyboard steps of the test plan.
 
 ### C. Reliable local sessions
 
@@ -86,8 +86,8 @@ Done on branch `feature/jak1-coop-launcher-mod`:
   (the latter ignores `--config-path`).
 
 Open:
-1. Merge `feature/jak1-local-splitscreen` into `feature/jak1-coop-launcher-mod` (10 commits behind
-   on 2026-10-10, including the respawn HUD crash fix; MOD.md "Before every release").
+1. Keep merging `feature/jak1-local-splitscreen` into `feature/jak1-coop-launcher-mod` before each
+   release (last merged 2026-10-10 at `ee509d24`; MOD.md "Before every release").
 2. Install a local package in the launcher and play it (needs the user's game files).
 3. Fork setup on GitHub: enable Actions, make `cut-release.yaml` dispatchable (default branch or a
    copy on `master`), then cut the first release.

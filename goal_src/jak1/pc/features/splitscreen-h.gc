@@ -40,7 +40,6 @@
    (near-hysteresis   meters) ;; a world process only switches player when the other is this much closer
    (respawn-delay     time-frame) ;; dead player waits this long before respawning next to the survivor
    (p2-pad            int32) ;; cpad index of player 2
-   (frame-views       int32) ;; views rendered in the last frame (for tests / stats)
    (sim-ticks         uint32) ;; simulation ticks since co-op started (for tests / stats)
    (render-passes     uint32) ;; view render passes since co-op started (for tests / stats)
    ))
@@ -56,7 +55,9 @@
        :nearest-world? #t
        :leash? #t
        :leash-distance (meters 60)
-       :near-hysteresis (meters 4)
+       ;; small: interactions have small radii (the fisherman's boat 1.5 m), a big margin left the closer
+       ;; player unable to use an object the other player had touched
+       :near-hysteresis (meters 0.25)
        :respawn-delay (seconds 2)
        :p2-pad 1))
 
@@ -109,9 +110,17 @@
       (if (>= coop-prev-player 0) (coop-switch-context coop-prev-player))
       coop-result)))
 
+(defmacro target-cpad-idx ()
+  "The pad of the current *target*: in a world process that is the nearest player, so the player next
+   to an npc, boat, cannon etc. uses it with their own pad. 0 (player 1) without a target."
+  `(if *target* (-> *target* control cpad number) 0))
+
 (defmacro coop-split-frame? ()
   "Is the frame being built a split-screen frame?"
   `(> (-> *coop-frame* views) 1))
+
+;; pc-settings applied the split-screen view aspect to the 2d scale (see pc-settings update)
+(define *coop-video-hacks-applied* #f)
 
 (defun coop-view-aspect ((aspect float))
   "The aspect ratio of one view, from the aspect ratio of the whole game area."
@@ -195,28 +204,51 @@
               (!= (-> other state name) 'target-death)
               (!= (-> other state name) 'target-coop-respawn)))))
 
-(define *coop-p2-pad-was-valid* #f)
+(define *coop-p2-device-was-lost* #f)
 
 (defun coop-merge-pause-buttons ()
   "Called right before determine-pause-mode: either player can pause the shared session, and
    player 2's controller disconnecting pauses it like player 1's does. Pad 0 is overwritten by
-   service-cpads right after, so player 1's gameplay never sees the merged buttons."
+   service-cpads right after, so player 1's gameplay never sees the merged buttons.
+   A player 2 slot that never had a device (waiting to join) does not pause: only a device that
+   was assigned and then lost its connection does."
   (when (coop-active?)
     (let* ((p1-pad (-> *cpad-list* cpads 0))
            (p2-pad (-> *cpad-list* cpads (-> *coop* p2-pad)))
-           (p2-valid (zero? (logand (-> p2-pad valid) 128)))
+           (p2-status (pc-coop-slot-status 1))
+           (p2-lost (and (nonzero? (logand p2-status 3)) (zero? (logand p2-status 4))))
            (pause-buttons (logand (-> p2-pad button0-rel 0) (pad-buttons start select))))
-      (if (and (not p2-valid) *coop-p2-pad-was-valid* (= *master-mode* 'game))
+      (if (and p2-lost (not *coop-p2-device-was-lost*) (= *master-mode* 'game))
         (set! pause-buttons (logior pause-buttons (pad-buttons select))))
-      (set! *coop-p2-pad-was-valid* p2-valid)
+      (set! *coop-p2-device-was-lost* p2-lost)
       (when (nonzero? pause-buttons)
         (logior! (-> p1-pad button0-abs 0) pause-buttons)
         (logior! (-> p1-pad button0-rel 0) pause-buttons))))
   (none))
 
+(defun coop-merge-menu-buttons ()
+  "Called right after service-cpads: in menus and while paused, player 2's buttons count as player 1's,
+   so either player can use the shared pause/progress menus (they read pad 0). Gameplay only runs
+   in 'game mode, so it never sees the merged buttons."
+  (when (and (coop-active?) (!= *master-mode* 'game))
+    (let ((p1-pad (-> *cpad-list* cpads 0))
+          (p2-pad (-> *cpad-list* cpads (-> *coop* p2-pad))))
+      (when (zero? (logand (-> p2-pad valid) 128))
+        (logior! (-> p1-pad button0-abs 0) (-> p2-pad button0-abs 0))
+        (logior! (-> p1-pad button0-rel 0) (-> p2-pad button0-rel 0)))))
+  (none))
+
 ;; the last grab that also held the other player: the player it was meant for, and the partner
-(define *coop-grab-main* (the-as handle #f))
-(define *coop-grab-partner* (the-as handle #f))
+(deftype coop-grab-pair (structure)
+  ((main    handle)
+   (partner handle)))
+
+;; in a structure: a symbol's value is 32 bits, a handle stored there loses its pid and never resolves
+(define *coop-grab* (new 'global 'coop-grab-pair))
+
+(set! (-> *coop-grab* main) (the-as handle #f))
+
+(set! (-> *coop-grab* partner) (the-as handle #f))
 
 (defun coop-grab-other-player ((proc process) (grab symbol))
   "Co-op: cutscenes, conversations and elevators that grab a player hold the other player too.
@@ -227,19 +259,24 @@
     (cond
       (grab
        (let ((other (coop-other-player-target proc)))
+         ;; success is judged by the state the other player is going to, not by the event's return
+         ;; value: some states (target-stance-ambient) go to target-grab but return #f, which left the
+         ;; other player held forever.
          (when (and other
                     (not (logtest? (-> other state-flags) (state-flags grabbed dying)))
-                    (send-event other 'change-mode 'grab))
-           (set! *coop-grab-main* (process->handle proc))
-           (set! *coop-grab-partner* (process->handle other)))))
+                    (begin
+                      (send-event other 'change-mode 'grab)
+                      (= (-> other next-state name) 'target-grab)))
+           (set! (-> *coop-grab* main) (process->handle proc))
+           (set! (-> *coop-grab* partner) (process->handle other)))))
       (else
-       (let ((main (handle->process *coop-grab-main*))
-             (partner (handle->process *coop-grab-partner*)))
+       (let ((main (handle->process (-> *coop-grab* main)))
+             (partner (handle->process (-> *coop-grab* partner))))
          (when (and partner (or (= proc main) (= proc partner)))
            (let ((to-release (if (= proc partner) main partner)))
              (if (and to-release (= (send-event to-release 'query 'mode) 'target-grab)) (send-event to-release 'end-mode)))
-           (set! *coop-grab-main* (the-as handle #f))
-           (set! *coop-grab-partner* (the-as handle #f)))))))
+           (set! (-> *coop-grab* main) (the-as handle #f))
+           (set! (-> *coop-grab* partner) (the-as handle #f)))))))
   (none))
 
 (defun coop-level-containing ((levels level-group) (pos vector) (skip level))
@@ -271,3 +308,49 @@
 (define-extern coop-stop (function none))
 (define-extern coop-player-target (function int target))
 (define-extern coop-kill-camera-processes (function none))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; water volumes
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; A water-vol tracks one player in its target field (player 1 in co-op). The player it tracks
+;; for player 2 is kept here, keyed by the volume's handle, so the type layout stays as decompiled.
+(defconstant COOP_WATER_VOL_SLOTS 64)
+
+(define *coop-water-vols* (new 'global 'array 'uint64 COOP_WATER_VOL_SLOTS))
+
+(define *coop-water-p2-targets* (new 'global 'array 'uint64 COOP_WATER_VOL_SLOTS))
+
+;; empty slots hold #f handles (a zero handle is not "no process" in GOAL)
+(dotimes (i COOP_WATER_VOL_SLOTS)
+  (set! (-> *coop-water-vols* i) (the-as uint64 #f))
+  (set! (-> *coop-water-p2-targets* i) (the-as uint64 #f)))
+
+;; >0 while water-vol update! runs its per-player passes (it can nest through on-exit-water)
+(define *coop-water-updating* 0)
+
+(defun coop-water-slot ((vol process) (create? symbol))
+  "Index of vol's player 2 slot, -1 if it has none (and create? is #f or the table is full)."
+  (let ((h (the-as uint64 (process->handle vol)))
+        (free -1))
+    (dotimes (i COOP_WATER_VOL_SLOTS)
+      (cond
+        ((= (-> *coop-water-vols* i) h) (return i))
+        ((and (< free 0) (not (handle->process (the-as handle (-> *coop-water-vols* i))))) (set! free i))))
+    (when (and create? (>= free 0))
+      (set! (-> *coop-water-vols* free) h)
+      (set! (-> *coop-water-p2-targets* free) (the-as uint64 #f)))
+    (if create? free -1)))
+
+(defun coop-water-p2-target ((vol process))
+  "The handle of player 2 if vol currently holds them, else #f."
+  (let ((i (coop-water-slot vol #f)))
+    (if (>= i 0) (the-as handle (-> *coop-water-p2-targets* i)) (the-as handle #f))))
+
+(defun coop-water-set-p2-target ((vol process) (h handle))
+  (let ((i (coop-water-slot vol (if (handle->process h) #t #f))))
+    (when (>= i 0)
+      (set! (-> *coop-water-p2-targets* i) (the-as uint64 h))
+      ;; nothing tracked any more: free the slot
+      (if (not (handle->process h)) (set! (-> *coop-water-vols* i) (the-as uint64 #f)))))
+  (none))

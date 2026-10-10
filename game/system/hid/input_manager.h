@@ -215,6 +215,7 @@ class InputManager {
   std::shared_ptr<PadData> m_unassigned_kbm_data = std::make_shared<PadData>();
   void coop_release_kbm_actions();
   void coop_apply_mapping();
+  int coop_port0_controller_instance_id() const;
   void coop_update_pending();
 
   /// No inputs will be processed while in this mode the first input detected from the relevant

@@ -86,13 +86,13 @@
          (print-game-text (lookup-text! *common-text* (text-id confirm) #f) s5-0 #f 128 22))))
     (cond
       ((!= (-> this decision) 'undecided))
-      ((and (cpad-pressed? 0 x) (not (-> this only-allow-cancel)))
-       (logclear! (-> *cpad-list* cpads 0 button0-abs 0) (pad-buttons x))
-       (logclear! (-> *cpad-list* cpads 0 button0-rel 0) (pad-buttons x))
+      ((and (cpad-pressed? (target-cpad-idx) x) (not (-> this only-allow-cancel))) ;; og:preserve-this coop: pad of the player using it
+       (logclear! (-> *cpad-list* cpads (target-cpad-idx) button0-abs 0) (pad-buttons x)) ;; og:preserve-this coop: pad of the player using it
+       (logclear! (-> *cpad-list* cpads (target-cpad-idx) button0-rel 0) (pad-buttons x)) ;; og:preserve-this coop: pad of the player using it
        (set! (-> this decision) 'yes))
-      ((cpad-pressed? 0 triangle)
-       (logclear! (-> *cpad-list* cpads 0 button0-abs 0) (pad-buttons triangle))
-       (logclear! (-> *cpad-list* cpads 0 button0-rel 0) (pad-buttons triangle))
+      ((cpad-pressed? (target-cpad-idx) triangle) ;; og:preserve-this coop: pad of the player using it
+       (logclear! (-> *cpad-list* cpads (target-cpad-idx) button0-abs 0) (pad-buttons triangle)) ;; og:preserve-this coop: pad of the player using it
+       (logclear! (-> *cpad-list* cpads (target-cpad-idx) button0-rel 0) (pad-buttons triangle)) ;; og:preserve-this coop: pad of the player using it
        (set! (-> this decision) 'no))))
   (-> this decision))
 
@@ -596,9 +596,9 @@
                   (set-scale! gp-1 0.9)
                   (set! (-> gp-1 flags) (font-flags shadow kerning middle-vert large))
                   (print-game-text (lookup-text! *common-text* (-> self talk-message) #f) gp-1 #f 128 22))
-                (when (and (cpad-pressed? 0 circle) (process-grab? *target*))
-                  (logclear! (-> *cpad-list* cpads 0 button0-abs 0) (pad-buttons circle))
-                  (logclear! (-> *cpad-list* cpads 0 button0-rel 0) (pad-buttons circle))
+                (when (and (cpad-pressed? (target-cpad-idx) circle) (process-grab? *target*)) ;; og:preserve-this coop: pad of the player using it
+                  (logclear! (-> *cpad-list* cpads (target-cpad-idx) button0-abs 0) (pad-buttons circle)) ;; og:preserve-this coop: pad of the player using it
+                  (logclear! (-> *cpad-list* cpads (target-cpad-idx) button0-rel 0) (pad-buttons circle)) ;; og:preserve-this coop: pad of the player using it
                   (send-event *target* 'trans 'save (-> self old-target-pos))
                   (go-virtual play-anim))))))))
       (if (= (-> *level* loading-level) (-> *level* level-default)) (process-taskable-method-33 self))

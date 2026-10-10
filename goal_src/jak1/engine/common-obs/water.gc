@@ -913,6 +913,16 @@
   (none))
 
 (defmethod on-exit-water ((this water-vol))
+  ;; og:preserve-this coop: when the volume itself goes away (not a player leaving it during update!),
+  ;; player 2 leaves it too
+  (when (and (coop-active?) (zero? *coop-water-updating*) (handle->process (coop-water-p2-target this)))
+    (let ((p1-handle (-> this target)))
+      (set! (-> this target) (coop-water-p2-target this))
+      (+! *coop-water-updating* 1)
+      (on-exit-water this)
+      (+! *coop-water-updating* -1)
+      (coop-water-set-p2-target this (the-as handle #f))
+      (set! (-> this target) p1-handle)))
   (when (handle->process (-> this target))
     (let ((v1-7 (-> (the-as target (-> this target process 0)) water)))
       (logclear! (-> v1-7 flag)
@@ -940,7 +950,9 @@
   0
   (none))
 
-(defmethod update! ((this water-vol))
+;; og:preserve-this coop: the body of update! for one player (tgt can enter the volume).
+;; update! below runs it for each player.
+(defun water-vol-update-for ((this water-vol) (tgt target))
   (cond
     ((handle->process (-> this target))
      (cond
@@ -960,12 +972,12 @@
                 (else
                  (if (send-event (handle->process (-> this target)) 'attack #f (static-attack-info ((mode v1-18))))
                    (send-event this 'notify 'attack))))))))))
-    ((and *target*
-          (and (not (handle->process (-> *target* water volume))) (point-in-vol? (-> this vol) (-> *target* control trans))))
-     (let ((s5-0 (-> *target* water)))
+    ((and tgt
+          (and (not (handle->process (-> tgt water volume))) (point-in-vol? (-> this vol) (-> tgt control trans))))
+     (let ((s5-0 (-> tgt water)))
        (process-entity-status! this (entity-perm-status bit-3) #t)
        (set! (-> s5-0 volume) (process->handle this))
-       (set! (-> this target) (process->handle *target*))
+       (set! (-> this target) (process->handle tgt))
        (logior! (-> s5-0 flag) (water-flag active))
        (set! (-> s5-0 base-height) (-> this water-height))
        (set! (-> s5-0 ocean-offset) 0.0)
@@ -974,6 +986,23 @@
        (if (< 0.0 (-> this swim-height)) (set! (-> s5-0 swim-height) (-> this swim-height)))
        (if (< 0.0 (-> this bottom-height)) (set! (-> s5-0 bottom-height) (-> this bottom-height)))
        (set-zero! (-> s5-0 bob)))))
+  0
+  (none))
+
+(defmethod update! ((this water-vol))
+  ;; og:preserve-this coop: one pass per player. The target field holds player 1; player 2's
+  ;; tracked handle is swapped in from a side table for the second pass.
+  (cond
+    ((coop-active?)
+     (+! *coop-water-updating* 1)
+     (water-vol-update-for this (coop-player-target 0))
+     (let ((p1-handle (-> this target)))
+       (set! (-> this target) (coop-water-p2-target this))
+       (water-vol-update-for this (coop-player-target 1))
+       (coop-water-set-p2-target this (-> this target))
+       (set! (-> this target) p1-handle))
+     (+! *coop-water-updating* -1))
+    (else (water-vol-update-for this *target*)))
   0
   (none))
 
