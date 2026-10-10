@@ -911,6 +911,11 @@
        (!= (-> tgt state name) 'target-death)
        (!= (-> tgt state name) 'target-coop-respawn)))
 
+(defun coop-clone-anim-state? ((name symbol))
+  "Is name a state a player is in while a cinematic animates them: on foot, on the zoomer or on the
+   flut flut."
+  (or (= name 'target-clone-anim) (= name 'target-racing-clone-anim) (= name 'target-flut-clone-anim)))
+
 (defun coop-update ()
   "Once per frame: split decision and listener. In game mode also player positions, player 2 respawn
    and the distance leash."
@@ -940,13 +945,17 @@
               other
               (movie?)
               (coop-player-in-play? me)
-              (= (-> other state name) 'target-clone-anim)
-              (!= (-> me state name) 'target-clone-anim))
+              (coop-clone-anim-state? (-> other state name))
+              (not (coop-clone-anim-state? (-> me state name))))
+         ;; hidden and frozen: they can't drive or walk away unseen (e.g. into lava on the zoomer)
          (when (zero? (logand *coop-movie-hidden* bit))
            (coop-set-hidden me #t)
+           (logior! (-> me mask) (process-mask sleep))
            (logior! *coop-movie-hidden* bit)))
         ((nonzero? (logand *coop-movie-hidden* bit))
-         (if me (coop-set-hidden me #f))
+         (when me
+           (coop-set-hidden me #f)
+           (logclear! (-> me mask) (process-mask sleep)))
          (logclear! *coop-movie-hidden* bit)))))
   (pc-set-splitscreen-layout! (the-as int (-> *coop* layout)))
   ;; the rest is gameplay: nothing moves while paused or in a menu
@@ -964,6 +973,7 @@
               (or (movie?) (nonzero? *camera-look-through-other*))
               (logtest? (-> other mask) (process-mask sleep))
               (zero? (logand *coop-movie-slept* (ash 1 (- 1 i))))
+              (zero? (logand *coop-movie-hidden* (ash 1 (- 1 i))))
               (not (logtest? (-> me mask) (process-mask sleep))))
          (logior! (-> me mask) (process-mask sleep))
          (logior! *coop-movie-slept* bit))
@@ -1079,7 +1089,10 @@
     (coop-despawn-player2)
     ;; stopped during a cinematic about player 2: show player 1 again
     (when (logtest? *coop-movie-hidden* 1)
-      (let ((p1 (coop-player-target 0))) (if p1 (coop-set-hidden p1 #f))))
+      (let ((p1 (coop-player-target 0)))
+        (when p1
+          (coop-set-hidden p1 #f)
+          (logclear! (-> p1 mask) (process-mask sleep)))))
     (set! *coop-movie-hidden* 0)
     (dotimes (i 2)
       (let ((tgt (coop-player-target i)))
