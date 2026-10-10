@@ -846,7 +846,10 @@
                     (.por a2-2 a2-1 a3-1)
                     (.ppach a2-3 zero a2-2)
                     (let ((a2-4 (shl (the-as int a2-3) 16))) (nop!) (b! (nonzero? a2-4) cfg-6 :delay (nop!)))
-                    (b! (= a1-3 v1-7) cfg-6 :delay (nop!))))
+                    (b! (= a1-3 v1-7) cfg-6 :delay (nop!))
+                    ;; og:preserve-this coop: a player never collides with themselves (probes leave proc #f;
+                    ;; with co-op a player's collide-with includes the other player)
+                    (b! (= v1-7 PP) cfg-6 :delay (nop!))))
                 (add-fg-prim-using-box a0-3 obj))
               (label cfg-6)
               0
@@ -1135,7 +1138,10 @@
                     (.por a2-2 a2-1 a3-1)
                     (.ppach a2-3 zero a2-2)
                     (let ((a2-4 (shl (the-as int a2-3) 16))) (nop!) (b! (nonzero? a2-4) cfg-6 :delay (nop!)))
-                    (b! (= a1-3 v1-7) cfg-6 :delay (nop!))))
+                    (b! (= a1-3 v1-7) cfg-6 :delay (nop!))
+                    ;; og:preserve-this coop: a player never collides with themselves (probes leave proc #f;
+                    ;; with co-op a player's collide-with includes the other player)
+                    (b! (= v1-7 PP) cfg-6 :delay (nop!))))
                 (add-fg-prim-using-y-probe a0-3 obj))
               (label cfg-6)
               0
@@ -1482,7 +1488,10 @@
                     (.por a2-2 a2-1 a3-1)
                     (.ppach a2-3 zero a2-2)
                     (let ((a2-4 (shl (the-as int a2-3) 16))) (nop!) (b! (nonzero? a2-4) cfg-6 :delay (nop!)))
-                    (b! (= a1-3 v1-9) cfg-6 :delay (nop!))))
+                    (b! (= a1-3 v1-9) cfg-6 :delay (nop!))
+                    ;; og:preserve-this coop: a player never collides with themselves (probes leave proc #f;
+                    ;; with co-op a player's collide-with includes the other player)
+                    (b! (= v1-9 PP) cfg-6 :delay (nop!))))
                 (add-fg-prim-using-line-sphere a0-3 obj))
               (label cfg-6)
               0
