@@ -265,7 +265,7 @@
     ((and (= *camera-look-through-other* 1) (!= *master-mode* 'menu)) (set! *camera-look-through-other* 0) 0))
   (cond
     (*external-cam-mode* (move-camera-from-pad *math-camera*))
-    ((nonzero? *camera-look-through-other*)
+    ((and (nonzero? *camera-look-through-other*) (coop-look-through-here?)) ;; og:preserve-this coop: a minigame's screen only in its player's view
      (set! (-> *math-camera* fov) (-> *camera-other-fov* data))
      (set! (-> *math-camera* trans quad) (-> *camera-other-trans* quad))
      (+! (-> *math-camera* trans y) (get-no-update *camera-smush-control*))
