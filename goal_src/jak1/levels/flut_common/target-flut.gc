@@ -1129,7 +1129,9 @@
       (logclear! (-> self state-flags) (state-flags being-attacked dying))
       (target-exit)
       (remove-setting! 'process-mask)
-      (apply-settings *setting-control*))
+      (apply-settings *setting-control*)
+      ;; og:preserve-this coop: off the flut flut while waiting to respawn (the reload used to do this)
+      (if (= (-> self next-state name) 'target-coop-respawn) ((-> target-flut-start exit))))
   :trans
     (-> target-hit
         trans)
@@ -1139,8 +1141,10 @@
       (logior! (-> self state-flags) (state-flags dying))
       (set! (-> self neck flex-blend) 0.0)
       (target-timed-invulnerable-off self)
-      (add-setting! 'process-mask 'set 0.0 (process-mask enemy platform projectile death))
-      (apply-settings *setting-control*)
+      ;; og:preserve-this coop: the world keeps running for the other player
+      (when (not (coop-other-player-alive? self))
+        (add-setting! 'process-mask 'set 0.0 (process-mask enemy platform projectile death))
+        (apply-settings *setting-control*))
       (set! (-> self control transv quad) (the-as uint128 0))
       (cond
         ((or (= arg0 'none) (= arg0 'water-vol) (= arg0 'sharkey)))
@@ -1191,6 +1195,8 @@
            (suspend)
            (ja :num! (seek!)))))
       (set! (-> self control transv quad) (the-as uint128 0))
+      ;; og:preserve-this coop: the other player is still in play: respawn at the flut flut pad on a flut flut
+      (when (coop-other-player-alive? self) (coop-racer-note-death self) (go target-coop-respawn))
       (initialize! (-> self game) 'dead (the-as game-save #f) (the-as string #f))
       (set-time! (-> self state-time))
       (until v1-104
@@ -1219,13 +1225,20 @@
           (set! (-> self control unknown-uint20) (the-as uint (-> self control draw-offset y)))
           (let* ((s3-0 (handle->process arg0))
                  (s4-1 (if (and (nonzero? s3-0) (type-type? (-> s3-0 type) process-drawable)) s3-0)))
-            (when s4-1
-              (set! (-> s5-0 quad) (-> (the-as process-drawable s4-1) root trans quad))
-              (quaternion-copy! (-> self control unknown-quaternion03) (-> (the-as process-drawable s4-1) root quat))
-              (send-event s4-1 'trans (-> self flut flut-trans))
-              (quaternion-copy! (the-as quaternion (-> self flut flut-quat)) (-> (the-as process-drawable s4-1) root quat))
-              (set! (-> self flut flut-scale quad) (-> (the-as process-drawable s4-1) root scale quad))
-              (set! (-> self control did-move-to-pole-or-max-jump-height) (the-as int (-> self flut flut-trans y)))))
+            (cond
+              ;; og:preserve-this coop: a co-op (re)spawn away from the pad gets on where the rider stands
+              ((and s4-1 (not (coop-flut-mount-at-pad? (the-as process-drawable s4-1) self)))
+               (set! (-> self flut flut-trans quad) (-> self control trans quad))
+               (quaternion-copy! (the-as quaternion (-> self flut flut-quat)) (-> self control quat))
+               (set! (-> self flut flut-scale quad) (-> self control scale quad))
+               (set! (-> self control did-move-to-pole-or-max-jump-height) (the-as int (-> self flut flut-trans y))))
+              (s4-1
+               (set! (-> s5-0 quad) (-> (the-as process-drawable s4-1) root trans quad))
+               (quaternion-copy! (-> self control unknown-quaternion03) (-> (the-as process-drawable s4-1) root quat))
+               (send-event s4-1 'trans (-> self flut flut-trans))
+               (quaternion-copy! (the-as quaternion (-> self flut flut-quat)) (-> (the-as process-drawable s4-1) root quat))
+               (set! (-> self flut flut-scale quad) (-> (the-as process-drawable s4-1) root scale quad))
+               (set! (-> self control did-move-to-pole-or-max-jump-height) (the-as int (-> self flut flut-trans y))))))
           (set! (-> self control unknown-vector102 quad) (-> gp-0 quad))
           (set! (-> self control unknown-vector103 quad) (-> s5-0 quad))))
       (let ((gp-1 #f))
