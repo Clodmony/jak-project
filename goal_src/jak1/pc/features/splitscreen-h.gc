@@ -38,6 +38,7 @@
    (leash?            symbol) ;; teleport a player that strays too far back to the other one
    (every-ring?       symbol) ;; race rings: each ring counts only once both players flew through it
    (friendly-fire?    symbol) ;; the players' attacks hit each other
+   (tougher-bosses?   symbol) ;; bosses need more hits while two players fight them
    (leash-distance    meters) ;; max distance between players before the catch-up teleport
    (near-hysteresis   meters) ;; a world process only switches player when the other is this much closer
    (respawn-delay     time-frame) ;; dead player waits this long before respawning next to the survivor
@@ -58,6 +59,7 @@
        :leash? #t
        :every-ring? #f
        :friendly-fire? #t
+       :tougher-bosses? #f
        :leash-distance (meters 60)
        ;; small: interactions have small radii (the fisherman's boat 1.5 m), a big margin left the closer
        ;; player unable to use an object the other player had touched
@@ -367,6 +369,10 @@
 (define-extern coop-ring-crossed? (function process cylinder-flat vector symbol))
 (define-extern coop-kill-camera-processes (function none))
 (define-extern coop-player-attack (function process process object symbol symbol))
+(define-extern coop-continue (function continue-point none))
+(define-extern coop-lowest-health (function float))
+(define-extern coop-send-to-cameras (function symbol object none))
+(define-extern coop-boss-hits (function int int))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; water volumes
