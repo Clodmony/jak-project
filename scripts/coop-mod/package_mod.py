@@ -17,11 +17,18 @@ The archive has the same layout as the GitHub release assets made by
 Differences from the CI scripts, all on the safe side:
   - Only files tracked by git are packaged (contents are read from the working tree, so local edits
     to tracked files are included). Untracked and ignored files such as goal_src/user/*,
-    custom_assets/*/texture_replacements/* or anything extracted from a disc never are.
-  - Every entry is checked against an allow list before and after writing; disc images, extracted
-    game files, compiled output, saves and settings are refused.
-  - A build that only runs on this machine (dynamically linked against libraries in the build
-    folder) is refused unless --allow-dynamic is given (Linux and macOS only).
+    custom_assets/*/texture_replacements/* or anything extracted from a disc never are. Files that
+    are staged but not committed, untracked files and deleted tracked files in the packaged folders
+    stop the run unless --allow-uncommitted is given; this is the main guard against packaging
+    something by accident.
+  - Every entry is also checked against an allow list and a best-effort deny list (disc and game
+    file names and types, saves, settings, keys) before and after writing, and the custom assets
+    that game.gp builds must be present.
+  - The binaries are checked: built after their C/C++ sources last changed (else rebuild or
+    --allow-stale), and, read from the executables themselves, linked only against system
+    libraries. A build that only runs on this machine (dynamically linked against libraries in the
+    build folder) is refused unless --allow-dynamic is given (Linux and macOS only). On Linux the
+    minimum glibc and libstdc++ versions the binaries need are printed.
 
 Python 3.9+ and the standard library only. Examples (from the repository root):
 
@@ -50,6 +57,7 @@ import tarfile
 import tempfile
 import time
 import zipfile
+import zlib
 from pathlib import Path
 
 # --------------------------------------------------------------------------------------------------
@@ -82,13 +90,32 @@ PLATFORMS = {
     "macos-arm": ("", ".tar.gz", "macho-arm64"),
 }
 
-# how to make a portable build in the folder that the auto-detection looks at first
+# how to make a static build in the folder that the auto-detection looks at first. One command per
+# line: Windows PowerShell 5.1 does not accept '&&'.
 STATIC_BUILD_HINT = {
-    "linux": "cmake --preset=Release-linux-clang-static && cmake --build build/Release/bin",
-    "windows": "cmake --preset=Release-windows-clang-static && cmake --build out/build/Release",
-    "macos-intel": "cmake --preset=Release-macos-x86_64-clang-static && cmake --build build/Release/bin",
-    "macos-arm": "cmake --preset=Release-macos-arm64-clang-static && cmake --build build/Release/bin",
+    "linux": ["cmake --preset=Release-linux-clang-static", "cmake --build build/Release/bin"],
+    "windows": ["cmake --preset=Release-windows-clang-static", "cmake --build out/build/Release"],
+    "macos-intel": ["cmake --preset=Release-macos-x86_64-clang-static",
+                    "cmake --build build/Release/bin"],
+    "macos-arm": ["cmake --preset=Release-macos-arm64-clang-static", "cmake --build build/Release/bin"],
 }
+
+# C/C++ sources of each binary (git-tracked files below these folders with SOURCE_EXTENSIONS, plus
+# CMakeLists.txt files), from the target_link_libraries calls in game/, goalc/ and decompiler/
+# CMakeLists.txt: gk = runtime + common; goalc = compiler + decomp (+ sound); extractor = decomp +
+# compiler (+ sound). Packaged data folders hold no such files.
+BINARY_SOURCES = {
+    "gk": ["game", "common", "third-party"],
+    "goalc": ["goalc", "decompiler", "game/sound", "common", "third-party"],
+    "extractor": ["decompiler", "goalc", "game/sound", "common", "third-party"],
+}
+SOURCE_EXTENSIONS = {
+    ".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx", ".inl", ".ipp", ".asm", ".s", ".cmake",
+}
+
+# Ubuntu 22.04, where the release pipeline builds Linux (linux-build-clang.yaml `runs-on`): the
+# newest glibc / libstdc++ symbol versions a Linux package may need to start on that system
+LINUX_BASELINE = {"GLIBC": (2, 35), "GLIBCXX": (3, 4, 30)}
 
 SUPPORTED_GAMES = ["jak1", "jak2", "jak3", "jakx"]
 DEFAULT_NAME = "jak1-coop"
@@ -101,11 +128,19 @@ FORBIDDEN_COMPONENTS = {
     "game_config", "saves", "savestate_out", "savestate-out", "ci-artifacts", ".git",
     "node_modules", "__pycache__",
 }
-# extensions of disc images, game archives, compiled objects, audio and save files
+# Best effort only: the main guard is that only committed, git-tracked files are packaged.
+# Extensions of disc images, game archives, compiled objects, audio, PS2 drivers and save files
+# (.png, .glb and .txt are not here: the repository tracks such files in the packaged folders).
 FORBIDDEN_EXTENSIONS = {
     ".iso", ".img", ".cue", ".bin", ".cgo", ".dgo", ".go", ".o", ".str", ".vag", ".sbk", ".mus",
-    ".p2s", ".sav", ".gci", ".mcd", ".ps2",
+    ".p2s", ".sav", ".gci", ".mcd", ".ps2", ".irx", ".cnf", ".ayb", ".wav", ".elf",
 }
+# File names from the game discs (decompiler/config/*/*/inputs.jsonc, *_config.jsonc): the
+# streamed audio VAGWAD.<language>, TEXT/<n>COMMON.TXT / <n>SUBTIT.TXT and the boot ELF
+# (SCUS_971.24, SCES_503.61, ...). Compared case-insensitively with the last path component.
+FORBIDDEN_NAME_RE = re.compile(
+    r"^vagwad\.[a-z]+$|^\d+[a-z]+\.txt$|^[a-z]{4}_\d{3}\.\d{2}$", re.IGNORECASE
+)
 # goal_src/user is for personal REPL files; only these two tracked files may be packaged
 ALLOWED_USER_FILES = {"data/goal_src/user/.gitignore", "data/goal_src/user/readme.md"}
 
@@ -183,6 +218,8 @@ def check_entry(name, is_dir, platform):
         ext = os.path.splitext(lower_parts[-1])[1]
         if ext in FORBIDDEN_EXTENSIONS:
             return "forbidden file type '{}'".format(ext)
+        if FORBIDDEN_NAME_RE.match(parts[-1]):
+            return "name of a game disc file"
     # allow list
     if is_dir:
         if name in ALLOWED_DIRS:
@@ -243,6 +280,12 @@ def tracked_files(repo, tree):
         mode = meta.split(" ")[0]
         result.append((path, mode))
     return result
+
+
+def head_files(repo, trees):
+    """Paths of the files committed in HEAD below `trees`."""
+    out = git(repo, "ls-tree", "-r", "-z", "--name-only", "HEAD", "--", *trees).stdout
+    return {p for p in out.decode("utf-8").split("\0") if p}
 
 
 def git_head_info(repo):
@@ -310,22 +353,59 @@ def candidate_bin_dirs(repo, platform):
 
 
 def detect_bin_dir(repo, platform):
+    """Pick a build from the default places. Returns (folder, candidates) with candidates a list of
+    (folder, CMake cache says static, gk modification time), the chosen one first: a static build
+    first (the only kind that can be shared), then the newest gk. The cache only reflects the last
+    configure; the binaries themselves are checked later."""
     exe = PLATFORMS[platform][0]
     found = []
     for cand in candidate_bin_dirs(repo, platform):
-        if cand.is_dir() and find_binary(cand, "gk", exe):
+        gk = find_binary(cand, "gk", exe) if cand.is_dir() else None
+        if gk:
             _, cache = read_cmake_cache(cand)
-            found.append((cand, cmake_bool(cache.get("STATICALLY_LINK"))))
+            found.append((cand, cmake_bool(cache.get("STATICALLY_LINK")) is True, gk.stat().st_mtime))
     if not found:
         raise PackageError(
             "no build found in {}; build first or pass --bin-dir".format(
                 ", ".join(str(c) for c in candidate_bin_dirs(repo, platform))
             )
         )
-    for cand, static in found:
-        if static:
-            return cand
-    return found[0][0]
+    found.sort(key=lambda f: (f[1], f[2]), reverse=True)
+    return found[0][0], found
+
+
+def fmt_time(epoch):
+    return datetime.datetime.fromtimestamp(epoch).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def stale_sources(repo, binaries):
+    """{binary name: [(mtime, path), ...] newest first} of the git-tracked C/C++ and CMake files
+    that changed after that binary was linked: the rule make and ninja use to decide on a rebuild.
+    (`gk --version` cannot tell: common/CMakeLists.txt writes the revision at configure time.)"""
+    roots = sorted({r for rs in BINARY_SOURCES.values() for r in rs})
+    out = git(repo, "ls-files", "-z", "--", "CMakeLists.txt", *roots).stdout.decode("utf-8")
+    sources = []
+    for path in out.split("\0"):
+        base = path.rsplit("/", 1)[-1]
+        if not path or (base != "CMakeLists.txt"
+                        and os.path.splitext(base)[1].lower() not in SOURCE_EXTENSIONS):
+            continue
+        try:
+            sources.append((path, (repo / path).stat().st_mtime))
+        except OSError:
+            continue  # deleted in the working tree
+    result = {}
+    for name, bin_path in binaries.items():
+        built = bin_path.stat().st_mtime
+        prefixes = tuple(r + "/" for r in BINARY_SOURCES[name])
+        newer = sorted(
+            ((m, p) for p, m in sources
+             if m > built and (p == "CMakeLists.txt" or p.startswith(prefixes))),
+            reverse=True,
+        )
+        if newer:
+            result[name] = newer
+    return result
 
 
 def binary_format(path):
@@ -371,61 +451,184 @@ def format_matches(fmt, expected):
     return False
 
 
-def elf_dynamic_info(path):
-    """(needed libraries, runpath entries) of a 64-bit little-endian ELF file."""
-    with open(path, "rb") as f:
-        hdr = f.read(64)
-        phoff = struct.unpack_from("<Q", hdr, 32)[0]
-        phentsize, phnum = struct.unpack_from("<HH", hdr, 54)
-        f.seek(phoff)
-        phdrs = f.read(phentsize * phnum)
-        loads, dynamic = [], None
-        for i in range(phnum):
-            p_type, _, p_offset, p_vaddr, _, p_filesz = struct.unpack_from(
-                "<IIQQQQ", phdrs, i * phentsize
-            )
-            if p_type == 1:
-                loads.append((p_vaddr, p_offset, p_filesz))
-            elif p_type == 2:
-                dynamic = (p_offset, p_filesz)
-        if dynamic is None:
-            return [], []  # fully static
-        f.seek(dynamic[0])
-        dyn = f.read(dynamic[1])
-        needed, runpaths, strtab = [], [], None
-        for off in range(0, len(dyn) - 15, 16):
-            tag, val = struct.unpack_from("<qQ", dyn, off)
-            if tag == 0:
-                break
-            if tag == 1:
-                needed.append(val)
-            elif tag in (15, 29):  # DT_RPATH, DT_RUNPATH
-                runpaths.append(val)
-            elif tag == 5:
-                strtab = val
-        if strtab is None:
-            return [], []
-        strtab_off = None
+def c_string(data, start, end=None):
+    end = len(data) if end is None else min(end, len(data))
+    stop = data.find(b"\0", start, end)
+    return data[start:stop if stop >= 0 else end].decode("utf-8", errors="replace")
+
+
+def elf_dynamic_info(data):
+    """(needed libraries, runpath entries, [(library, symbol version)]) of a 64-bit little-endian
+    ELF image, e.g. (['libc.so.6'], [], [('libc.so.6', 'GLIBC_2.34')]). Empty for a fully static
+    binary."""
+    if len(data) < 64 or data[:4] != b"\x7fELF" or data[4] != 2 or data[5] != 1:
+        return [], [], []
+    phoff = struct.unpack_from("<Q", data, 32)[0]
+    phentsize, phnum = struct.unpack_from("<HH", data, 54)
+    loads, dynamic = [], None
+    for i in range(phnum):
+        off = phoff + i * phentsize
+        if off + 40 > len(data):
+            break
+        p_type, _, p_offset, p_vaddr, _, p_filesz = struct.unpack_from("<IIQQQQ", data, off)
+        if p_type == 1:
+            loads.append((p_vaddr, p_offset, p_filesz))
+        elif p_type == 2:
+            dynamic = (p_offset, p_filesz)
+    if dynamic is None:
+        return [], [], []
+
+    def to_offset(addr):
         for vaddr, offset, size in loads:
-            if vaddr <= strtab < vaddr + size:
-                strtab_off = strtab - vaddr + offset
-        if strtab_off is None:
-            return [], []
+            if vaddr <= addr < vaddr + size:
+                return addr - vaddr + offset
+        return None
 
-        def read_str(index):
-            f.seek(strtab_off + index)
-            buf = b""
-            while b"\0" not in buf and len(buf) < 4096:
-                chunk = f.read(256)
-                if not chunk:
-                    break
-                buf += chunk
-            return buf.split(b"\0", 1)[0].decode("utf-8", errors="replace")
+    needed, runpaths, tags = [], [], {}
+    for off in range(dynamic[0], min(dynamic[0] + dynamic[1], len(data)) - 15, 16):
+        tag, val = struct.unpack_from("<qQ", data, off)
+        if tag == 0:
+            break
+        if tag == 1:  # DT_NEEDED
+            needed.append(val)
+        elif tag in (15, 29):  # DT_RPATH, DT_RUNPATH
+            runpaths.append(val)
+        else:
+            tags[tag] = val
+    strtab = to_offset(tags[5]) if 5 in tags else None  # DT_STRTAB
+    if strtab is None:
+        return [], [], []
 
-        rp = []
-        for v in runpaths:
-            rp.extend(x for x in read_str(v).split(":") if x)
-        return [read_str(v) for v in needed], rp
+    versions = []  # .gnu.version_r: DT_VERNEED / DT_VERNEEDNUM
+    off = to_offset(tags[0x6FFFFFFE]) if 0x6FFFFFFE in tags else None
+    count = tags.get(0x6FFFFFFF, 0)
+    while off is not None and count > 0 and off + 16 <= len(data):
+        _, vn_cnt, vn_file, vn_aux, vn_next = struct.unpack_from("<HHIII", data, off)
+        lib = c_string(data, strtab + vn_file)
+        aux = off + vn_aux
+        for _ in range(vn_cnt):
+            if aux + 16 > len(data):
+                break
+            _, _, _, vna_name, vna_next = struct.unpack_from("<IHHII", data, aux)
+            versions.append((lib, c_string(data, strtab + vna_name)))
+            if not vna_next:
+                break
+            aux += vna_next
+        count -= 1
+        if not vn_next:
+            break
+        off += vn_next
+
+    rp = []
+    for v in runpaths:
+        rp.extend(x for x in c_string(data, strtab + v).split(":") if x)
+    return [c_string(data, strtab + v) for v in needed], rp, versions
+
+
+def max_symbol_versions(versions):
+    """Highest GLIBC_ and GLIBCXX_ version in [(library, version)], e.g.
+    {'GLIBC': (2, 38), 'GLIBCXX': (3, 4, 32)}."""
+    best = {}
+    for _, ver in versions:
+        m = re.match(r"^(GLIBC|GLIBCXX)_(\d+(?:\.\d+)*)$", ver)
+        if m:
+            t = tuple(int(x) for x in m.group(2).split("."))
+            if t > best.get(m.group(1), ()):
+                best[m.group(1)] = t
+    return best
+
+
+def version_text(t):
+    return ".".join(str(x) for x in t)
+
+
+def pe_imports(data):
+    """Names of the DLLs a PE image imports, normal and delay-loaded, as written in the file;
+    None if it is not a PE image."""
+    if len(data) < 0x40 or data[:2] != b"MZ":
+        return None
+    pe = struct.unpack_from("<I", data, 0x3C)[0]
+    if pe + 24 > len(data) or data[pe:pe + 4] != b"PE\0\0":
+        return None
+    nsections = struct.unpack_from("<H", data, pe + 6)[0]
+    opt_size = struct.unpack_from("<H", data, pe + 20)[0]
+    opt = pe + 24
+    magic = struct.unpack_from("<H", data, opt)[0]
+    if magic == 0x20B:  # PE32+
+        image_base = struct.unpack_from("<Q", data, opt + 24)[0]
+        dirs = opt + 112
+    elif magic == 0x10B:  # PE32
+        image_base = struct.unpack_from("<I", data, opt + 28)[0]
+        dirs = opt + 96
+    else:
+        return None
+    ndirs = struct.unpack_from("<I", data, dirs - 4)[0]
+    sections = []
+    for i in range(nsections):
+        s = opt + opt_size + 40 * i
+        if s + 40 > len(data):
+            break
+        vsize, vaddr, rawsize, rawptr = struct.unpack_from("<IIII", data, s + 8)
+        sections.append((vaddr, max(vsize, rawsize), rawptr))
+
+    def to_offset(rva):
+        for vaddr, size, rawptr in sections:
+            if vaddr <= rva < vaddr + size:
+                return rva - vaddr + rawptr
+        return None
+
+    names = []
+    # directory 1: IMAGE_IMPORT_DESCRIPTOR (20 bytes, name RVA at +12);
+    # directory 13: delay-load descriptor (32 bytes, attributes at +0, name at +4)
+    for index, size, name_at in ((1, 20, 12), (13, 32, 4)):
+        if index >= ndirs:
+            continue
+        rva = struct.unpack_from("<I", data, dirs + 8 * index)[0]
+        off = to_offset(rva) if rva else None
+        while off is not None and off + size <= len(data) and len(names) < 1000:
+            if data[off:off + size] == b"\0" * size:
+                break
+            name = struct.unpack_from("<I", data, off + name_at)[0]
+            if index == 13 and not struct.unpack_from("<I", data, off)[0] & 1:
+                name -= image_base  # old-style delay-load descriptors hold addresses, not RVAs
+            name_off = to_offset(name)
+            if name_off is not None:
+                names.append(c_string(data, name_off, name_off + 260))
+            off += size
+    return names
+
+
+MACHO_CPU = {"macho-x86_64": 0x01000007, "macho-arm64": 0x0100000C}
+
+
+def macho_dylibs(data, expected):
+    """(dylibs, rpaths) from the load commands of a Mach-O image (the `expected` slice of a
+    universal binary), or None if it is not one."""
+    if data[:4] == b"\xca\xfe\xba\xbe":
+        count = struct.unpack_from(">I", data, 4)[0]
+        for i in range(min(count, 16)):
+            cpu, _, offset, size, _ = struct.unpack_from(">IIIII", data, 8 + 20 * i)
+            if cpu == MACHO_CPU.get(expected):
+                return macho_dylibs(data[offset:offset + size], expected)
+        return None
+    if len(data) < 32 or data[:4] != b"\xcf\xfa\xed\xfe":
+        return None
+    ncmds = struct.unpack_from("<I", data, 16)[0]
+    off, dylibs, rpaths = 32, [], []
+    # LC_LOAD_DYLIB, LC_LOAD_WEAK_DYLIB, LC_REEXPORT_DYLIB, LC_LAZY_LOAD_DYLIB, LC_LOAD_UPWARD_DYLIB
+    dylib_cmds = {0xC, 0x80000018, 0x8000001F, 0x20, 0x80000023}
+    for _ in range(ncmds):
+        if off + 12 > len(data):
+            break
+        cmd, cmdsize = struct.unpack_from("<II", data, off)
+        if cmd in dylib_cmds or cmd == 0x8000001C:  # LC_RPATH
+            name_at = struct.unpack_from("<I", data, off + 8)[0]
+            text = c_string(data, off + name_at, off + cmdsize)
+            (rpaths if cmd == 0x8000001C else dylibs).append(text)
+        if cmdsize < 8:
+            break
+        off += cmdsize
+    return dylibs, rpaths
 
 
 # libraries every Linux desktop has; anything else would have to ship next to the binaries.
@@ -434,6 +637,19 @@ SYSTEM_LIB_RE = re.compile(
     r"^(libc|libm|libdl|librt|libpthread|libresolv|libutil|libz|libstdc\+\+|libgcc_s)\.so(\.\d+)*$"
     r"|^ld-linux[-\w.]*\.so(\.\d+)*$"
 )
+# DLLs that come with Windows (plus the API sets). A DLL outside this list is only reported: the
+# list is not complete, and the build folder check below is what refuses a dynamic build.
+WINDOWS_SYSTEM_DLLS = {
+    "kernel32.dll", "kernelbase.dll", "ntdll.dll", "user32.dll", "gdi32.dll", "advapi32.dll",
+    "shell32.dll", "ole32.dll", "oleaut32.dll", "comdlg32.dll", "comctl32.dll", "ws2_32.dll",
+    "wsock32.dll", "crypt32.dll", "bcrypt.dll", "ncrypt.dll", "secur32.dll", "winmm.dll",
+    "imm32.dll", "version.dll", "setupapi.dll", "cfgmgr32.dll", "dbghelp.dll", "shlwapi.dll",
+    "opengl32.dll", "dwmapi.dll", "uxtheme.dll", "hid.dll", "wldap32.dll", "normaliz.dll",
+    "iphlpapi.dll", "userenv.dll", "winhttp.dll", "wininet.dll", "dinput8.dll", "xinput1_4.dll",
+    "xinput9_1_0.dll", "dxgi.dll", "d3d11.dll", "d3d12.dll", "dsound.dll", "propsys.dll",
+    "powrprof.dll", "psapi.dll", "rpcrt4.dll", "combase.dll", "msvcrt.dll", "ucrtbase.dll",
+    "shcore.dll", "winusb.dll", "mfplat.dll", "mfreadwrite.dll", "mf.dll", "avrt.dll",
+}
 
 
 def shorten(items, keep=3):
@@ -442,40 +658,97 @@ def shorten(items, keep=3):
     return "{} and {} more".format(", ".join(items[:keep]), len(items) - keep)
 
 
-def assess_portability(platform, bin_dir, binaries):
-    """Return (verdict, notes): verdict is 'static', 'dynamic' or 'unknown'."""
-    notes = []
-    cache_path, cache = read_cmake_cache(bin_dir)
-    static = cmake_bool(cache.get("STATICALLY_LINK"))
-    if cache_path:
-        notes.append(
-            "CMake cache {}: STATICALLY_LINK={}, CMAKE_BUILD_TYPE={}".format(
-                cache_path, cache.get("STATICALLY_LINK", "?"), cache.get("CMAKE_BUILD_TYPE", "?")
-            )
-        )
-    verdict = {True: "static", False: "dynamic", None: "unknown"}[static]
+VERDICT_TEXT = {
+    "static": "static build (needs no libraries from the build)",
+    "dynamic": "needs libraries that are not part of the package (dynamic build)",
+    "unknown": "could not be determined",
+}
 
-    if platform == "linux":
-        for name, path in binaries.items():
-            needed, runpath = elf_dynamic_info(path)
+
+def assess_portability(platform, images, folder_files=None, cache=None):
+    """Judge from the binaries themselves which libraries they need.
+    images: {name: bytes}; folder_files: {name: lower-case file names next to that binary} when
+    packaging from a build folder; cache: CMakeCache values (only used when the binaries cannot
+    be read). Returns (verdict, notes, warnings, requirements): verdict is 'static' (only system
+    libraries), 'dynamic' or 'unknown'; requirements the highest GLIBC/GLIBCXX versions (Linux)."""
+    notes, warnings, requirements = [], [], {}
+    verdict = None
+    exe = PLATFORMS[platform][0]
+    for name in BINARIES:
+        img = images.get(name)
+        if img is None:
+            continue
+        label = name + exe
+        try:
+            parsed = (elf_dynamic_info(img) if platform == "linux" else pe_imports(img)
+                      if platform == "windows" else macho_dylibs(img, PLATFORMS[platform][2]))
+        except (struct.error, IndexError, ValueError):
+            parsed = None
+        if parsed is None:
+            continue
+        if platform == "linux":
+            needed, runpath, versions = parsed
+            for key, value in max_symbol_versions(versions).items():
+                requirements[key] = max(requirements.get(key, ()), value)
             odd = [lib for lib in needed if not SYSTEM_LIB_RE.match(lib)]
             abs_rp = [r for r in runpath if not r.startswith("$ORIGIN")]
             if odd or abs_rp:
                 verdict = "dynamic"
-                notes.append(
-                    "{} needs {} (RUNPATH {})".format(
-                        name, shorten(odd) or "only system libraries", shorten(abs_rp) or "none"
-                    )
-                )
-            elif verdict == "unknown":
+                notes.append("{} needs {} (RUNPATH {})".format(
+                    label, shorten(odd) or "only system libraries", shorten(abs_rp) or "none"))
+            elif verdict is None:
                 verdict = "static"
-    elif platform == "windows":
-        dlls = sorted({p.name for b in binaries.values() for p in b.parent.glob("*.dll")})
-        if dlls:
-            notes.append("DLLs next to the binaries: " + ", ".join(dlls[:8]))
-            if static is not True:
+        elif platform == "windows":
+            imports = parsed
+            local = [d for d in imports if folder_files and d.lower() in folder_files.get(name, ())]
+            other = [d for d in imports if d not in local and d.lower() not in WINDOWS_SYSTEM_DLLS
+                     and not re.match(r"^(api|ext)-ms-", d, re.IGNORECASE)]
+            if local:
                 verdict = "dynamic"
-    return verdict, notes
+                notes.append("{} imports {} from its build folder".format(label, shorten(local, 6)))
+            elif verdict is None:
+                verdict = "static"
+            if other:
+                warnings.append("{} imports {}, which is neither in the package nor a known Windows "
+                                "system DLL; it must exist on every machine that runs the mod"
+                                .format(label, shorten(other, 6)))
+        else:
+            dylibs, rpaths = parsed
+            odd = [d for d in dylibs if not d.startswith(("/usr/lib/", "/System/Library/"))]
+            if odd:
+                verdict = "dynamic"
+                rp = " (LC_RPATH {})".format(shorten(rpaths)) if rpaths else ""
+                notes.append("{} loads {}{}".format(label, shorten(odd, 4), rp))
+            elif verdict is None:
+                verdict = "static"
+    if verdict is None:
+        static = cmake_bool((cache or {}).get("STATICALLY_LINK"))
+        verdict = {True: "static", False: "dynamic", None: "unknown"}[static]
+        if static is not None:
+            notes.append("from CMakeCache.txt only (STATICALLY_LINK), the binaries could not be read")
+    return verdict, notes, warnings, requirements
+
+
+def requirement_lines(requirements):
+    """(info line, warning or None) about the glibc/libstdc++ versions a Linux build needs."""
+    if not requirements:
+        return None, None
+    parts = []
+    if "GLIBC" in requirements:
+        parts.append("glibc {}".format(version_text(requirements["GLIBC"])))
+    if "GLIBCXX" in requirements:
+        parts.append("libstdc++ with GLIBCXX_{}".format(version_text(requirements["GLIBCXX"])))
+    line = "needs at least " + " and ".join(parts) + " on the target system"
+    newer = [k for k, v in requirements.items() if k in LINUX_BASELINE and v > LINUX_BASELINE[k]]
+    if not newer:
+        return line, None
+    return line, (
+        "the binaries need a newer {} than Ubuntu 22.04 has (glibc {}, GLIBCXX_{}; the release "
+        "pipeline builds there), so they will not start on Ubuntu 22.04, Debian 12 or older "
+        "distributions. Fine for this machine; for other people share the GitHub release asset or "
+        "build in an ubuntu:22.04 container".format(
+            " and ".join("glibc" if k == "GLIBC" else "libstdc++" for k in sorted(newer)),
+            version_text(LINUX_BASELINE["GLIBC"]), version_text(LINUX_BASELINE["GLIBCXX"])))
 
 
 def maybe_strip(binaries, platform, mode, tmpdir):
@@ -534,13 +807,11 @@ def sort_key(name):
     return name.split("/")
 
 
-def build_plan(repo, platform, binaries, version, timestamp):
-    errors, entries = [], []
-    exe = PLATFORMS[platform][0]
-    for name in BINARIES:
-        entries.append(Entry(name + exe, source=binaries[name], mode=0o755))
-
-    files = []
+def list_data_files(repo):
+    """(files, missing, errors): files is [(path, git mode, archive path)] of every git-tracked file
+    in the packaged folders that exists on disk, missing the tracked paths deleted in the working
+    tree (or outside a sparse checkout)."""
+    files, missing, errors = [], [], []
     for src_tree, dst_tree in DATA_TREES:
         listed = tracked_files(repo, src_tree)
         if not listed:
@@ -553,16 +824,26 @@ def build_plan(repo, platform, binaries, version, timestamp):
             errors.append("{} is not tracked by git".format(src))
         for path, mode in listed:
             files.append((path, mode, dst))
+    present = []
+    for path, mode, dst in files:
+        if mode not in ("120000", "160000") and not os.path.lexists(repo / path):
+            missing.append(path)
+        else:
+            present.append((path, mode, dst))
+    return present, missing, errors
 
-    missing = []
+
+def build_plan(repo, files, binaries, platform, version, timestamp):
+    errors, entries = [], []
+    exe = PLATFORMS[platform][0]
+    for name in BINARIES:
+        entries.append(Entry(name + exe, source=binaries[name], mode=0o755))
+
     for path, mode, dst in files:
         if mode in ("120000", "160000"):
             errors.append("{} is a symlink or submodule in git".format(path))
             continue
         full = repo / path
-        if not full.exists():
-            missing.append(path)
-            continue
         if full.is_symlink() or not full.is_file():
             errors.append("{} is not a regular file".format(path))
             continue
@@ -574,12 +855,6 @@ def build_plan(repo, platform, binaries, version, timestamp):
                 entry.data = text.replace(VERSION_PLACEHOLDER, stamp).encode("utf-8")
                 info("Replaced {} in {} with '{}'".format(VERSION_PLACEHOLDER, path, stamp))
         entries.append(entry)
-    if missing:
-        warn(
-            "{} tracked file(s) are deleted in the working tree and are left out, e.g. {}".format(
-                len(missing), ", ".join(missing[:3])
-            )
-        )
 
     dirs = set(EMPTY_DIRS)
     for e in entries:
@@ -594,6 +869,56 @@ def build_plan(repo, platform, binaries, version, timestamp):
 # --------------------------------------------------------------------------------------------------
 # Checks (shared by the plan and by archives read back from disk)
 # --------------------------------------------------------------------------------------------------
+
+
+# Files that game.gp compiles from custom_assets (macros in goal_src/jak1/game.gp:157-235 and
+# goal_src/jak{2,3,x}/lib/project-lib.gp) and literal `:in "..."` inputs. {g} is the game, {0} the
+# string in game.gp. Without them the launcher's compile step fails ("Input file ... does not exist").
+GAME_GP_INPUTS = [
+    (re.compile(r'\(build-custom-level\s+"([^"]+)"'), "data/custom_assets/{g}/levels/{0}/{0}.jsonc"),
+    (re.compile(r'\(custom-level-cgo\s+"[^"]*"\s+"([^"]+)"'), "data/custom_assets/{g}/levels/{0}"),
+    (re.compile(r'\(build-actor\s+"([^"]+)"'), "data/custom_assets/{g}/models/custom_levels/{0}.glb"),
+    (re.compile(r'\(custom-actor-cgo\s+"[^"]*"\s+"([^"]+)"'), "data/custom_assets/{g}/models/{0}"),
+    (re.compile(r':in\s+"((?:custom_assets|game/assets|decompiler/config|goal_src)/[^"]+)"'), "data/{0}"),
+]
+
+
+def strip_goal_comments(text):
+    """GOAL/GOOS source without #| block |# and ; line comments (strings and #\\x characters
+    are kept)."""
+    text = re.sub(r"#\|.*?\|#", "", text, flags=re.DOTALL)
+    out, i, n, in_string = [], 0, len(text), False
+    while i < n:
+        ch = text[i]
+        if in_string:
+            if ch == "\\":
+                out.append(text[i:i + 2])
+                i += 2
+                continue
+            in_string = ch != '"'
+        elif ch == '"':
+            in_string = True
+        elif ch == "#" and text.startswith("#\\", i):
+            out.append(text[i:i + 3])
+            i += 3
+            continue
+        elif ch == ";":
+            nl = text.find("\n", i)
+            i = n if nl < 0 else nl
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+
+def game_gp_inputs(game, text):
+    """Archive paths of the input files that `game`'s game.gp names explicitly."""
+    text = strip_goal_comments(text)
+    found = set()
+    for pattern, template in GAME_GP_INPUTS:
+        for m in pattern.finditer(text):
+            found.add(template.format(m.group(1), g=game))
+    return sorted(found)
 
 
 def check_entries(records, platform, games, content_reader=None):
@@ -633,6 +958,15 @@ def check_entries(records, platform, games, content_reader=None):
     for r in required:
         if by_name.get(r, (None,))[0] != "file":
             errors.append("missing required file: " + r)
+    if content_reader is not None:
+        for g in games:
+            gp = "data/goal_src/{}/game.gp".format(g)
+            if by_name.get(gp, (None,))[0] != "file":
+                continue
+            text = content_reader(gp, None).decode("utf-8", errors="replace")
+            for r in game_gp_inputs(g, text):
+                if by_name.get(r, (None,))[0] != "file":
+                    errors.append("missing file that {} compiles: {}".format(gp, r))
     for d in ["data", "data/log", "data/game/assets", "data/game/graphics/opengl_renderer/shaders"]:
         if d not in by_name:
             errors.append("missing directory: " + d)
@@ -798,10 +1132,18 @@ def infer_platform(reader, records):
     return "linux"
 
 
+# what a truncated, corrupt or mislabelled archive raises while it is read
+ARCHIVE_READ_ERRORS = (tarfile.TarError, zipfile.BadZipFile, EOFError, zlib.error, OSError)
+
+
 def verify_archive(path, platform, games, extract_test, verbose):
     """Read an archive back, re-run every check, optionally extract it.
-    Returns (errors, records, platform)."""
-    reader = ArchiveReader(path)
+    Returns (errors, records, platform, images) with images {binary name: bytes}."""
+    try:
+        reader = ArchiveReader(path)
+    except ARCHIVE_READ_ERRORS as e:
+        raise PackageError("{} is not a readable {} archive: {}".format(
+            path, "zip" if str(path).endswith(".zip") else ".tar.gz", e or type(e).__name__))
     try:
         records = reader.records()
         if platform is None:
@@ -811,11 +1153,13 @@ def verify_archive(path, platform, games, extract_test, verbose):
                 info("  {:<4} {:>4} {:>10}  {}".format(
                     kind[:4], "" if mode is None else "{:o}".format(mode), size, name))
         errors = check_entries(records, platform, games, reader.read)
+        exe = PLATFORMS[platform][0]
+        names = {r[0] for r in records if r[1] == "file"}
+        images = {b: reader.read(b + exe) for b in BINARIES if b + exe in names}
         if not errors and extract_test:
             with tempfile.TemporaryDirectory(prefix="coop-mod-check-") as tmp:
                 reader.extract_to(tmp)
                 root = Path(tmp)
-                exe = PLATFORMS[platform][0]
                 for b in BINARIES:
                     p = root / (b + exe)
                     if not p.is_file():
@@ -828,7 +1172,10 @@ def verify_archive(path, platform, games, extract_test, verbose):
                 expected = sum(1 for r in records if r[1] == "file")
                 if count != expected:
                     errors.append("after extraction: {} files, expected {}".format(count, expected))
-        return errors, records, platform
+        return errors, records, platform, images
+    except ARCHIVE_READ_ERRORS as e:
+        raise PackageError("{} could not be read (truncated or corrupt?): {}".format(
+            path, e or type(e).__name__))
     finally:
         reader.close()
 
@@ -909,6 +1256,11 @@ def parse_args(argv):
     p.add_argument("--allow-dynamic", action="store_true",
                    help="package a dynamically linked Linux/macOS build anyway (works only on this "
                    "machine while the build folder exists)")
+    p.add_argument("--allow-stale", action="store_true",
+                   help="package binaries even though C/C++ sources changed after they were built")
+    p.add_argument("--allow-uncommitted", action="store_true",
+                   help="package even though the packaged folders have staged-but-uncommitted, "
+                   "untracked or deleted files (staged files are included, the others left out)")
     p.add_argument("--dry-run", action="store_true", help="run all checks, write nothing")
     p.add_argument("--check", type=Path, metavar="ARCHIVE",
                    help="only verify an existing archive (yours or a release asset)")
@@ -928,15 +1280,42 @@ def run_check(args):
     games = parse_games(args.games)
     if not args.check.is_file():
         raise PackageError("{} does not exist".format(args.check))
-    errors, records, platform = verify_archive(args.check, args.platform, games, True, args.verbose)
+    errors, records, platform, images = verify_archive(
+        args.check, args.platform, games, True, args.verbose)
     files = sum(1 for r in records if r[1] == "file")
     info("{}: {} entries ({} files), platform {}".format(args.check, len(records), files, platform))
+    verdict, notes, warnings, requirements = assess_portability(platform, images)
+    info("Linking: " + VERDICT_TEXT[verdict])
+    for n in notes:
+        info("         " + n)
+    req_line, req_warning = requirement_lines(requirements) if platform == "linux" else (None, None)
+    if req_line:
+        info("Target : " + req_line)
+    for w in warnings + ([req_warning] if req_warning else []):
+        warn(w)
+    if verdict == "dynamic":
+        warn("this archive only runs where the libraries listed above exist (an --allow-dynamic "
+             "package?); do not share it")
     if errors:
         for e in errors[:50]:
             info("  ERROR: " + e)
         raise PackageError("{} problem(s) found in {}".format(len(errors), args.check))
-    info("OK: only allowed paths, binaries at the root, data/ next to them.")
+    info("OK: only allowed paths, binaries at the root, data/ next to them, custom assets that "
+         "game.gp builds present.")
     return 0
+
+
+def binaries_containing(binaries, path):
+    """Names of the binaries whose bytes contain `path` (compiled-in source file names)."""
+    text = str(path)
+    needles = {text.encode("utf-8"), text.replace("\\", "/").encode("utf-8")}
+    hits = []
+    for name, p in binaries.items():
+        with open(p, "rb") as f:
+            data = f.read()
+        if any(n in data for n in needles):
+            hits.append(name)
+    return hits
 
 
 def run_package(args):
@@ -949,15 +1328,16 @@ def run_package(args):
         bin_dir = args.bin_dir if args.bin_dir.is_absolute() else Path.cwd() / args.bin_dir
     else:
         bin_dir = None
+    candidates = []
     platform = args.platform or host_platform()
     if platform is None:  # macOS host: Intel or Apple Silicon build?
-        probe = bin_dir or detect_bin_dir(repo, "macos-intel")
+        probe = bin_dir or detect_bin_dir(repo, "macos-intel")[0]
         gk = find_binary(probe, "gk", "")
         fmt = binary_format(gk) if gk else ""
         platform = "macos-arm" if fmt == "macho-arm64" else "macos-intel"
     exe, ext, fmt_expected = PLATFORMS[platform]
     if bin_dir is None:
-        bin_dir = detect_bin_dir(repo, platform)
+        bin_dir, candidates = detect_bin_dir(repo, platform)
     bin_dir = bin_dir.resolve()
 
     errors = []
@@ -980,14 +1360,42 @@ def run_package(args):
     if errors:
         raise PackageError("\n  ".join(["binaries:"] + errors))
 
-    verdict, notes = assess_portability(platform, bin_dir, binaries)
-    _, cache = read_cmake_cache(bin_dir)
+    images = {}
+    for name, path in binaries.items():
+        with open(path, "rb") as f:
+            images[name] = f.read()
+    folder_files = None
+    if platform == "windows":
+        folder_files = {name: {p.name.lower() for p in path.parent.iterdir()
+                               if p.suffix.lower() == ".dll" and p.is_file()}
+                        for name, path in binaries.items()}
+    cache_path, cache = read_cmake_cache(bin_dir)
     build_type = cache.get("CMAKE_BUILD_TYPE")
+    verdict, notes, port_warnings, requirements = assess_portability(
+        platform, images, folder_files, cache)
+    del images
+    if cache_path:
+        notes.append("CMake cache {}: STATICALLY_LINK={} (as of the last configure)".format(
+            cache_path, cache.get("STATICALLY_LINK", "?")))
+    build_root = cache_path.parent if cache_path else bin_dir
+    gk_time = binaries["gk"].stat().st_mtime
+    stale = stale_sources(repo, binaries)
+
+    # git state of the packaged folders and of the sources the binaries were built from
+    data_paths = [t for t, _ in DATA_TREES] + [f for f, _ in DATA_FILES]
+    status = git_status(repo, data_paths)
+    src_paths = sorted({r for rs in BINARY_SOURCES.values() for r in rs}) + ["CMakeLists.txt"]
+    src_changed = [p for code, p in git_status(repo, src_paths) if code != "??"]
+    files, missing, list_errors = list_data_files(repo)
+    committed = head_files(repo, data_paths)
+    new_files = sorted(p for p, _, _ in files if p not in committed)
+    untracked = sorted(p for code, p in status if code == "??")
+    modified = sorted({p for code, p in status
+                       if code != "??" and p in committed and os.path.lexists(repo / p)})
+    dirty = bool(modified or new_files or missing or src_changed)
 
     # version and names
     version = args.version or (tag if tag and SEMVER_RE.match(tag[1:] if tag.startswith("v") else tag) else "")
-    status = git_status(repo, [t for t, _ in DATA_TREES] + [f for f, _ in DATA_FILES])
-    dirty = any(code != "??" for code, _ in status)
     if not version:
         version = "v0.0.0-local.g{}{}".format(sha, ".dirty" if dirty else "")
     if not version.startswith("v"):
@@ -1003,53 +1411,112 @@ def run_package(args):
     out_dir = (args.out_dir or repo / "build" / "coop-mod").resolve()
     archive = out_dir / (stem + ext)
 
-    info("Repository : {} (HEAD {}{})".format(repo, sha, ", tracked changes in packaged folders" if dirty else ""))
+    info("Repository : {} (HEAD {}, committed {}{})".format(
+        repo, sha, fmt_time(epoch), ", uncommitted changes" if dirty else ""))
     info("Platform   : {}".format(platform))
-    info("Binaries   : {} (build type {}, linking {})".format(bin_dir, build_type or "unknown", verdict))
+    info("Binaries   : {} (gk built {}, build type {})".format(
+        bin_dir, fmt_time(gk_time), build_type or "unknown"))
+    for cand, static, mtime in candidates[1:]:
+        info("             also found: {} (gk built {}{})".format(
+            cand, fmt_time(mtime), ", static" if static else ""))
+    info("Linking    : {}".format(VERDICT_TEXT[verdict]))
     for n in notes:
         info("             " + n)
+    req_line, req_warning = requirement_lines(requirements) if platform == "linux" else (None, None)
+    if req_line:
+        info("Target     : " + req_line)
     info("Version    : {}".format(version))
 
-    untracked = [p for code, p in status if code == "??"]
+    blockers = list(list_errors)
+    for cand, _, mtime in candidates[1:]:
+        if mtime > gk_time:
+            warn("{} has a newer gk (built {}) than the build being packaged. Rebuild this one "
+                 "({}), or pass --bin-dir to choose".format(
+                     cand, fmt_time(mtime), "cmake --build " + str(build_root)))
+    if stale:
+        lines = []
+        for name, newer in stale.items():
+            lines.append("{} (built {}) is older than {} of its source file(s), newest {} ({})".format(
+                binaries[name].name, fmt_time(binaries[name].stat().st_mtime), len(newer),
+                newer[0][1], fmt_time(newer[0][0])))
+        if args.allow_stale:
+            for line in lines:
+                warn(line + "; packaging it anyway (--allow-stale)")
+        else:
+            blockers.append(
+                "the binaries were built before their sources last changed, so they may not match "
+                "the GOAL code that would be packaged:\n  " + "\n  ".join(lines)
+                + "\nRebuild first:\n    cmake --build {}\nor pass --allow-stale.".format(build_root))
+    if src_changed:
+        warn("{} C/C++ source file(s) have uncommitted changes (the binaries may include them; the "
+             "version is marked .dirty), e.g. {}".format(len(src_changed), shorten(src_changed, 3)))
+
+    problems = []
+    if new_files:
+        problems.append("{} file(s) are staged but not committed (they would be included): {}".format(
+            len(new_files), shorten(new_files, 8)))
     if untracked:
-        warn("{} untracked file(s) in packaged folders are NOT included (git add them if the mod "
-             "needs them), e.g. {}".format(len(untracked), ", ".join(untracked[:5])))
-    if dirty:
-        warn("packaged folders have uncommitted changes; they are included as they are on disk")
+        problems.append("{} untracked file(s) would be left out (git add and commit them if the mod "
+                        "needs them): {}".format(len(untracked), shorten(untracked, 8)))
+    if missing:
+        problems.append("{} tracked file(s) are deleted in the working tree (or outside a sparse "
+                        "checkout) and would be left out: {}".format(len(missing), shorten(missing, 8)))
+    if problems and not args.allow_uncommitted:
+        blockers.append("the packaged folders differ from the last commit:\n  " + "\n  ".join(problems)
+                        + "\nCommit or remove these changes (or restore the deleted files), or pass "
+                        "--allow-uncommitted.")
+    for problem in problems if args.allow_uncommitted else []:
+        warn(problem)
+    if modified:
+        warn("{} tracked file(s) in the packaged folders have uncommitted edits; they are included "
+             "as they are on disk: {}".format(len(modified), shorten(modified, 5)))
     if build_type and build_type != "Release":
         warn("CMAKE_BUILD_TYPE is {}, the release pipeline uses Release".format(build_type))
 
     if verdict == "dynamic":
-        hint = "Build the static preset instead:\n    " + STATIC_BUILD_HINT[platform]
+        hint = "Build the static preset instead:\n    " + "\n    ".join(STATIC_BUILD_HINT[platform])
         if platform == "windows":
-            raise PackageError("this build is dynamically linked: its DLLs are not part of the mod "
-                               "layout, so the packaged gk.exe would not start. {}".format(hint))
-        problem = ("this build is dynamically linked: the archive would only run on this machine, and "
-                   "only while {} exists".format(bin_dir))
-        if not args.allow_dynamic:
-            raise PackageError("{}. {}\nor pass --allow-dynamic for a package you only use on this "
-                               "machine".format(problem, hint))
-        warn(problem + ". Do not share this archive.")
+            blockers.append("this build is dynamically linked: its DLLs are not part of the mod "
+                            "layout, so the packaged executables would not start. " + hint)
+        elif not args.allow_dynamic:
+            blockers.append("this build is dynamically linked: the archive would only run where "
+                            "the libraries listed above exist (for a normal CMake build: on this "
+                            "machine, while {} exists). {}\nor pass --allow-dynamic for a package "
+                            "you only use on this machine".format(bin_dir, hint))
+        else:
+            warn("this build is dynamically linked: the archive only runs where the libraries listed "
+                 "above exist (for a normal CMake build: on this machine, while {} exists). Do not "
+                 "share this archive.".format(bin_dir))
     elif verdict == "unknown":
-        warn("could not tell whether the build is statically linked (no CMakeCache.txt found)")
+        warn("could not tell from the binaries or CMakeCache.txt whether the build is statically linked")
+    for w in port_warnings + ([req_warning] if req_warning else []):
+        warn(w)
+
+    if blockers:
+        raise PackageError("nothing was written:\n\n" + "\n\n".join(blockers))
 
     timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     with tempfile.TemporaryDirectory(prefix="coop-mod-") as tmp:
         staged_bins = binaries if args.dry_run else maybe_strip(binaries, platform, args.strip, tmp)
-        entries, plan_errors = build_plan(repo, platform, staged_bins, version, timestamp)
+        leaked = binaries_containing(staged_bins, repo)
+        if leaked:
+            info("NOTE: {} contain the build path {} (compiled-in source file names), which shows "
+                 "your user name. Fine for your own use; to share, prefer the GitHub release.".format(
+                     ", ".join(n + exe for n in leaked), repo))
+        entries, plan_errors = build_plan(repo, files, staged_bins, platform, version, timestamp)
 
         records = plan_records(entries)
-        files = [e for e in entries if not e.is_dir]
-        content = {e.name: e for e in files}
+        plan_files = [e for e in entries if not e.is_dir]
+        content = {e.name: e for e in plan_files}
         plan_errors += check_entries(records, platform, games, lambda n, limit: content[n].read(limit))
         if plan_errors:
             for e in plan_errors[:50]:
                 info("  ERROR: " + e)
             raise PackageError("{} problem(s) with the files to package; nothing was written".format(
                 len(plan_errors)))
-        total = sum(e.size() for e in files)
+        total = sum(e.size() for e in plan_files)
         info("Contents   : {} files + {} folders, {:.1f} MB uncompressed".format(
-            len(files), len(entries) - len(files), total / (1 << 20)))
+            len(plan_files), len(entries) - len(plan_files), total / (1 << 20)))
         if args.verbose:
             for e in entries:
                 info("  {}{}".format(e.name, "/" if e.is_dir else ""))
@@ -1066,7 +1533,7 @@ def run_package(args):
                 write_zip(entries, partial, epoch)
             else:
                 write_tar_gz(entries, partial, epoch)
-            errors, read_back, _ = verify_archive(partial, platform, games, True, False)
+            errors, read_back, _, _ = verify_archive(partial, platform, games, True, False)
             if not errors and len(read_back) != len(records):
                 errors.append("archive has {} entries, expected {}".format(len(read_back), len(records)))
             if errors:
@@ -1092,8 +1559,8 @@ def run_package(args):
     info("      {}".format(sha_path))
     if meta_path:
         info("      {}".format(meta_path))
-    info("Verified: only allowed paths, binaries at the root, data/ next to them,")
-    info("          extracted cleanly into a temporary folder.")
+    info("Verified: only allowed paths, binaries at the root, data/ next to them, custom assets")
+    info("          that game.gp builds present; extracted cleanly into a temporary folder.")
     info("")
     info("Add it in the OpenGOAL Launcher:")
     info("  1. Install the official Jak 1 in the launcher first (the mod reuses its extracted disc files).")
