@@ -821,7 +821,7 @@ void InputManager::coop_set_enabled(const bool enabled) {
   }
   if (enabled) {
     if (!m_coop_explicit_assignment || !m_coop_slots.any_assigned()) {
-      m_coop_slots.auto_assign(m_coop_controllers);
+      m_coop_slots.auto_assign(m_coop_controllers, coop_port0_controller_instance_id());
     } else {
       m_coop_slots.on_controllers_changed(m_coop_controllers);
     }
@@ -873,9 +873,21 @@ void InputManager::coop_cancel_join() {
   m_coop_slots.cancel_join();
 }
 
+/// SDL instance id of the controller that currently feeds port 0 (player 1), -1 if none.
+/// Like get_controller_index, this reads the port mapping from the EE thread; it only changes on
+/// hotplug or when the co-op mapping is applied.
+int InputManager::coop_port0_controller_instance_id() const {
+  const auto it = m_controller_port_mapping.find(0);
+  if (it == m_controller_port_mapping.end() || it->second < 0 ||
+      it->second >= (int)m_available_controllers.size()) {
+    return -1;
+  }
+  return m_available_controllers.at(it->second)->get_sdl_instance_id();
+}
+
 void InputManager::coop_auto_assign() {
   const std::lock_guard<std::mutex> lock(m_coop_mtx);
-  m_coop_slots.auto_assign(m_coop_controllers);
+  m_coop_slots.auto_assign(m_coop_controllers, coop_port0_controller_instance_id());
   m_coop_explicit_assignment = false;
   m_coop_mapping_dirty = true;
 }

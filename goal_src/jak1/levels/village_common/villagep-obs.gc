@@ -94,7 +94,7 @@
                         #f)
                        (else #t))
                      (time-elapsed? (-> self state-time) (seconds 0.1)))
-            (if (and (cpad-pressed? 0 circle) (process-grab? *target*)) (go-virtual active))
+            (if (and (cpad-pressed? (target-cpad-idx) circle) (process-grab? *target*)) (go-virtual active)) ;; og:preserve-this coop: pad of the player using it
             (if (and *cheat-mode* (cpad-pressed? 0 l3)) (set! (-> self max-slot) 4))
             (let ((gp-0 (new 'stack 'font-context *font-default-matrix* 32 160 0.0 (font-color default) (font-flags shadow kerning))))
               (set-width! gp-0 440)
@@ -140,10 +140,10 @@
       (set-time! (-> self state-time)))
   :trans
     (behavior ()
-      (when (or (and (cpad-pressed? 0 triangle) (time-elapsed? (-> self state-time) (seconds 0.1)) (process-release? *target*))
+      (when (or (and (cpad-pressed? (target-cpad-idx) triangle) (time-elapsed? (-> self state-time) (seconds 0.1)) (process-release? *target*)) ;; og:preserve-this coop: pad of the player using it
                 (not *target*))
-        (logclear! (-> *cpad-list* cpads 0 button0-abs 0) (pad-buttons triangle))
-        (logclear! (-> *cpad-list* cpads 0 button0-rel 0) (pad-buttons triangle))
+        (logclear! (-> *cpad-list* cpads (target-cpad-idx) button0-abs 0) (pad-buttons triangle)) ;; og:preserve-this coop: pad of the player using it
+        (logclear! (-> *cpad-list* cpads (target-cpad-idx) button0-rel 0) (pad-buttons triangle)) ;; og:preserve-this coop: pad of the player using it
         (sound-play "cursor-options")
         (go-virtual idle))
       (when *target*
@@ -163,12 +163,12 @@
           (loop
             (when (zero? s2-0)
               (cond
-                ((cpad-pressed? 0 right)
+                ((cpad-pressed? (target-cpad-idx) right) ;; og:preserve-this coop: pad of the player using it
                  (set! s5-0 #t)
                  (set! s4-0 #f)
                  (sound-play "cursor-up-down")
                  (set! s3-0 (get-next-slot-up self s3-0)))
-                ((cpad-pressed? 0 left)
+                ((cpad-pressed? (target-cpad-idx) left) ;; og:preserve-this coop: pad of the player using it
                  (set! s5-0 #t)
                  (set! s4-0 #t)
                  (sound-play "cursor-up-down")
@@ -182,9 +182,9 @@
             (hide-hud)
             (let ((s1-2 (get-continue-by-name *game-info* (-> *warp-info* gp-0))))
               (lookup-level-info (-> s1-2 level))
-              (when (and (time-elapsed? (-> self state-time) (seconds 0.05)) (cpad-pressed? 0 circle))
-                (logclear! (-> *cpad-list* cpads 0 button0-abs 0) (pad-buttons circle))
-                (logclear! (-> *cpad-list* cpads 0 button0-rel 0) (pad-buttons circle))
+              (when (and (time-elapsed? (-> self state-time) (seconds 0.05)) (cpad-pressed? (target-cpad-idx) circle)) ;; og:preserve-this coop: pad of the player using it
+                (logclear! (-> *cpad-list* cpads (target-cpad-idx) button0-abs 0) (pad-buttons circle)) ;; og:preserve-this coop: pad of the player using it
+                (logclear! (-> *cpad-list* cpads (target-cpad-idx) button0-rel 0) (pad-buttons circle)) ;; og:preserve-this coop: pad of the player using it
                 (go-virtual use gp-0 (the-as level s1-2))))
             (let ((s1-3 (new 'stack 'font-context *font-default-matrix* 6 110 0.0 (font-color default) (font-flags shadow kerning))))
               (set-scale! s1-3 0.7)
