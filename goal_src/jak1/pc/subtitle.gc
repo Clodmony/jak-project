@@ -558,12 +558,17 @@
   :post
     (behavior ()
       ;; og:preserve-this coop: on split-screen frames the subtitle goes to the view of the player who
-      ;; hears it (coop-subtitle-views), drawn in that player's context
+      ;; hears it (coop-subtitle-views): only the bucket group is switched, the player context stays
       (let ((views (coop-subtitle-views)))
         (if (zero? views)
           (subtitle-post-draw)
-          (dotimes (v 2)
-            (if (logtest? views (ash 1 v)) (with-coop-player v (subtitle-post-draw))))))
+          (let* ((frame (-> *display* frames (-> *display* on-screen) frame))
+                 (saved (-> frame bucket-group)))
+            (dotimes (v 2)
+              (when (logtest? views (ash 1 v))
+                (set! (-> frame bucket-group) (-> *coop-frame* groups v))
+                (subtitle-post-draw)))
+            (set! (-> frame bucket-group) saved))))
       0))
 
 (defstate subtitle-debug (subtitle)
