@@ -662,6 +662,8 @@
               (none)))
        (new 'static 'game-option :option-type (game-option-type button) :name (text-id back) :scale #t)))
 
+(define-extern coop-open-join-screen (function progress symbol none)) ;; og:preserve-this coop
+
 (define *misc-options*
   (new 'static
        'boxed-array
@@ -679,7 +681,12 @@
             :scale #t
             :on-confirm
             (lambda ()
-              (if (-> *coop* enabled?) (coop-start) (coop-stop))
+              (cond
+                ;; turned on: player 2 joins on the join screen first, co-op starts from there
+                ((and (-> *coop* enabled?) (not (coop-active?)) *progress-process*)
+                 (set! (-> *coop* enabled?) #f)
+                 (coop-open-join-screen (-> *progress-process* 0) 'resume))
+                ((not (-> *coop* enabled?)) (coop-stop)))
               (set! (-> *coop* enabled?) (coop-active?))
               (none)))
        (new 'static
@@ -830,6 +837,81 @@
        (new 'static 'game-option :option-type (game-option-type button) :name (text-id local-coop-new-game) :scale #t)
        (new 'static 'game-option :option-type (game-option-type button) :name (text-id local-coop-load-game) :scale #t)
        (new 'static 'game-option :option-type (game-option-type button) :name (text-id back) :scale #t)))
+
+;; og:preserve-this coop: join screen. Player 1 keeps the device they use, player 2 joins by pressing a
+;; button on their controller (or a key, when player 1 uses a controller). Co-op starts with "Start".
+(defun coop-both-joined? ()
+  (and (logtest? (pc-coop-slot-status 0) 4) (logtest? (pc-coop-slot-status 1) 4)))
+
+(define *coop-join-options*
+  (new 'static
+       'boxed-array
+       :type
+       game-option
+       (new 'static
+            'game-option
+            :option-type (game-option-type button)
+            :name (text-id local-coop-start)
+            :scale #t
+            :option-disabled-func
+            (lambda ()
+              (not (coop-both-joined?))))
+       (new 'static 'game-option :option-type (game-option-type button) :name (text-id local-coop-swap) :scale #t)
+       (new 'static 'game-option :option-type (game-option-type button) :name (text-id back) :scale #t)))
+
+;; what "Start" on the join screen leads to: 'new (new game slots), 'load (load slots), 'resume (back to the menu)
+(define *coop-join-then* 'resume)
+
+(defun coop-open-join-screen ((obj progress) (then symbol))
+  "Go to the join screen (from the current screen, which Back returns to)."
+  (set! *coop-join-then* then)
+  (pc-coop-prepare-join!)
+  (push! obj)
+  (set! (-> obj next-display-state) (progress-screen coop-join))
+  (none))
+
+(define *coop-join-name* (new 'global 'string 128 (the-as string #f)))
+
+(defun coop-draw-join-text ((obj progress) (font font-context))
+  "The join screen's heading and one line per player: their device, or how to join."
+  (let ((alpha (the int (* 128.0 (-> obj transition-percentage-invert))))
+        (x (- 17 (-> obj left-x-offset))))
+    (set-scale! font (* 0.85 (-> obj transition-percentage-invert)))
+    (set-color! font (font-color progress-blue))
+    (set-origin! font x 22)
+    (print-game-text (lookup-text! *common-text* (text-id local-coop) #f) font #f alpha 22)
+    (dotimes (i 2)
+      (let ((status (pc-coop-slot-status i))
+            (y (+ 62 (* i 50))))
+        (set-scale! font (* 0.6 (-> obj transition-percentage-invert)))
+        (set-color! font (font-color progress-yellow))
+        (set-origin! font x y)
+        (print-game-text (lookup-text! *common-text* (if (zero? i) (text-id local-coop-player-1) (text-id local-coop-player-2)) #f)
+                         font
+                         #f
+                         alpha
+                         22)
+        (set-scale! font (* 0.5 (-> obj transition-percentage-invert)))
+        (set-origin! font x (+ y 20))
+        (cond
+          ((not (logtest? status 4))
+           ;; no device yet: blink the hint
+           (set-color! font (font-color default))
+           (if (< (mod (-> *display* real-frame-counter) (seconds 1)) (seconds 0.7))
+             (print-game-text (lookup-text! *common-text* (text-id local-coop-press-to-join) #f) font #f alpha 22)))
+          ((= (logand status 3) 1)
+           (set-color! font (font-color default))
+           (print-game-text (lookup-text! *common-text* (text-id local-coop-keyboard) #f) font #f alpha 22))
+          (else
+           (set-color! font (font-color default))
+           (print-game-text (if (pc-coop-slot-name i *coop-join-name*)
+                              *coop-join-name*
+                              (lookup-text! *common-text* (text-id local-coop-controller) #f))
+                            font
+                            #f
+                            alpha
+                            22))))))
+  (none))
 
 (define *speedrun-options*
   (new 'static
@@ -2162,6 +2244,7 @@
   (set! (-> *options-remap* (progress-screen speedrun-il-options)) *speedrun-il-options*)
   (set! (-> *options-remap* (progress-screen speedrun-cat-ext-options)) *speedrun-cat-ext-options*)
   (set! (-> *options-remap* (progress-screen coop-title)) *coop-title-options*) ;; og:preserve-this coop
+  (set! (-> *options-remap* (progress-screen coop-join)) *coop-join-options*) ;; og:preserve-this coop
   ;; set default params
   (set! (-> *progress-state* aspect-ratio-choice) (get-aspect-ratio))
   (set! (-> *progress-state* video-mode-choice) (get-video-mode))
@@ -2252,13 +2335,19 @@
        (set! (-> *options-remap* (-> obj display-state)) *secrets-title*)
        (set! (-> *options-remap* (-> obj display-state)) *secrets*)))
     (((progress-screen monitor)) (build-monitor-options))
+    (((progress-screen select-controller)) (build-controller-options))
+    (((progress-screen controller-binds) (progress-screen keyboard-binds) (progress-screen mouse-binds))
+     (build-binding-reassignment-options (-> obj display-state)))
     ;; og:preserve-this coop: the title menus pick single player or co-op, so co-op is off there
     ;; (not while leaving one: "new/load co-op game" starts co-op on the way out)
     (((progress-screen title) (progress-screen coop-title))
-     (if (and (coop-active?) (= (-> obj next-display-state) (-> obj display-state))) (coop-stop)))
-    (((progress-screen select-controller)) (build-controller-options))
-    (((progress-screen controller-binds) (progress-screen keyboard-binds) (progress-screen mouse-binds))
-     (build-binding-reassignment-options (-> obj display-state))))
+     (if (and (coop-active?) (= (-> obj next-display-state) (-> obj display-state))) (coop-stop))))
+  ;; og:preserve-this coop: the join screen turns co-op input on before co-op starts; anywhere else
+  ;; (Back from it) it goes off again. Both players' buttons work the join screen.
+  (set! *coop-join-screen?*
+        (or (= (-> obj display-state) (progress-screen coop-join)) (= (-> obj next-display-state) (progress-screen coop-join))))
+  (when (and (not *coop-join-screen?*) (not (coop-active?)) (pc-coop-input-enabled?))
+    (pc-coop-set-input-enabled! #f))
   ;; run nav code
   (let ((options (-> *options-remap* (-> obj display-state))))
     ;; snap scroll if oob
@@ -2532,18 +2621,29 @@
                   ;; exit demo!
                   (set! *master-exit* 'force)
                   (set-master-mode 'game))
-                 ;; og:preserve-this coop: start co-op, then the usual new game / load screens (co-op save slots)
+                 ;; og:preserve-this coop: join screen, then co-op starts and the usual new game / load screens
+                 ;; follow (co-op save slots)
                  (((text-id local-coop-new-game) (text-id local-coop-load-game))
                   (cpad-clear! 0 x)
                   (cpad-clear! 0 circle)
-                  (coop-start)
-                  (push! obj)
                   (sound-play "select-option")
+                  (coop-open-join-screen obj (if (= (-> options (-> obj option-index) name) (text-id local-coop-new-game)) 'new 'load)))
+                 (((text-id local-coop-start))
+                  ;; Back from the screen that follows returns to the one before the join screen
+                  (cpad-clear! 0 x)
+                  (cpad-clear! 0 circle)
+                  (sound-play "start-options")
+                  (coop-start)
                   (set! (-> obj next-display-state)
-                        (set-memcard-screen obj
-                                            (if (= (-> options (-> obj option-index) name) (text-id local-coop-new-game))
-                                              (progress-screen save-game-title)
-                                              (progress-screen load-game)))))
+                        (case *coop-join-then*
+                          (('new) (set-memcard-screen obj (progress-screen save-game-title)))
+                          (('load) (set-memcard-screen obj (progress-screen load-game)))
+                          (else (progress-screen invalid)))))
+                 (((text-id local-coop-swap))
+                  (cpad-clear! 0 x)
+                  (cpad-clear! 0 circle)
+                  (sound-play "cursor-options")
+                  (pc-coop-swap-players!))
                  (((text-id back))
                   ;; go back!
                   (if (= (-> obj display-state) (progress-screen settings)) (sound-play "menu-stats") (sound-play "cursor-options"))
@@ -3067,6 +3167,7 @@
                 (the float (if (and draw-arrows draw-next) (- 195 (-> *progress-process* 0 left-x-offset)) -320))))
         ;; cheating a bit and putting some screen-specific code here. it's not a big deal.
         (case (-> obj display-state)
+          (((progress-screen coop-join)) (coop-draw-join-text obj font)) ;; og:preserve-this coop
           (((progress-screen music-player))
            (set-color! font (font-color default))
            (set-origin! font (- 17 (-> obj left-x-offset)) 14)
@@ -3544,6 +3645,7 @@
               (progress-screen coop-title)) ;; og:preserve-this coop
              (hide-progress-icons)
              (draw-options self 115 25 0.82))
+            (((progress-screen coop-join)) (hide-progress-icons) (draw-options self 190 22 0.7)) ;; og:preserve-this coop
             (((progress-screen settings) (progress-screen settings-title)) (hide-progress-icons) (draw-options self 115 25 0.78))
             (((progress-screen misc-options)) (hide-progress-icons) (draw-options self 115 25 0.59)) ;; og:preserve-this coop: 0.79 -> 0.59, six more options
             (((progress-screen music-player)) (hide-progress-icons) (draw-options self 128 21 0.82))
@@ -3631,6 +3733,10 @@
 (set! (-> progress-going-out enter)
       (lambda :behavior progress ()
         (sound-play "menu-close")
+        ;; og:preserve-this coop: the menu closed on the join screen: co-op input off again
+        (set! *coop-join-screen?* #f)
+        (when (and (not (coop-active?)) (pc-coop-input-enabled?))
+          (pc-coop-set-input-enabled! #f))
         (hide-progress-icons)
         (remove-setting! 'music)
         (apply-settings *setting-control*)

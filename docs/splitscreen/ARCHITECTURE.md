@@ -56,8 +56,15 @@ Consequences, by design:
   cache, player 2 respawn next to player 1 after `respawn-delay`, hold-backs that had to wait, the
   distance leash (`leash-distance`, 1000 m, a safety net since #69).
 - Title screen (all builds): "Local co-op" > "New co-op game" / "Load co-op game" (`*coop-title-options*`,
-  screen `coop-title`, `progress-pc.gc`). Choosing one starts co-op right away, then the normal new game
-  slot choice or load screen follows, so their slots are the co-op ones. Back on the title menu (or
+  screen `coop-title`, `progress-pc.gc`). Choosing one opens the join screen; its "Start" starts co-op,
+  then the normal new game slot choice or load screen follows, so their slots are the co-op ones.
+- Join screen (`coop-join`, `*coop-join-options*`): shown before co-op starts, from the title menu and
+  from Misc Options > "Local co-op" on. It turns co-op input on with player 1 keeping the device that
+  drives port 0 (else keyboard/mouse) and player 2 joining (`pc-coop-prepare-join!`). Each player's
+  device is shown by name (`pc-coop-slot-name`, SDL's controller name) or "keyboard and mouse"; "Start"
+  is locked until both have a device; "Swap players" swaps the two devices (`pc-coop-swap-players!`);
+  Back leaves co-op off and turns co-op input off again (also when the menu closes on that screen).
+  Both players' buttons work the join screen (`*coop-join-screen?*` in `coop-merge-menu-buttons`). Back on the title menu (or
   "Quit game") co-op stops again; on the title screen itself no player 2 is spawned and nothing is
   split (`coop-at-title?`; the game's end leads there with co-op still on).
 - In-game options (all builds, so it works for a launcher mod): Options > Game Options > Misc Options
@@ -123,7 +130,7 @@ input, and losing player 2's pad pauses. `InputManager` applies changes on the g
 keyboard/mouse inputs are released on the old port before the mapping changes, keyboard command
 binds (fullscreen, screenshot, ImGui) keep working when keyboard/mouse has no player, and the key
 used to join is ignored until released. Enabling co-op auto-assigns devices unless the player chose
-them. GOAL API: `pc-coop-*` in `kernel-defs.gc`.
+them (the join screen counts as choosing: `SlotAssigner::prepare_join`, `swap_slots`). GOAL API: `pc-coop-*` in `kernel-defs.gc`.
 
 ## Streaming and world simulation
 

@@ -631,7 +631,10 @@
                         (= v1-2 (progress-screen mouse-binds))
                         (= v1-2 (progress-screen controller-options))
                         (= v1-2 (progress-screen mouse-options))
-                        (= v1-2 (progress-screen reassign-binds-options)))))))))
+                        (= v1-2 (progress-screen reassign-binds-options))
+                        ;; og:preserve-this coop: title co-op menu and join screen
+                        (= v1-2 (progress-screen coop-title))
+                        (= v1-2 (progress-screen coop-join)))))))))
 
 (defmethod visible? ((this progress))
   (the-as symbol (and *progress-process* (zero? (-> *progress-process* 0 in-out-position)))))
