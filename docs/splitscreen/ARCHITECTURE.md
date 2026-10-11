@@ -158,10 +158,13 @@ cross them (#69):
   pairs, the crossing player's first (`coop-want-levels`, the `want-levels` hook; at most four names,
   so nobody's level goes away for the other player's loads). A script's load (boats, warp gates,
   cutscenes take both players along) sets both pairs. A player who got into a level without crossing
-  a boundary (respawned elsewhere, teleported) gets that level as their pair
+  a boundary (respawned elsewhere, teleported) gets the levels whose boxes hold them as their pair
   (`coop-wants-update`, once per frame); a checkpoint reload gives both players the checkpoint's two
   levels (`coop-wants-reset`). Turning off the display of the other player's level is ignored. Vis
   and checkpoints follow player 1 only;
+- the DGO loader, the login state and the loading heap are global, so levels load one at a time:
+  with four wants two can be missing at once, and `load-state update!` adds the next one only when no
+  slot is loading or logging in (`level-load-in-progress?`; the original never had two missing wants);
 - the continue point, `level-distance`, vis, music, ambients and the sound listener stay with player 1.
 So two players can be anywhere in the loaded levels, each in their own. Safety nets:
 - residency guard: right before a level is discarded or hidden (`load-state update!`, `level.gc`),
