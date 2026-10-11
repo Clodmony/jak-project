@@ -198,6 +198,16 @@ so the mod has its own settings and saves, separate from vanilla OpenGOAL:
 - saves: `.../_settings/<name>/OpenGOAL/jak1/saves/`
 - co-op saves: `.../_settings/<name>/OpenGOAL/jak1/saves/coop/`
 
+**Your single-player saves in the mod.** Because of that separate folder, the mod doesn't see the
+saves of the Jak 1 you played before. `scripts/coop-mod/import_saves.py` copies them over: from
+OpenGOAL's own save folder (`~/.config/OpenGOAL/jak1/saves` on Linux, `%APPDATA%\OpenGOAL\jak1\saves`
+on Windows, `~/Library/Application Support/OpenGOAL/jak1/saves` on macOS) to the mod's, which it finds
+through the launcher's `settings.json` (`installationDir`). It copies only single-player save files,
+never touches `saves/coop/`, and skips saves the mod already has unless `--force` (then the old file is
+kept as `.bak`). `--dry-run` shows what it would do. In the mod, load the save from "Load game", then
+turn co-op on in Misc Options: co-op goes on from that progress, and saving then offers the co-op
+slots.
+
 `<source>` is `_local` for "Add from File", or the `sourceName` of a mod source. The `_settings`
 folder is outside the mod folder: uninstalling or re-adding the mod keeps it. A different archive
 name means a different, empty settings folder, so keep the name fixed (`jak1-coop`).
