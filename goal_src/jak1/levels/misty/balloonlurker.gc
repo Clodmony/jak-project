@@ -445,7 +445,7 @@
     ((not (-> self dead))
      (if (zero? (-> self engine-sound-id)) (set! (-> self engine-sound-id) (new-sound-id)))
      (if (zero? (-> self pedal-sound-id)) (set! (-> self pedal-sound-id) (new-sound-id)))
-     (when (< (vector-vector-distance (-> self root-overlay trans) (ear-trans)) 286720.0)
+     (when (< (coop-sound-ear-distance (-> self root-overlay trans)) 286720.0) ;; og:preserve-this coop
        (let* ((f0-2 (/ (-> self engine-thrust) (-> *BALLOONLURKER-bank* max-engine-thrust)))
               (f1-2 100.0)
               (f0-3 (* 3.0 f0-2)))
