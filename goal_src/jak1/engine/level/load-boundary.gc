@@ -1121,6 +1121,7 @@
       (format 0 "WARNING: load state somehow aquired object command ~A~%" (-> this object-name s4-0))
       (set! (-> this object-name s4-0) #f)))
   (mem-copy! (&-> *backup-load-state* type) (&-> this type) (size-of coop-load-state)) ;; og:preserve-this coop: was 2092, the load-state size
+  (coop-wants-backup) ;; og:preserve-this coop: the players' level pairs go with the wants
   (set! (-> *backup-load-state* command-list) '())
   (set! (-> this command-list) arg0)
   0)
@@ -1134,12 +1135,14 @@
         (if (-> a0-3 extra process) (kill! a0-3)))
       (set! (-> this object-name s5-0) #f)))
   (mem-copy! (&-> this type) (&-> *backup-load-state* type) (size-of coop-load-state)) ;; og:preserve-this coop
+  (coop-wants-restore) ;; og:preserve-this coop
   0)
 
 (defmethod restore-load-state ((this load-state))
   (dotimes (v1-0 256)
     (if (-> this object-name v1-0) (set! (-> this object-name v1-0) #f)))
   (mem-copy! (&-> this type) (&-> *backup-load-state* type) (size-of coop-load-state)) ;; og:preserve-this coop
+  (coop-wants-restore) ;; og:preserve-this coop
   0)
 
 ;; ERROR: Failed load: (set! a0-1 (l.wu (+ a0-0 -4))) at op 11
