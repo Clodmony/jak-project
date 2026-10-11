@@ -1,7 +1,8 @@
 # Copied from OpenGOAL-Mods/OG-Mod-Base (commit 2c4ee857, ISC licence, OpenGOAL Team).
 # Changes for this fork (AI-assisted): actions/checkout, upload-artifact and download-artifact
-# use the same versions as the other workflows in this repository, and the optional `customTag`
-# input is passed to github-tag-action as `custom_tag`. Everything else is unchanged.
+# use the same versions as the other workflows in this repository, the optional `customTag`
+# input is passed to github-tag-action as `custom_tag`, and `dryRun` builds and bundles everything
+# without a tag or a release (the assets stay workflow artifacts). Everything else is unchanged.
 # Called by cut-release.yaml; see docs/splitscreen/MOD.md.
 name: "Mod Release Pipeline"
 on:
@@ -62,6 +63,11 @@ on:
         required: false
         default: false
         type: "boolean"
+      dryRun:
+        description: "Build and bundle without creating a tag or a release: the assets and metadata.json are uploaded as workflow artifacts (named like the release assets, version `v<customTag>-dry-run`). Defaults to `false`"
+        required: false
+        default: false
+        type: "boolean"
     secrets:
       token:
         description: "GitHub token used to create the release and push assets to it."
@@ -102,10 +108,11 @@ jobs:
       - validate_metadata
     runs-on: ubuntu-latest
     outputs:
-      bundleTagName: ${{ steps.tag_version.outputs.new_tag }}
+      bundleTagName: ${{ steps.tag_version.outputs.new_tag || steps.dry_run.outputs.new_tag }}
     steps:
       - name: Bump Version and Push Tag
         id: tag_version
+        if: ${{ !inputs.dryRun }}
         uses: mathieudutour/github-tag-action@v6.2
         with:
           github_token: ${{ secrets.token }}
@@ -115,9 +122,15 @@ jobs:
           custom_tag: ${{ inputs.customTag }}
 
       - name: Create Release
+        if: ${{ !inputs.dryRun }}
         env:
           GITHUB_TOKEN: ${{ secrets.token }}
         run: gh release create ${{ steps.tag_version.outputs.new_tag }} --generate-notes --draft --repo ${{ github.repository }}
+
+      - name: Dry Run Version Name
+        id: dry_run
+        if: ${{ inputs.dryRun }}
+        run: echo "new_tag=v${{ inputs.customTag }}-dry-run" >> "$GITHUB_OUTPUT"
 
   # if `buildBinaries`, run the workflow to build and generate artifacts
 
@@ -143,7 +156,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ needs.create_release.outputs.bundleTagName }}
+          ref: ${{ inputs.dryRun && github.sha || needs.create_release.outputs.bundleTagName }}
 
       - name: "Checkout Repository"
         uses: actions/checkout@v7
@@ -200,7 +213,7 @@ jobs:
     steps:      
       - uses: actions/checkout@v7
         with:
-          ref: ${{ needs.create_release.outputs.bundleTagName }}
+          ref: ${{ inputs.dryRun && github.sha || needs.create_release.outputs.bundleTagName }}
 
       - name: "Checkout Repository"
         uses: actions/checkout@v7
@@ -259,7 +272,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ needs.create_release.outputs.bundleTagName }}
+          ref: ${{ inputs.dryRun && github.sha || needs.create_release.outputs.bundleTagName }}
 
       - name: "Checkout Repository"
         uses: actions/checkout@v7
@@ -430,7 +443,16 @@ jobs:
           npm install -g ajv-cli
           ajv validate -s ./.github/schemas/mods/v2/mod-schema.v2.json -d ${{ inputs.outputDir }}/dist/metadata.json
 
+      - name: Upload Dry Run Assets
+        if: ${{ inputs.dryRun }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-dry-run
+          if-no-files-found: error
+          path: ${{ inputs.outputDir }}/dist
+
       - name: Upload Assets
+        if: ${{ !inputs.dryRun }}
         env:
           GITHUB_TOKEN: ${{ secrets.token }}
         run: |
@@ -439,6 +461,7 @@ jobs:
           gh release upload "${TAG_VAL}" ${{ github.WORKSPACE }}/${{ inputs.outputDir }}/dist/* --repo ${{ github.repository }} --clobber
 
       - name: Publish Release
+        if: ${{ !inputs.dryRun }}
         env:
           GITHUB_TOKEN: ${{ secrets.token }}
         run: |

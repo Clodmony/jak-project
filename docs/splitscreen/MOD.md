@@ -263,6 +263,13 @@ contain the whole co-op branch.
 Actions > "Cut Mod Release ⭐" > Run workflow > branch `feature/jak1-local-splitscreen` (or
 `master`) > bump > Run.
 
+With **Dry run** checked, the same builds and bundles run but nothing is tagged or released: the
+three archives and `metadata.json` end up in the run's workflow artifact `release-dry-run`, named
+like the release assets with the version `v<next version>-dry-run`. Use it to check the assets
+before cutting the real release (`gh run download <run id> -n release-dry-run`, then
+`package_mod.py --check <asset>`). From the command line:
+`gh workflow run cut-release.yaml -R <fork> --ref feature/jak1-local-splitscreen -f bump=minor -f dry_run=true`.
+
 - Releases can only be cut from `master` and `feature/jak1-local-splitscreen`
   (`ALLOWED_BRANCHES` in `cut-release.yaml`); a run on any other branch stops in "Prep Variables".
 - The bump you pick decides the version: "Prep Variables" takes the highest `vX.Y.Z` tag
@@ -428,7 +435,7 @@ ISC licence, Copyright (c) OpenGOAL Team, the same licence and copyright holder 
 | File | Origin |
 | --- | --- |
 | `.github/workflows/cut-release.yaml` | adapted: binaries always built from this repository (the `binary_source` input is gone), `releaseBranches` set and limited to `master` / `feature/jak1-local-splitscreen`, merge check for the co-op branch, version computed from the bump and passed as `customTag` |
-| `.github/workflows/mod-release-pipeline.yml` | copied; `actions/checkout`, `upload-artifact`, `download-artifact` at the versions this repository uses; optional `customTag` input passed to the tag action as `custom_tag` |
+| `.github/workflows/mod-release-pipeline.yml` | copied; `actions/checkout`, `upload-artifact`, `download-artifact` at the versions this repository uses; optional `customTag` input passed to the tag action as `custom_tag`; `dryRun` input (no tag, no release, assets as a workflow artifact) |
 | `.github/scripts/create-mod-release/*.py` | copied unchanged (`bundle-*.py` and `common.py` are only used by the "no build" path, which `cut-release.yaml` no longer selects) |
 | `.github/scripts/releases/extract_mod_build_{unix,windows}.sh`, `replace-mod-version-timestamp.py` | copied unchanged |
 | `.github/schemas/README.md`, `.github/schemas/mods/v2/*` | copied unchanged |
