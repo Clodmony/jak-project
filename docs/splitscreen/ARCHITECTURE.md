@@ -133,7 +133,7 @@ slots (pad ports). Controllers are tracked by SDL instance id, not GUID (identic
 A device feeds at most one slot; assigning another player's device is rejected; a disconnected
 slot keeps its claim, and only a newly connected pad of the same model refills it. A slot without a
 connected device reports a disconnected pad (`scePadGetState`), so GOAL marks it invalid: neutral
-input, and losing player 2's pad pauses. `InputManager` applies changes on the graphics thread; held
+input, and losing player 2's pad pauses. `InputManager` applies changes on the graphics thread, and rebuilds the controller list there (hotplug, co-op turned off) while holding the co-op lock that the game thread's `pc-coop-*` calls take; held
 keyboard/mouse inputs are released on the old port before the mapping changes, keyboard command
 binds (fullscreen, screenshot, ImGui) keep working when keyboard/mouse has no player, and the key
 used to join is ignored until released. Enabling co-op auto-assigns devices unless the player chose
