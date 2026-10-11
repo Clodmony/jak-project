@@ -664,6 +664,8 @@
 
 (define-extern coop-open-join-screen (function progress symbol none)) ;; og:preserve-this coop
 
+(define-extern coop-save-settings (function none)) ;; og:preserve-this coop
+
 (define *misc-options*
   (new 'static
        'boxed-array
@@ -697,6 +699,7 @@
             :on-confirm
             (lambda ()
               (set! (-> *coop* layout) (if (-> *coop* top-bottom?) (coop-split-layout top-bottom) (coop-split-layout side-by-side)))
+              (coop-save-settings)
               (none)))
        (new 'static
             'game-option
@@ -708,9 +711,34 @@
               ;; on-off-backup holds the yes/no answer
               (if (-> *progress-state* on-off-backup) (pc-coop-auto-assign!))
               (none)))
-       (new 'static 'game-option :option-type (game-option-type on-off) :name (text-id local-coop-every-ring) :scale #t)
-       (new 'static 'game-option :option-type (game-option-type on-off) :name (text-id local-coop-friendly-fire) :scale #t)
-       (new 'static 'game-option :option-type (game-option-type on-off) :name (text-id local-coop-tougher-bosses) :scale #t)
+       ;; og:preserve-this coop: these are kept in coop-settings.gc (coop-save-settings)
+       (new 'static
+            'game-option
+            :option-type (game-option-type on-off)
+            :name (text-id local-coop-every-ring)
+            :scale #t
+            :on-confirm
+            (lambda ()
+              (coop-save-settings)
+              (none)))
+       (new 'static
+            'game-option
+            :option-type (game-option-type on-off)
+            :name (text-id local-coop-friendly-fire)
+            :scale #t
+            :on-confirm
+            (lambda ()
+              (coop-save-settings)
+              (none)))
+       (new 'static
+            'game-option
+            :option-type (game-option-type on-off)
+            :name (text-id local-coop-tougher-bosses)
+            :scale #t
+            :on-confirm
+            (lambda ()
+              (coop-save-settings)
+              (none)))
        (new 'static 'game-option :option-type (game-option-type button) :name (text-id back) :scale #t)))
 
 (define *gfx-ps2-options*
