@@ -1064,6 +1064,8 @@
             (set! (-> root param2) (the-as basic (-> self control cspace-offset))))
           (send-event (ppointer->process (-> self sidekick)) 'matrix 'normal)
           (reset-target-state #t)
+          ;; a fall out of the world (endlessfall) faded us to black on the way down: normal colour again
+          (set-vector! (-> self draw color-mult) 1.0 1.0 1.0 1.0)
           (target-exit)
           (quaternion-copy! (-> self control quat-for-control) quat)
           (move-to-point! (-> self control) pos)
