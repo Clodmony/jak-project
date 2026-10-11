@@ -805,6 +805,13 @@
   (local-coop-tougher-bosses #x1705) ;; og:preserve-this coop
   (local-coop-new-game #x1706) ;; og:preserve-this coop
   (local-coop-load-game #x1707) ;; og:preserve-this coop
+  (local-coop-player-1 #x1708) ;; og:preserve-this coop
+  (local-coop-player-2 #x1709) ;; og:preserve-this coop
+  (local-coop-press-to-join #x1710) ;; og:preserve-this coop
+  (local-coop-keyboard #x1711) ;; og:preserve-this coop
+  (local-coop-start #x1712) ;; og:preserve-this coop
+  (local-coop-swap #x1713) ;; og:preserve-this coop
+  (local-coop-controller #x1714) ;; og:preserve-this coop
   ;; GAME-TEXT-ID ENUM ENDS
   )
 
