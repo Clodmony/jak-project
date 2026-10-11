@@ -159,8 +159,12 @@ cross them (#69):
   so nobody's level goes away for the other player's loads). A script's load (boats, warp gates,
   cutscenes take both players along) sets both pairs. A player who got into a level without crossing
   a boundary (respawned elsewhere, teleported) gets the levels whose boxes hold them as their pair
-  (`coop-wants-update`, once per frame); a checkpoint reload gives both players the checkpoint's two
-  levels (`coop-wants-reset`). Turning off the display of the other player's level is ignored. Vis
+  (`coop-wants-update`, once per frame). A pair the player's own crossing set stays while it holds
+  one of those levels (the boundary named the levels needed there; a teleport, seen by
+  `coop-boundary-skip-jumps`, ends that). The pairs are backed up and restored with the load state
+  around a cutscene's or checkpoint's commands (`coop-wants-backup`/`-restore`); a checkpoint reload
+  gives both players the checkpoint's two levels (`coop-wants-reset`); `coop-stop` leaves player 1's
+  pair as the wants. Turning off the display of the other player's level is ignored. Vis
   and checkpoints follow player 1 only;
 - the DGO loader, the login state and the loading heap are global, so levels load one at a time:
   with four wants two can be missing at once, and `load-state update!` adds the next one only when no
