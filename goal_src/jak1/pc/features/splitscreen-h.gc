@@ -353,16 +353,6 @@
 ;; defined in splitscreen.gc
 (define-extern coop-draw-player2-view (function none))
 (define-extern coop-switch-context (function int int))
-
-(defun coop-update-p2-hud-layout ()
-  "Once per frame after coop-update-2d-aspect: update-video-hacks re-places the hud sprites of the
-   current player's huds for the view aspect (set-hud-aspect-ratio); player 2's huds need the same,
-   or they keep the layout of the frame they were made in (a layout switch, the first split frame)."
-  (when (and (coop-active?) (coop-split-frame?))
-    (let ((prev (coop-switch-context 1)))
-      (set-hud-aspect-ratio 'aspect4x3 'ntsc)
-      (coop-switch-context prev)))
-  (none))
 (define-extern coop-start (function symbol))
 (define-extern coop-stop (function none))
 (define-extern coop-player-target (function int target))
@@ -460,4 +450,14 @@
       (set! (-> *coop-water-p2-targets* i) (the-as uint64 h))
       ;; nothing tracked any more: free the slot
       (if (not (handle->process h)) (set! (-> *coop-water-vols* i) (the-as uint64 #f)))))
+  (none))
+
+(defun coop-update-p2-hud-layout ()
+  "Once per frame after coop-update-2d-aspect: update-video-hacks re-places the hud sprites of the
+   current player's huds for the view aspect (set-hud-aspect-ratio); player 2's huds need the same,
+   or they keep the layout of the frame they were made in (a layout switch, the first split frame)."
+  (when (and (coop-active?) (coop-split-frame?))
+    (let ((prev (coop-switch-context 1)))
+      (set-hud-aspect-ratio 'aspect4x3 'ntsc)
+      (coop-switch-context prev)))
   (none))
