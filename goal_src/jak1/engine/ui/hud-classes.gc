@@ -235,37 +235,45 @@
   ((scale float)))
 
 
+;; og:preserve-this coop: the health particles are simulated once for both players' huds, in one
+;; player's context, so *target* there is not always the hud's player. coop-particle-target is the
+;; target of the player whose hud launched the particle (*target* without co-op).
+(define-extern coop-particle-target (function sparticle-cpuinfo target))
+
 (defun part-hud-health-01-func ((arg0 sparticle-system) (arg1 sparticle-cpuinfo) (arg2 matrix))
   (let ((f0-0 (-> *hud-parts* health 0 scale))) (set! (-> arg2 vector 0 w) f0-0) (set! (-> arg2 vector 1 w) f0-0))
-  (cond
-    ((and *target* (< (-> *target* fact health) 1.0)) (set! (-> arg2 vector 2 w) 32.0))
-    (else
-     (let ((f0-3 128.0))
-       ;; low health flashing
-       ;; og:preserve-this modified to support high fps
-       (when (and *target* (= (-> *target* fact health) 1.0))
-         (let* ((scaled-frame-counter (the int (* DISPLAY_FPS_RATIO (-> *display* integral-frame-counter))))
-                (v1-16 (logand scaled-frame-counter 7)))
-           (set! f0-3
-                 (if (not (logtest? scaled-frame-counter 8))
-                   (+ 128.0 (* 18.142857 (the float v1-16)))
-                   (- 255.0 (* 18.142857 (the float v1-16)))))))
-       (set! (-> arg2 vector 2 x) f0-3)
-       (set! (-> arg2 vector 2 y) f0-3)
-       (set! (-> arg2 vector 2 z) f0-3))
-     (set! (-> arg2 vector 2 w) 128.0)))
+  (let ((tgt (coop-particle-target arg1))) ;; og:preserve-this coop
+    (cond
+      ((and tgt (< (-> tgt fact health) 1.0)) (set! (-> arg2 vector 2 w) 32.0))
+      (else
+       (let ((f0-3 128.0))
+         ;; low health flashing
+         ;; og:preserve-this modified to support high fps
+         (when (and tgt (= (-> tgt fact health) 1.0))
+           (let* ((scaled-frame-counter (the int (* DISPLAY_FPS_RATIO (-> *display* integral-frame-counter))))
+                  (v1-16 (logand scaled-frame-counter 7)))
+             (set! f0-3
+                   (if (not (logtest? scaled-frame-counter 8))
+                     (+ 128.0 (* 18.142857 (the float v1-16)))
+                     (- 255.0 (* 18.142857 (the float v1-16)))))))
+         (set! (-> arg2 vector 2 x) f0-3)
+         (set! (-> arg2 vector 2 y) f0-3)
+         (set! (-> arg2 vector 2 z) f0-3))
+       (set! (-> arg2 vector 2 w) 128.0))))
   0
   (none))
 
 (defun part-hud-health-02-func ((arg0 sparticle-system) (arg1 sparticle-cpuinfo) (arg2 matrix))
   (let ((f0-0 (-> *hud-parts* health 0 scale))) (set! (-> arg2 vector 0 w) f0-0) (set! (-> arg2 vector 1 w) f0-0))
-  (if (and *target* (< (-> *target* fact health) 2.0)) (set! (-> arg2 vector 2 w) 32.0) (set! (-> arg2 vector 2 w) 128.0))
+  (let ((tgt (coop-particle-target arg1))) ;; og:preserve-this coop
+    (if (and tgt (< (-> tgt fact health) 2.0)) (set! (-> arg2 vector 2 w) 32.0) (set! (-> arg2 vector 2 w) 128.0)))
   0
   (none))
 
 (defun part-hud-health-03-func ((arg0 sparticle-system) (arg1 sparticle-cpuinfo) (arg2 matrix))
   (let ((f0-0 (-> *hud-parts* health 0 scale))) (set! (-> arg2 vector 0 w) f0-0) (set! (-> arg2 vector 1 w) f0-0))
-  (if (and *target* (< (-> *target* fact health) 3.0)) (set! (-> arg2 vector 2 w) 32.0) (set! (-> arg2 vector 2 w) 128.0))
+  (let ((tgt (coop-particle-target arg1))) ;; og:preserve-this coop
+    (if (and tgt (< (-> tgt fact health) 3.0)) (set! (-> arg2 vector 2 w) 32.0) (set! (-> arg2 vector 2 w) 128.0)))
   0
   (none))
 
