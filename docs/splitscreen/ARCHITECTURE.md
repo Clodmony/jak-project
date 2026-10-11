@@ -70,6 +70,7 @@ Consequences, by design:
 - In-game options (all builds, so it works for a launcher mod): Options > Game Options > Misc Options
   > "Local co-op" (on/off), "Co-op split top/bottom", "Co-op assign devices", "Co-op: every ring for both" (race rings count only once both players flew through them; off by default), "Co-op: friendly fire" (on by default), "Co-op: tougher bosses" (bosses need 1.5x the hits, `coop-boss-hits`; off by default)
   (`goal_src/jak1/pc/progress-pc.gc`). Co-op is never saved as on: every session starts single player.
+  The layout and the three co-op options are remembered in `coop-settings.gc` (see "Saves and settings").
 - Debug menu "Local Co-op" (`goal_src/jak1/pc/debug/coop-menu.gc`, debug builds only): start/stop,
   layout, device join, respawn, leash, info overlay.
 - Processes a player spawns into shared pools (player 2's first-person HUD in `*dproc*`) are marked as
@@ -228,6 +229,10 @@ the same behaviour as the existing PC "force actors" option, without changing th
 - `coop-start` saves `*ACTOR-bank*` and `coop-stop` restores it, so single player doesn't keep the
   co-op actor distances.
 - Nothing is added to `pc-settings.gc` (other builds sharing the folder would reject unknown keys).
+  The split layout and the co-op options (every ring for both, friendly fire, tougher bosses) are
+  kept in `coop-settings.gc` in the same folder (`coop-save-settings` when one changes in the menu,
+  `coop-load-settings` at boot). Its reader skips keys it doesn't know (a newer build's file) and a
+  broken file only leaves the defaults. Whether co-op is on is never kept.
 
 ## Source map (verified)
 

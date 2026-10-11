@@ -2096,10 +2096,13 @@
         (format *stdcon* "~1k(none)~%"))))
   (none))
 
+(define-extern coop-save-settings (function none))
+
 (defun coop-toggle-layout ()
   (set! (-> *coop* layout)
         (if (= (-> *coop* layout) (coop-split-layout side-by-side)) (coop-split-layout top-bottom) (coop-split-layout side-by-side)))
   (set! (-> *coop* top-bottom?) (= (-> *coop* layout) (coop-split-layout top-bottom)))
+  (coop-save-settings)
   (none))
 
 (defun coop-respawn-player2-near-player1 ()
@@ -2108,3 +2111,66 @@
       (coop-despawn-player2)
       (coop-spawn-player2 (coop-safe-position-near p1 (new 'stack-no-clear 'vector)))))
   (none))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; co-op preferences file
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; The split layout and the co-op options are kept in their own file next to pc-settings.gc:
+;; pc-settings.gc must stay readable by other OpenGOAL builds sharing the folder, and those reject
+;; the whole file when it has a key they don't know. Whether co-op is on is not kept (every session
+;; starts single player).
+
+(defconstant COOP_SETTINGS_VERSION 1)
+
+(define *coop-settings-path* (new 'global 'string 256 (the-as string #f)))
+
+(defun coop-settings-path ()
+  (format (clear *coop-settings-path*) "~S/coop-settings.gc" *pc-settings-folder*)
+  *coop-settings-path*)
+
+(defun coop-save-settings ()
+  "Write the split layout and co-op options to coop-settings.gc."
+  (let ((path (coop-settings-path)))
+    (pc-mkdir-file-path path)
+    (let ((file (new 'stack 'file-stream path 'write)))
+      (when (file-stream-valid? file)
+        (format file "(coop-settings ~D~%" COOP_SETTINGS_VERSION)
+        (format file "  (top-bottom? ~A)~%" (= (-> *coop* layout) (coop-split-layout top-bottom)))
+        (format file "  (every-ring? ~A)~%" (-> *coop* every-ring?))
+        (format file "  (friendly-fire? ~A)~%" (-> *coop* friendly-fire?))
+        (format file "  (tougher-bosses? ~A)~%" (-> *coop* tougher-bosses?))
+        (format file "  )~%")
+        (file-stream-close file))))
+  (none))
+
+(defun coop-read-flag ((file file-stream))
+  "#t or #f, from the next word."
+  (if (= (file-stream-read-symbol file) #t) #t #f))
+
+(defun coop-load-settings ()
+  "Read coop-settings.gc if there is one. Keys it doesn't know are skipped (a newer build's file)."
+  (let ((path (coop-settings-path)))
+    (when (pc-filepath-exists? path)
+      (let ((file (new 'stack 'file-stream path 'read)))
+        (when (not (file-stream-valid? file))
+          (return #f))
+        (with-settings-scope (file)
+          (case-str (file-stream-read-word file)
+            (("coop-settings")
+             (file-stream-read-int file)
+             (dosettings (file)
+               (case-str *pc-temp-string*
+                 (("top-bottom?")
+                  (set! (-> *coop* top-bottom?) (coop-read-flag file))
+                  (set! (-> *coop* layout)
+                        (if (-> *coop* top-bottom?) (coop-split-layout top-bottom) (coop-split-layout side-by-side))))
+                 (("every-ring?") (set! (-> *coop* every-ring?) (coop-read-flag file)))
+                 (("friendly-fire?") (set! (-> *coop* friendly-fire?) (coop-read-flag file)))
+                 (("tougher-bosses?") (set! (-> *coop* tougher-bosses?) (coop-read-flag file)))
+                 (else (file-stream-read-symbol file)))))))
+        (file-stream-close file)
+        (format 0 "[coop] co-op settings read: ~A~%" path))))
+  #t)
+
+(coop-load-settings)
