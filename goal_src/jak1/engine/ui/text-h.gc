@@ -803,6 +803,8 @@
   (local-coop-every-ring #x1703) ;; og:preserve-this coop
   (local-coop-friendly-fire #x1704) ;; og:preserve-this coop
   (local-coop-tougher-bosses #x1705) ;; og:preserve-this coop
+  (local-coop-new-game #x1706) ;; og:preserve-this coop
+  (local-coop-load-game #x1707) ;; og:preserve-this coop
   ;; GAME-TEXT-ID ENUM ENDS
   )
 
