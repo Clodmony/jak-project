@@ -429,8 +429,9 @@
 ;; og:preserve-this coop
 ;; og:preserve-this coop
 (defmacro coop-subtitle-address? (ptr)
-  "Can ptr be followed (inside game memory, not 0 or a small number)?"
-  `(let ((a (the-as uint ,ptr))) (and (>= a #x10000) (< a #x8000000))))
+  "Can ptr be followed (not #f, not 0 or a small number, inside game memory)?"
+  `(let ((p ,ptr))
+    (and p (let ((a (the-as uint p))) (and (>= a #x10000) (< a #x8000000))))))
 
 (defun coop-subtitle-player-pos ((idx int))
   "Player idx's position, or #f when there is no usable player."
