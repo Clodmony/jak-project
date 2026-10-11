@@ -1145,14 +1145,21 @@
       (&+! (-> dma-buff base) (* qwc 16))
       #t)))
 
+(defun coop-money-hud ((pp (pointer hud)))
+  "The orb counter behind a hud-parts entry, or #f. Careful: during a checkpoint reload the huds die
+   and an entry can point at an empty slot (0 or #f), so every step is checked before it is followed."
+  (when (coop-goal-address? pp)
+    (let ((p (the-as process (-> (the-as (pointer process) pp) 0))))
+      (if (and (coop-goal-address? p) (= (-> p type) hud-money)) (the-as hud p) (the-as hud #f)))))
+
 (defun coop-sync-money-huds ()
   "Once per frame: both players' orb counters show the same number. The orbs are one shared total
    (game-info money); only the counting animation differs: the hud of the player who picked an orb up
    counts when the orb flies into it, the other hud counts on its own a moment later. Each hud takes
    the higher of the two numbers."
   (let* ((parts0 (if (zero? *coop-player*) *hud-parts* (-> (coop-context 0) hud-parts)))
-         (h0 (the-as hud (ppointer->process (-> parts0 money))))
-         (h1 (the-as hud (ppointer->process (-> *coop-p2-hud-parts* money)))))
+         (h0 (coop-money-hud (-> parts0 money)))
+         (h1 (coop-money-hud (-> *coop-p2-hud-parts* money))))
     ;; only the shown number: target-value is each hud's own count of orbs flying in ('increment)
     (when (and h0 h1)
       (let ((v (min (max (-> h0 value) (-> h1 value)) (the int (+ 0.5 (-> *game-info* money))))))
