@@ -1145,6 +1145,23 @@
       (&+! (-> dma-buff base) (* qwc 16))
       #t)))
 
+(defun coop-sync-money-huds ()
+  "Once per frame: both players' orb counters show the same number. The orbs are one shared total
+   (game-info money); only the counting animation differs: the hud of the player who picked an orb up
+   counts when the orb flies into it, the other hud counts on its own a moment later. Each hud takes
+   the higher of the two numbers."
+  (let* ((parts0 (if (zero? *coop-player*) *hud-parts* (-> (coop-context 0) hud-parts)))
+         (h0 (the-as hud (ppointer->process (-> parts0 money))))
+         (h1 (the-as hud (ppointer->process (-> *coop-p2-hud-parts* money)))))
+    (when (and h0 h1)
+      (let ((v (max (-> h0 value) (-> h1 value)))
+            (tv (max (-> h0 target-value) (-> h1 target-value))))
+        (set! (-> h0 value) v)
+        (set! (-> h1 value) v)
+        (set! (-> h0 target-value) tv)
+        (set! (-> h1 target-value) tv))))
+  (none))
+
 (defun coop-draw-view-only ()
   "The view dependent part of real-main-draw-hook, for player 2's view.
    Nothing here may advance the simulation: touching events, actors-update, time of day, ocean
@@ -1855,23 +1872,6 @@
               ((= *master-mode* 'pause)
                (print-game-text (lookup-text! *common-text* (text-id local-coop-press-start) #f) font #f 128 22)))
             (coop-switch-context prev))))))
-  (none))
-
-(defun coop-sync-money-huds ()
-  "Once per frame: both players' orb counters show the same number. The orbs are one shared total
-   (game-info money); only the counting animation differs: the hud of the player who picked an orb up
-   counts when the orb flies into it, the other hud counts on its own a moment later. Each hud takes
-   the higher of the two numbers."
-  (let* ((parts0 (if (zero? *coop-player*) *hud-parts* (-> (coop-context 0) hud-parts)))
-         (h0 (the-as hud (ppointer->process (-> parts0 money))))
-         (h1 (the-as hud (ppointer->process (-> *coop-p2-hud-parts* money)))))
-    (when (and h0 h1)
-      (let ((v (max (-> h0 value) (-> h1 value)))
-            (tv (max (-> h0 target-value) (-> h1 target-value))))
-        (set! (-> h0 value) v)
-        (set! (-> h1 value) v)
-        (set! (-> h0 target-value) tv)
-        (set! (-> h1 target-value) tv))))
   (none))
 
 (defun coop-update ()
