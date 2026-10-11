@@ -1857,6 +1857,23 @@
             (coop-switch-context prev))))))
   (none))
 
+(defun coop-sync-money-huds ()
+  "Once per frame: both players' orb counters show the same number. The orbs are one shared total
+   (game-info money); only the counting animation differs: the hud of the player who picked an orb up
+   counts when the orb flies into it, the other hud counts on its own a moment later. Each hud takes
+   the higher of the two numbers."
+  (let* ((parts0 (if (zero? *coop-player*) *hud-parts* (-> (coop-context 0) hud-parts)))
+         (h0 (the-as hud (ppointer->process (-> parts0 money))))
+         (h1 (the-as hud (ppointer->process (-> *coop-p2-hud-parts* money)))))
+    (when (and h0 h1)
+      (let ((v (max (-> h0 value) (-> h1 value)))
+            (tv (max (-> h0 target-value) (-> h1 target-value))))
+        (set! (-> h0 value) v)
+        (set! (-> h1 value) v)
+        (set! (-> h0 target-value) tv)
+        (set! (-> h1 target-value) tv))))
+  (none))
+
 (defun coop-update ()
   "Once per frame: split decision and listener. In game mode also player positions, player 2 respawn
    and the distance leash."
@@ -1930,6 +1947,7 @@
          (if me (logclear! (-> me mask) (process-mask sleep)))
          (logclear! *coop-movie-slept* bit)))))
   (coop-racer-update)
+  (coop-sync-money-huds)
   ;; actors near player 2 must exist and run even when player 1's camera is far away or can't see
   ;; them. Same as the "force actors" PC option, without touching the saved setting.
   ;; (pc-settings update may lower these again after the frame; actor birth and pause happen
