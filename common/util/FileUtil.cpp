@@ -179,10 +179,32 @@ std::optional<std::string> try_get_project_path_from_path(const std::string& pat
 }
 
 /*!
- * See if the current executable is somewhere in jak-project/. If so, return the path to jak-project
+ * A repository checked out under another folder name (a fork's clone, a CI checkout named after the
+ * repository): the closest folder above path that contains goal_src/ and decompiler/config/.
+ */
+std::optional<std::string> try_get_project_path_by_markers(const fs::path& path) {
+  std::error_code ec;
+  for (fs::path dir = path.parent_path(); !dir.empty(); dir = dir.parent_path()) {
+    if (fs::is_directory(dir / "goal_src", ec) && fs::is_directory(dir / "decompiler" / "config", ec)) {
+      return dir.string();
+    }
+    if (dir == dir.root_path()) {
+      break;
+    }
+  }
+  return {};
+}
+
+/*!
+ * See if the current executable is somewhere in jak-project/. If so, return the path to jak-project.
+ * Otherwise, the repository folder above it (whatever its name).
  */
 std::optional<std::string> try_get_jak_project_path() {
-  return try_get_project_path_from_path(get_current_executable_path());
+  const auto by_name = try_get_project_path_from_path(get_current_executable_path());
+  if (by_name) {
+    return by_name;
+  }
+  return try_get_project_path_by_markers(fs::path(get_current_executable_path()));
 }
 
 std::optional<fs::path> try_get_data_dir(bool skip_logs) {
