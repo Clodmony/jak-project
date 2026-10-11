@@ -1929,8 +1929,8 @@
   ;; the rest is gameplay: nothing moves while paused or in a menu
   (if (!= *master-mode* 'game) (return #f))
   (+! (-> *coop* sim-ticks) 1)
-  (coop-keep-player-levels-displayed)
   (coop-grab-watch)
+  (coop-keep-player-levels-displayed)
   (coop-hold-back-update)
   (coop-contact-update)
   ;; some cinematics freeze the player with process-mask sleep instead of a grab (power cell plants,
