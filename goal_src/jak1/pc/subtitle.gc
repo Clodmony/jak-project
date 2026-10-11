@@ -458,7 +458,7 @@
               (< (mod (time-passed) (seconds 1)) (seconds 0.8)))
          (set! (-> self font origin y) (* (-> *SUBTITLE-bank* notice-height) 224))
          (print-game-subtitle (lookup-text! *common-text* (-> self notice-id) #f) (-> self font) #f 128 22)))
-  (none))
+  0)
 
 (defstate subtitle-process (subtitle)
   :event
