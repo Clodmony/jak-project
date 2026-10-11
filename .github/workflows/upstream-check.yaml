@@ -1,0 +1,100 @@
+# Weekly check that the co-op branch still merges with upstream OpenGOAL, builds, compiles all Jak 1
+# code, passes the tests and stays a clean add-on (issue #5). Written with AI assistance (AI-assisted).
+# The same steps as scripts/splitscreen/sync_upstream.sh, without pushing anything: the merge only
+# exists in the runner. A red run means the next sync_upstream.sh will need work.
+# See docs/splitscreen/ARCHITECTURE.md ("Staying an add-on").
+name: Upstream Check
+
+on:
+  schedule:
+    - cron: "0 5 * * 1" # Mondays 05:00 UTC
+  workflow_dispatch:
+    inputs:
+      upstreamRepo:
+        description: "Repository to merge from"
+        required: true
+        default: "open-goal/jak-project"
+        type: string
+      upstreamRef:
+        description: "Branch to merge (e.g. a branch of this fork with a deliberate conflict, to test the check)"
+        required: true
+        default: "master"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: "Merge, build and test against upstream"
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    env:
+      UPSTREAM_REPO: ${{ inputs.upstreamRepo || 'open-goal/jak-project' }}
+      UPSTREAM_REF: ${{ inputs.upstreamRef || 'master' }}
+    steps:
+      - name: Checkout the co-op branch
+        uses: actions/checkout@v7
+        with:
+          ref: feature/jak1-local-splitscreen
+          fetch-depth: 0
+
+      - name: Merge upstream
+        run: |
+          git config user.name "upstream-check"
+          git config user.email "upstream-check@users.noreply.github.com"
+          git remote add upstream "https://github.com/${UPSTREAM_REPO}.git"
+          git fetch --quiet upstream "${UPSTREAM_REF}:refs/remotes/upstream/master"
+          echo "upstream ${UPSTREAM_REPO} ${UPSTREAM_REF} is $(git rev-list --count HEAD..upstream/master) commit(s) ahead of the co-op branch"
+          if ! git merge --no-edit upstream/master > merge.log 2>&1; then
+            cat merge.log
+            echo "### Merge conflicts with ${UPSTREAM_REPO} ${UPSTREAM_REF}" >> "$GITHUB_STEP_SUMMARY"
+            git diff --name-only --diff-filter=U | while read -r f; do
+              echo "::error file=${f}::conflicts with upstream"
+              echo "- \`${f}\`" >> "$GITHUB_STEP_SUMMARY"
+            done
+            exit 1
+          fi
+          cat merge.log
+
+      - name: Install Package Dependencies
+        run: |
+          sudo apt update
+          sudo apt install build-essential cmake \
+            clang gcc g++ lcov make nasm libxrandr-dev \
+            libxinerama-dev libxcursor-dev libpulse-dev \
+            libxi-dev zip ninja-build libgl1-mesa-dev libssl-dev
+
+      - name: Setup sccache
+        uses: hendrikmuhs/ccache-action@v1.2.23
+        with:
+          variant: sccache
+          key: linux-ubuntu-22.04-upstream-check-${{ github.sha }}
+          restore-keys: linux-ubuntu-22.04-upstream-check
+          max-size: 1000M
+
+      - name: CMake Generation
+        env:
+          CC: clang
+          CXX: clang++
+        run: |
+          cmake -B build --preset=Release-linux-clang \
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+
+      - name: Build
+        run: cmake --build build --parallel $((`nproc`))
+
+      - name: Compile all Jak 1 code
+        run: |
+          ./build/goalc/goalc --game jak1 --cmd '(make-group "all-code")' 2>&1 | tee goalc.log
+          if grep -q "Compilation Error\|Build failed" goalc.log || ! grep -q "Successfully built" goalc.log; then
+            echo "::error::Jak 1 code doesn't compile against upstream"
+            exit 1
+          fi
+
+      - name: Run Tests
+        run: ./test.sh
+
+      - name: Co-op add-on rules
+        run: python3 scripts/splitscreen/check_upstream_compat.py
