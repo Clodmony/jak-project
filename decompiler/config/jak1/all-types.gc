@@ -1714,6 +1714,13 @@
   (local-coop-tougher-bosses #x1705)
   (local-coop-new-game #x1706)
   (local-coop-load-game #x1707)
+  (local-coop-player-1 #x1708)
+  (local-coop-player-2 #x1709)
+  (local-coop-press-to-join #x1710)
+  (local-coop-keyboard #x1711)
+  (local-coop-start #x1712)
+  (local-coop-swap #x1713)
+  (local-coop-controller #x1714)
 ;; GAME-TEXT-ID ENUM ENDS
   )
 
@@ -15963,6 +15970,7 @@
   (speedrun-il-options)
   (speedrun-cat-ext-options)
   (coop-title)
+  (coop-join)
 
   ;; the last one!
   (max)

@@ -81,6 +81,14 @@ class SlotAssigner {
   void auto_assign(const std::vector<ConnectedController>& controllers,
                    int player1_instance_id = -1);
 
+  /// Join screen: player 1 keeps the device they are using (player1_instance_id if that controller
+  /// is connected, otherwise keyboard/mouse), player 2 has no device and is joining: the next
+  /// unassigned controller (or the keyboard, if player 1 uses a controller) that presses a button
+  /// becomes player 2.
+  void prepare_join(const std::vector<ConnectedController>& controllers, int player1_instance_id);
+  /// Swap the two players' devices. A slot left without a device is the joining one.
+  void swap_slots();
+
   const SlotState& slot(int slot) const { return m_slots.at(slot); }
   int slot_for_controller(int instance_id) const;
   int keyboard_slot() const;
