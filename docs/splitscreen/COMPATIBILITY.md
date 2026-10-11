@@ -41,6 +41,7 @@ are adapted (see below).
 | `ps2-lod-dist?` option | With the original LOD distances enabled, the two views may pick different LODs for the same actor | `engine/draw/drawable.gc` `dma-add-process-drawable` | #34 |
 | Occlusion culling | Off on split frames (one vis buffer per level) | `OpenGLRenderer::dispatch_jak1_split_views` | #34 |
 | Touching list | 32 overlap pairs per tick are now shared by two players; overflow drops touches | `engine/collide/collide-touch-h.gc` | #29 |
+| Co-op text in Icelandic, Romanian, Korean | The co-op menu texts (ids 1700-1718) are translated in the 19 languages whose PC text is translated; Icelandic, Romanian and Korean show them in English like the rest of their PC text (the Jak 1 font has no Þ, Ă/Ș/Ț or Hangul) | `game/assets/jak1/text/game_custom_text_*.json` | #43 |
 | Input thread safety | Turning co-op off re-enumerates controllers on the graphics thread while the game thread reads them without a lock (same pattern as upstream hotplug; not observed to crash) | `game/system/hid/input_manager.cpp` | #35 |
 
 ## Unchanged by design
