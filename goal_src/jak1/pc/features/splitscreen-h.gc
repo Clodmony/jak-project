@@ -128,6 +128,11 @@
   "Is the frame being built a split-screen frame?"
   `(> (-> *coop-frame* views) 1))
 
+(defmacro coop-hud-aspect-reciprocal ()
+  "*pc-settings* aspect-ratio-reciprocal for placing HUD sprites, except on split-screen frames: there
+   the 2d scale of one view (update-video-hacks), since the HUD is drawn into one view."
+  `(if (coop-split-frame?) (-> *video-parms* relative-x-scale) (-> *pc-settings* aspect-ratio-reciprocal)))
+
 ;; the split-screen view aspect was applied to the 2d scale (see coop-update-2d-aspect)
 (define *coop-video-hacks-applied* #f)
 
@@ -445,4 +450,14 @@
       (set! (-> *coop-water-p2-targets* i) (the-as uint64 h))
       ;; nothing tracked any more: free the slot
       (if (not (handle->process h)) (set! (-> *coop-water-vols* i) (the-as uint64 #f)))))
+  (none))
+
+(defun coop-update-p2-hud-layout ()
+  "Once per frame after coop-update-2d-aspect: update-video-hacks re-places the hud sprites of the
+   current player's huds for the view aspect (set-hud-aspect-ratio); player 2's huds need the same,
+   or they keep the layout of the frame they were made in (a layout switch, the first split frame)."
+  (when (and (coop-active?) (coop-split-frame?))
+    (let ((prev (coop-switch-context 1)))
+      (set-hud-aspect-ratio 'aspect4x3 'ntsc)
+      (coop-switch-context prev)))
   (none))

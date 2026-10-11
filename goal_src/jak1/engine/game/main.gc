@@ -574,7 +574,8 @@
         (#when PC_PORT
           (update *pc-settings*)
           ;; og:preserve-this coop: 2d aspect for split-screen views
-          (coop-update-2d-aspect)))
+          (coop-update-2d-aspect)
+          (coop-update-p2-hud-layout)))
       ;; suspend
       (suspend)))
   0)
