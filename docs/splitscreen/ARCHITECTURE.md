@@ -23,7 +23,7 @@ active is decided:
 
 | When | Context | Where |
 | --- | --- | --- |
-| a process runs (trans, code, post, `run-logic?`) | the player that owns it; world processes use the closest player (4 m hysteresis) | `execute-process-tree`, `goal_src/jak1/kernel/gkernel.gc` |
+| a process runs (trans, code, post, `run-logic?`) | the player that owns it; world processes use the closest player (0.25 m hysteresis), measured from their body or, for world code without a body that a level actor placed (tutorial cameras, task triggers), from the actor's position | `execute-process-tree`, `goal_src/jak1/kernel/gkernel.gc` |
 | an event is delivered | the receiver's owner, else the sender's owner, else unchanged. A `touch`/`attack` from a player also latches the world process to that player (until the other player is 4 m closer) | `send-event-function`, `goal_src/jak1/kernel/gstate.gc` |
 | a view is rendered | the view's player | `coop-draw-player2-view` |
 | `start` / `stop` | always player 1 (session operations) | `logic-target.gc` |
