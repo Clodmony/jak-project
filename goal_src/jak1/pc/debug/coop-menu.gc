@@ -23,4 +23,5 @@
             (function "Respawn player 2 near player 1" #f ,(lambda () (coop-respawn-player2-near-player1)))
             (flag "World follows nearest player" #f ,(dm-lambda-boolean-flag (-> *coop* nearest-world?)))
             (flag "Distance leash" #f ,(dm-lambda-boolean-flag (-> *coop* leash?)))
-            (flag "Show co-op info" #f ,(dm-lambda-boolean-flag *coop-show-info*))))))
+            (flag "Show co-op info" #f ,(dm-lambda-boolean-flag *coop-show-info*))
+            (flag "Show P1/P2 labels" #f ,(dm-lambda-boolean-flag *coop-show-labels*))))))
