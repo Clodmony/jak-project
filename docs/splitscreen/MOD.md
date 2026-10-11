@@ -13,8 +13,8 @@ from) the official Jak 1:
    mod source.
 
 A local package installed the way the launcher installs it boots the game (see
-[Validation](#validation)). Not done yet: an install through the launcher's own UI (#1), a release
-run on GitHub (#2), Windows (#3).
+[Validation](#validation)). The first release, v0.1.0, was cut on GitHub on 2026-10-11 (#2). Not
+done yet: an install through the launcher's own UI (#1), Windows (#3).
 
 ## What a launcher mod is
 
@@ -344,7 +344,11 @@ by the launcher; it is for mod lists that collect releases.
 
 ## Limitations
 
-- No GitHub release run (#2) and no install through the launcher UI yet (#1).
+- No install through the launcher UI yet (#1).
+- The Windows `.exe` files import the Microsoft Visual C++ runtime (`MSVCP140.dll`,
+  `VCRUNTIME140.dll`, `VCRUNTIME140_1.dll`), which is not in the archive: it must be installed on
+  the machine (the "Microsoft Visual C++ Redistributable", present on most Windows PCs). Not checked
+  on a real Windows machine (#3).
 - One macOS asset (Intel); the launcher has a single `macos` key, so Apple Silicon runs it through
   Rosetta.
 - Each mod install keeps its own decompiled and compiled copy of the game inside the mod folder
@@ -426,6 +430,23 @@ now cut from that branch):
   boots to the title screen, writes `pc-settings.gc` and `display-settings.json` only under the
   given config path, and leaves `~/.config/OpenGOAL` untouched.
 
+Added on 2026-10-11, the first GitHub release (#2):
+
+- Actions were already enabled on the fork and its default branch is the co-op branch, so "Cut Mod
+  Release" could be dispatched as is. A dry run (new `dry_run` input, run 38111248933) built and
+  bundled all three platforms with tests in about 35 min: `package_mod.py --check` accepts all three
+  archives (5,023 entries each; Linux needs glibc 2.34 and `GLIBCXX_3.4.30`, i.e. Ubuntu 22.04 or
+  newer; the Windows binaries need the VC++ runtime, see Limitations); `metadata.json` names `jak1`.
+- The Linux archive installed the way the launcher does it (extractor with the user's PAL disc files:
+  all 1321 targets built) booted without `-debug` to the title screen and wrote settings only under
+  its `--config-path`.
+- Then the real release: run 38122944841, tag `v0.1.0`, assets `windows-v0.1.0.zip`,
+  `linux-v0.1.0.tar.gz`, `macos-intel-v0.1.0.tar.gz`, `metadata.json` (all three pass
+  `package_mod.py --check`, `gk --version` says `v0.1.0`). Its Linux bundle job failed the first
+  time: it ran while the Linux build was the run's only artifact, and `download-artifact` without a
+  name extracts a single artifact without its folder. "Re-run failed jobs" finished the release
+  (same tag). The bundle jobs now download their build by name.
+
 ## Attribution
 
 The release tooling is adapted from
@@ -435,7 +456,7 @@ ISC licence, Copyright (c) OpenGOAL Team, the same licence and copyright holder 
 | File | Origin |
 | --- | --- |
 | `.github/workflows/cut-release.yaml` | adapted: binaries always built from this repository (the `binary_source` input is gone), `releaseBranches` set and limited to `master` / `feature/jak1-local-splitscreen`, merge check for the co-op branch, version computed from the bump and passed as `customTag` |
-| `.github/workflows/mod-release-pipeline.yml` | copied; `actions/checkout`, `upload-artifact`, `download-artifact` at the versions this repository uses; optional `customTag` input passed to the tag action as `custom_tag`; `dryRun` input (no tag, no release, assets as a workflow artifact) |
+| `.github/workflows/mod-release-pipeline.yml` | copied; `actions/checkout`, `upload-artifact`, `download-artifact` at the versions this repository uses; optional `customTag` input passed to the tag action as `custom_tag`; `dryRun` input (no tag, no release, assets as a workflow artifact); bundle jobs download their build artifact by name |
 | `.github/scripts/create-mod-release/*.py` | copied unchanged (`bundle-*.py` and `common.py` are only used by the "no build" path, which `cut-release.yaml` no longer selects) |
 | `.github/scripts/releases/extract_mod_build_{unix,windows}.sh`, `replace-mod-version-timestamp.py` | copied unchanged |
 | `.github/schemas/README.md`, `.github/schemas/mods/v2/*` | copied unchanged |
