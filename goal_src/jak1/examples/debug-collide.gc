@@ -170,7 +170,7 @@
 
     ;; loop over active levels
     (dotimes (lev-idx (-> *level* length))
-      (let ((lev (-> *level* level lev-idx)))
+      (let ((lev (level-slot lev-idx))) ;; coop: slot loop (#110)
         (when (= (-> lev status) 'active)
           ;; do the collision check!
           (collide-ray (-> lev bsp) 0 *collide-list*)

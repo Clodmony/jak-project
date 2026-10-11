@@ -111,7 +111,7 @@
     ((= bsp-find-mesh-func (method-of-type bsp-header collide-ray))
      ;; for collide-ray (actually line-sphere), we have a fancy version.
      (dotimes (s4-1 (-> *level* length))
-       (let ((a0-2 (-> *level* level s4-1)))
+       (let ((a0-2 (level-slot s4-1))) ;; og:preserve-this coop: slot loop
          (when (= (-> a0-2 status) 'active)
            (reset! (-> *perf-stats* data 14))
            (collide-probe-make-list a0-2 *collide-list*)
@@ -119,7 +119,7 @@
     (else
      ;; for the othes, we don't have a fancy version, so use the versio provided by the user.
      (dotimes (s3-0 (-> *level* length))
-       (let ((v1-21 (-> *level* level s3-0)))
+       (let ((v1-21 (level-slot s3-0))) ;; og:preserve-this coop: slot loop
          (if (= (-> v1-21 status) 'active) (bsp-find-mesh-func (-> v1-21 bsp) 0 *collide-list*))))))
   (when (> (-> *collide-list* num-items) 0)
     ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

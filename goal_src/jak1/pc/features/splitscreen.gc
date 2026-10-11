@@ -608,7 +608,7 @@
 (defun coop-racer-checkpoint-near ((pos vector))
   "The continue point of an active level within 30 m of pos, or #f."
   (dotimes (i (-> *level* length))
-    (let ((lev (-> *level* level i)))
+    (let ((lev (level-slot i)))
       (when (= (-> lev status) 'active)
         (let ((cps (-> lev info continues)))
           (while (not (null? cps))
@@ -970,7 +970,7 @@
       (let ((pos (-> p2 control trans))
             (safe-elsewhere #f))
         (dotimes (i (-> *level* length))
-          (let ((other (-> *level* level i)))
+          (let ((other (level-slot i)))
             (if (and (!= other lev) (= (-> other status) 'active) (-> other display?) (point-in-boxes? other pos))
               (set! safe-elsewhere #t))))
         (when (and (not safe-elsewhere) (= (coop-level-containing *level* pos (the-as level #f)) lev))
@@ -1011,8 +1011,10 @@
   (none))
 
 ;; a player that died while the other one is still playing. Entered from target-death instead of
-;; the world reset. Waits respawn-delay, then respawns at the other player's last safe ground.
-;; If the other player goes down meanwhile, their target-death does the shared checkpoint reload.
+;; the world reset. Waits respawn-delay, then respawns at the other player's last safe ground, or at
+;; the last checkpoint when that is nearer to where they died (#110: with four level slots the
+;; players can be levels apart). If the other player goes down meanwhile, their target-death does
+;; the shared checkpoint reload.
 (defstate target-coop-respawn (target)
   :event
     (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
@@ -1051,9 +1053,23 @@
              (let ((place (coop-racer-respawn-point (coop-process-player self) pos quat)))
                (format 0 "[coop] player ~D respawns at the checkpoint ~A~%" (+ 1 (coop-process-player self)) place)))
             (else
-             (coop-safe-position-near other pos)
-             (quaternion-copy! quat (-> other control quat-for-control))
-             (format 0 "[coop] player ~D respawns next to player ~D~%" (+ 1 (coop-process-player self)) (- 2 (coop-process-player self)))))
+             ;; next to the other player, or at the last checkpoint (the continue point, which follows
+             ;; player 1) when that is nearer to where we died: with four level slots the players can
+             ;; be levels apart (#110)
+             (let* ((cp (-> *game-info* current-continue))
+                    (to-cp (vector-vector-xz-distance (-> self control trans) (-> cp trans)))
+                    (to-other (vector-vector-xz-distance (-> self control trans) (-> other control trans))))
+               (cond
+                 ((< to-cp to-other)
+                  (set! (-> pos quad) (-> cp trans quad))
+                  (quaternion-copy! quat (-> cp quat))
+                  (format 0 "[coop] player ~D respawns at the checkpoint ~S (~,,1m away, player ~D ~,,1m)~%"
+                          (+ 1 (coop-process-player self)) (-> cp name) to-cp (- 2 (coop-process-player self)) to-other))
+                 (else
+                  (coop-safe-position-near other pos)
+                  (quaternion-copy! quat (-> other control quat-for-control))
+                  (format 0 "[coop] player ~D respawns next to player ~D (~,,1m away, the checkpoint ~,,1m)~%"
+                          (+ 1 (coop-process-player self)) (- 2 (coop-process-player self)) to-other to-cp))))))
           (reset! (-> self fact) 'health)
           (reset! (-> self fact) 'eco)
           ;; a death that drove our root joint (eaten by the Dark Eco Plant) left it attached to the
@@ -1187,17 +1203,17 @@
   ;; order the renderer replays them in.
   (when (logtest? *texture-enable-user* 1)
     (dotimes (i (-> *level* length))
-      (let ((lev (-> *level* level i))) (if (= (-> lev status) 'active) (add-tex-to-dma! *texture-pool* lev 0)))))
+      (let ((lev (level-slot i))) (if (= (-> lev status) 'active) (add-tex-to-dma! *texture-pool* lev 0)))))
   (when (logtest? *texture-enable-user* 2)
     (dotimes (i (-> *level* length))
-      (let ((lev (-> *level* level i))) (if (= (-> lev status) 'active) (add-tex-to-dma! *texture-pool* lev 1)))))
+      (let ((lev (level-slot i))) (if (= (-> lev status) 'active) (add-tex-to-dma! *texture-pool* lev 1)))))
   (when (logtest? *texture-enable-user* 4)
     (dotimes (i (-> *level* length))
-      (let ((lev (-> *level* level i))) (if (= (-> lev status) 'active) (add-tex-to-dma! *texture-pool* lev 2)))))
+      (let ((lev (level-slot i))) (if (= (-> lev status) 'active) (add-tex-to-dma! *texture-pool* lev 2)))))
   (when (logtest? *texture-enable-user* 8)
     (let ((uploaded-common #f))
       (dotimes (i (-> *level* length))
-        (let ((lev (-> *level* level i)))
+        (let ((lev (level-slot i)))
           (when (= (-> lev status) 'active)
             (add-tex-to-dma! *texture-pool* lev 3)
             (when (not uploaded-common)
@@ -1206,7 +1222,7 @@
       (if (not uploaded-common) (upload-one-common! *texture-pool* (-> *level* level0)))))
   (when (logtest? *texture-enable-user* 16)
     (dotimes (i (-> *level* length))
-      (let ((lev (-> *level* level i))) (if (= (-> lev status) 'active) (add-tex-to-dma! *texture-pool* lev 4)))))
+      (let ((lev (level-slot i))) (if (= (-> lev status) 'active) (add-tex-to-dma! *texture-pool* lev 4)))))
   ;; sky. The sky textures were generated in player 1's pass, which the renderer runs first.
   (when (zero? (logand *vu1-enable-user* (vu1-renderer-mask sky)))
     (with-dma-buffer-add-bucket ((dma-buf (-> (current-frame) global-buf)) (bucket-id sky-draw))
@@ -1373,7 +1389,7 @@
    (level       symbol 2)
    (flags       uint32 2) ;; bit 0 grabbed, bit 1 dying, bit 2 zoomer, bit 3 flut flut
    (exists      symbol 2)
-   (levels      symbol 2) ;; names in *level* slots 0 and 1, for load/unload lines
+   (levels      symbol 4) ;; names in the four *level* slots, for load/unload lines
    (last-status time-frame)))
 
 (define *coop-log-state* (new 'global 'coop-log-state))
@@ -1384,7 +1400,8 @@
     (set! (-> *coop-log-state* state i) #f)
     (set! (-> *coop-log-state* level i) #f)
     (set! (-> *coop-log-state* flags i) (the-as uint 0))
-    (set! (-> *coop-log-state* exists i) #f)
+    (set! (-> *coop-log-state* exists i) #f))
+  (dotimes (i COOP_LEVEL_SLOTS)
     (set! (-> *coop-log-state* levels i) #f))
   (set! (-> *coop-log-state* last-status) 0)
   (none))
@@ -1427,8 +1444,8 @@
   (when *coop-log?*
     (let ((st *coop-log-state*))
       ;; levels loaded and unloaded
-      (dotimes (k 2)
-        (let* ((lev (-> *level* level k))
+      (dotimes (k (-> *level* length))
+        (let* ((lev (level-slot k))
                (name (if (= (-> lev status) 'inactive) #f (-> lev name))))
           (when (!= name (-> st levels k))
             (format 0 "[coop-log] t=~,,1f level slot ~D: ~A -> ~A~%" (coop-log-time) k (-> st levels k) name)
@@ -1814,10 +1831,11 @@
 ;; level streaming for both players (#69)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-;; Jak 1 keeps two levels. Load boundaries (load-boundary-data.gc) switch them as the camera or the
-;; player crosses: (load a b), (display a #t/#f), (vis a), (checkpt name). With co-op both players'
-;; cameras and positions cross them, and a crossing may only load a pair that keeps the level the
-;; other player is in. A player heading for a third level is held back: put next to the other player.
+;; Jak 1 kept two levels, co-op keeps four. Load boundaries (load-boundary-data.gc) switch them as the
+;; camera or the player crosses: (load a b), (display a #t/#f), (vis a), (checkpt name). With co-op both
+;; players' cameras and positions cross them, and a crossing's load never drops the level the
+;; other player is in. With four level slots (issue #110) each player has their own pair of levels
+;; (the one they are in and the next one while crossing), the wants are the union of both pairs.
 ;; Vis and checkpoints follow player 1 (as the continue point, music and the listener do).
 
 ;; player 2's load boundary points, as *load-boundary-target*: 0 camera, 1 player, 2 and 3 the same
@@ -1835,19 +1853,89 @@
 ;; a move longer than this in one frame is a teleport (respawn, warp, being held back): no crossing
 (defconstant COOP_BOUNDARY_JUMP (meters 10))
 
-(defun coop-level-keeps-player? ((tgt target) (lev symbol) (on symbol))
-  "Would tgt still have their level if the displayed levels became the ones named lev (and on, may be
-   #f)? Every displayed level whose boxes contain tgt must stay (level boxes overlap near borders, so
-   a player can be inside two); inside none, the nearest level must stay."
-  (let ((inside-any #f))
-    (dotimes (i (-> *level* length))
-      (let ((l (-> *level* level i)))
-        (when (and (= (-> l status) 'active) (point-in-boxes? l (-> tgt control trans)))
-          (set! inside-any #t)
-          (if (not (or (= (-> l name) lev) (= (-> l name) on))) (return #f)))))
-    (or inside-any
-        (let ((near (coop-level-containing *level* (-> tgt control trans) (the-as level #f))))
-          (or (not near) (= (-> near name) lev) (= (-> near name) on))))))
+;;;; Four level slots (issue #110): each player's own pair of levels
+
+;; The levels each player needs: the one they stand in and, while they cross a border, the next one.
+;; A player's load boundary crossing (load a b) sets their pair; the wants of the game are the union
+;; of both pairs, at most four names, so nobody's level goes away for the other player's loads.
+(deftype coop-wants (structure)
+  ((name symbol 4))) ;; player 1's pair, player 2's pair
+
+(define *coop-wants* (new 'global 'coop-wants))
+
+;; the player whose boundary crossing issues the next want-levels (set by coop-boundary-command-ok?),
+;; or -1: a script's load (boats, warp gates, cutscenes take both players along) sets both pairs
+(define *coop-want-player* -1)
+
+(defun coop-want-levels ((ls load-state) (a symbol) (b symbol))
+  "want-levels with co-op running: (a b) becomes the pair of the player whose crossing it is, or of
+   both players for a script's load, and the wants become the union of both pairs, that player's
+   first. Entries already wanted keep their display settings (load-state-want-names)."
+  (let ((me *coop-want-player*))
+    (set! *coop-want-player* -1)
+    (dotimes (p 2)
+      (when (or (< me 0) (= p me))
+        (set! (-> *coop-wants* name (* 2 p)) a)
+        (set! (-> *coop-wants* name (+ (* 2 p) 1)) b)))
+    (let ((names (new 'stack-no-clear 'array 'symbol 4))
+          (count 0)
+          (first (if (< me 0) 0 me)))
+      (dotimes (k 2)
+        (let ((p (if (zero? k) first (- 1 first))))
+          (dotimes (i 2)
+            (let ((n (-> *coop-wants* name (+ (* 2 p) i)))
+                  (dup #f))
+              (dotimes (j count)
+                (if (= (-> names j) n) (set! dup #t)))
+              (when (and n (not dup))
+                (set! (-> names count) n)
+                (+! count 1))))))
+      (load-state-want-names ls (the-as (pointer symbol) names) count)))
+  0)
+
+(defun coop-wants-reset ()
+  "Both players' pairs become the first two wants: when co-op starts and when both players come back
+   at a checkpoint (its two levels)."
+  (dotimes (p 2)
+    (set! (-> *coop-wants* name (* 2 p)) (-> (load-want *load-state* 0) name))
+    (set! (-> *coop-wants* name (+ (* 2 p) 1)) (-> (load-want *load-state* 1) name)))
+  (set! *coop-want-player* -1)
+  (none))
+
+(defun coop-wants-update ()
+  "Once per gameplay frame: a player who got somewhere without crossing a boundary (respawned next to
+   the other player, teleported) has a pair that doesn't hold the level they are in. Their pair becomes
+   that level alone and the wants are merged again, so the level stays loaded for them."
+  (dotimes (p 2)
+    (let ((tgt (coop-player-target p)))
+      (when (and tgt (coop-player-in-play? tgt))
+        (let ((here (coop-level-containing *level* (-> tgt control trans) (the-as level #f))))
+          (when (and here
+                     (!= (-> here name) (-> *coop-wants* name (* 2 p)))
+                     (!= (-> here name) (-> *coop-wants* name (+ (* 2 p) 1)))
+                     (not (and (not (point-in-boxes? here (-> tgt control trans))) (-> *coop-wants* name (* 2 p)))))
+            (format 0 "[coop] player ~D is in ~A without having crossed into it, wanting it for them~%" (+ p 1) (-> here name))
+            (set! *coop-want-player* p)
+            (coop-want-levels *load-state* (-> here name) #f))))))
+  (none))
+
+(defun coop-alloc-extra-levels! ()
+  "Co-op holds four levels: give the two extra slots their heaps (the first two got theirs in
+   alloc-levels!, the same size) and put all four slots in use. They stay in use afterwards; without
+   co-op the game only ever wants two levels, so the extra slots sit empty."
+  (when (< (-> *level* length) COOP_LEVEL_SLOTS)
+    (let* ((heap0 (-> (level-slot 0) heap))
+           (level-heap-size (&- (-> heap0 top-base) (the-as uint (-> heap0 base)))))
+      (dotimes (s COOP_LEVEL_SLOTS)
+        (let ((heap (-> (level-slot s) heap)))
+          (when (zero? (-> heap base))
+            (set! (-> heap base) (malloc 'global level-heap-size))
+            (set! (-> heap current) (-> heap base))
+            (set! (-> heap top-base) (&+ (-> heap base) level-heap-size))
+            (set! (-> heap top) (-> heap top-base)))))
+      (set! (-> *level* length) COOP_LEVEL_SLOTS)
+      (format 0 "[coop] ~D level slots, ~D KB each~%" (-> *level* length) (/ level-heap-size 1024))))
+  (none))
 
 (defun coop-boundary-skip-jumps ((points object))
   "A teleport since the last frame isn't a crossing: the old points (as *load-boundary-target*) become
@@ -1855,40 +1943,6 @@
   (let ((pts (the-as (inline-array lbvtx) points)))
   (if (< COOP_BOUNDARY_JUMP (vector-vector-distance (-> pts 0 v) (-> pts 2 v))) (set! (-> pts 2 quad) (-> pts 0 quad)))
     (if (< COOP_BOUNDARY_JUMP (vector-vector-distance (-> pts 1 v) (-> pts 3 v))) (set! (-> pts 3 quad) (-> pts 1 quad))))
-  (none))
-
-(define *coop-hold-back-pending* 0)
-
-(defun coop-hold-back ((idx int))
-  "Player idx heads for a third level: they are put next to the other player instead. If that can't
-   happen now (the other player is out of play, or idx is held by a cutscene), it happens as soon as
-   it can (coop-hold-back-update)."
-  (let ((me (coop-player-target idx))
-        (other (coop-player-target (- 1 idx))))
-    (cond
-      ((and me other (coop-player-in-play? other) (not (coop-held? me)))
-       (logclear! *coop-hold-back-pending* (ash 1 idx))
-       (format 0 "[coop] player ~D heads for a third level, putting them next to player ~D~%" (+ idx 1) (- 2 idx))
-       (let ((pos (coop-safe-position-near other (new 'stack-no-clear 'vector))))
-         (set! (-> me control transv quad) (the-as uint128 0))
-         (move-to-point! (-> me control) pos)
-         (set! (-> me control highest-jump-mark quad) (-> pos quad))
-         (set! (-> me control last-known-safe-ground quad) (-> pos quad))
-         (set! (-> me control camera-pos quad) (-> pos quad))
-         (let ((prev (coop-switch-context idx)))
-           (send-event *camera* 'teleport)
-           (coop-switch-context prev))))
-      (else (logior! *coop-hold-back-pending* (ash 1 idx)))))
-  (none))
-
-(defun coop-hold-back-update ()
-  "Once per tick: hold-backs that had to wait. A player who is out of play meanwhile (knocked out,
-   respawning) comes back next to the other one anyway."
-  (dotimes (i 2)
-    (when (logtest? *coop-hold-back-pending* (ash 1 i))
-      (if (coop-player-in-play? (coop-player-target i))
-        (coop-hold-back i)
-        (logclear! *coop-hold-back-pending* (ash 1 i)))))
   (none))
 
 (defun coop-full-display? ((mode symbol))
@@ -1900,7 +1954,7 @@
 (defun coop-player-in-level? ((tgt target) (name symbol))
   "Is tgt inside the boxes of the active level called name?"
   (dotimes (i (-> *level* length))
-    (let ((l (-> *level* level i)))
+    (let ((l (level-slot i)))
       (if (and (= (-> l name) name) (= (-> l status) 'active) (point-in-boxes? l (-> tgt control trans))) (return #t))))
   #f)
 
@@ -1908,8 +1962,8 @@
   "Once per gameplay frame: a level a player stands in is displayed in full. A boundary the other
    player crossed earlier (or before player 2 walked in) may have set it to special / special-vis,
    which leaves most of it undrawn and kills its actors (water volumes too: players fell through)."
-  (dotimes (i 2)
-    (let ((want (-> *load-state* want i)))
+  (dotimes (i (load-want-count))
+    (let ((want (load-want *load-state* i)))
       (when (and (-> want name) (-> want display?) (not (coop-full-display? (-> want display?))))
         (dotimes (p 2)
           (let ((tgt (coop-player-target p)))
@@ -1920,9 +1974,9 @@
   (none))
 
 (defun coop-boundary-command-ok? ((crossing object))
-  "check-boundary hook: may this crossing's command run? Always without co-op. A load that would drop
-   the other player's level holds the crossing player back instead; turning that level's display off
-   is ignored; vis and checkpoints follow player 1."
+  "check-boundary hook: may this crossing's command run? Always without co-op. A load is the crossing
+   player's own pair of levels (coop-want-levels merges it with the other player's); turning the other
+   player's level's display off is ignored; vis and checkpoints follow player 1."
   (if (not (coop-active?)) (return #t))
   (let* ((cmd (the-as load-boundary-crossing-command crossing))
          (me *coop-boundary-player*)
@@ -1930,9 +1984,8 @@
          (other? (and other (coop-player-in-play? other))))
     (case (-> cmd cmd)
       (((load-boundary-cmd load))
-       (cond
-         ((or (not other?) (coop-level-keeps-player? other (the-as symbol (-> cmd lev0)) (the-as symbol (-> cmd lev1)))) #t)
-         (else (coop-hold-back me) #f)))
+       (set! *coop-want-player* me)
+       #t)
       ;; turning a level's display off or down to special / special-vis (most of it not drawn, its
       ;; actors killed): not while the other player is in it
       (((load-boundary-cmd display))
@@ -2074,7 +2127,7 @@
           (lst (-> (scratchpad-object terrain-context) work ambient ambient-list)))
       (set! (-> lst num-items) 0)
       (dotimes (i (-> *level* length))
-        (let ((lev (-> *level* level i)))
+        (let ((lev (level-slot i)))
           (if (= (-> lev status) 'active) (collect-ambients (-> lev bsp) sphere 0 lst))))
       (countdown (i (-> lst num-items))
         (let* ((amb (-> lst items i))
@@ -2142,7 +2195,7 @@
   (coop-log-tick)
   (coop-grab-watch)
   (coop-keep-player-levels-displayed)
-  (coop-hold-back-update)
+  (coop-wants-update)
   (coop-contact-update)
   ;; some cinematics freeze the player with process-mask sleep instead of a grab (power cell plants,
   ;; the last race ring, lightning moles): freeze the other player for as long too
@@ -2267,7 +2320,8 @@
     (set! (-> *coop* sim-ticks) 0)
     (set! (-> *coop* render-passes) 0)
     (set! (-> *coop-timers* p2-missing) 0)
-    (set! *coop-hold-back-pending* 0)
+    (coop-alloc-extra-levels!)
+    (coop-wants-reset)
     (set! *coop-p2-boundary-valid?* #f)
     (dotimes (i 2)
       (set! (-> *coop-pad-watch* lost i) #f)

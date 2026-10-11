@@ -42,8 +42,8 @@ constexpr int bits_for_sym() {
 }
 static_assert(bits_for_sym() != -1, "symbol table invalid length");
 
-// amount of levels in level heap
-constexpr int LEVEL_MAX = 2;
+// amount of levels in level heap (local co-op: four level slots, issue #110; the original game held two)
+constexpr int LEVEL_MAX = 4;
 // total amount of levels, including ones outside level heap (default-level)
 constexpr int LEVEL_TOTAL = LEVEL_MAX + 1;
 }  // namespace jak1

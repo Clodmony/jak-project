@@ -128,7 +128,7 @@
     (let ((vu-lgt (the-as vu-lights (+ 64 (scratchpad-object int))))
           (lgt (if (= (-> draw level-index) 2)
                  (-> *time-of-day-context* light-group (-> draw light-index))
-                 (-> *time-of-day-context* moods (-> draw level-index) light-group (-> draw light-index)))))
+                 (-> (tod-mood *time-of-day-context* (the-as int (-> draw level-index))) light-group (-> draw light-index))))) ;; coop: any slot (#110)
       (vu-lights<-light-group! vu-lgt lgt))
     (lod-set! draw 0)
     (logior! (-> draw status) (draw-status was-drawn))

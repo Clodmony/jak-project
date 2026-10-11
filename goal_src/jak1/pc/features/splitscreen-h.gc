@@ -333,7 +333,7 @@
   (let ((best (the-as level #f))
         (best-dist 0.0))
     (dotimes (i (-> levels length))
-      (let ((lev (-> levels level i)))
+      (let ((lev (level-slot i :group levels)))
         (when (and (= (-> lev status) 'active) (!= lev skip))
           (if (point-in-boxes? lev pos) (return lev))
           (let ((d (vector-vector-distance (-> lev bsp bsphere) pos)))
@@ -391,6 +391,15 @@
 (define-extern coop-lowest-player-y (function float))
 (define-extern coop-boundary-skip-jumps (function object none))
 (define-extern coop-boundary-command-ok? (function object symbol))
+
+;; want-levels hook (issue #110): each player's own pair of levels, the wants are their union
+(define-extern coop-want-levels (function load-state symbol symbol int))
+
+;; both players' pairs become the first two wants (co-op start, checkpoint reload)
+(define-extern coop-wants-reset (function none))
+
+;; load-boundary.gc: the wants become the given names (the original want-levels for any count)
+(define-extern load-state-want-names (function load-state (pointer symbol) int int))
 (define-extern coop-check-boundaries-p2 (function none))
 (define-extern coop-send-to-other-camera (function process symbol object none))
 (define-extern coop-blast-survivor? (function float symbol symbol))
