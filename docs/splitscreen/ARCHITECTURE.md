@@ -286,6 +286,11 @@ upstream OpenGOAL, never a diverging copy:
 - Shared C++ runtime changes only take effect when Jak 1 turns co-op on. One exception, a bug fix:
   `gk --port` now sets the listener port (upstream declared it as a flag and the listener used a
   fixed port); without `--port` nothing changes. The local test tools use it to run several games.
+- Repository path (a bug fix, shared C++): the tools and test programs found the repository only if a
+  folder named `jak-project` was in their path. This fork is `opengoal-coop`, so its clones and CI
+  checkouts have that name; `file_util::try_get_jak_project_path` now falls back to the closest folder
+  above the program that contains `goal_src/` and `decompiler/config/`. Where the old rule finds
+  a path nothing changes.
 - Co-op code writes files through `*pc-settings-folder*`, not `*pc-user-dir-base-path*` (the latter
   ignores the launcher's `--config-path`).
 
