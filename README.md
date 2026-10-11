@@ -1,3 +1,43 @@
+# Jak 1 local co-op (split screen)
+
+**Two players, one PC, one screen: *Jak and Daxter: The Precursor Legacy* in split-screen co-op.**
+
+This is an unofficial fork of [OpenGOAL](https://github.com/open-goal/jak-project), the PC port of the Jak trilogy. It adds a local co-op mode to Jak 1 and ships as a mod for the [OpenGOAL Launcher](https://opengoal.dev). It is not made or supported by the OpenGOAL team: please report problems [here](https://github.com/Clodmony/jak-project/issues), not upstream.
+
+> [!WARNING]
+> No game files are included. You need your own legally purchased PS2 copy of Jak 1, installed through the OpenGOAL Launcher.
+
+## Download and install
+
+1. Install the official Jak 1 in the OpenGOAL Launcher.
+2. Download the archive for your system from the [latest release](https://github.com/Clodmony/jak-project/releases/latest) and rename it to `jak1-coop.tar.gz` (Linux, macOS) or `jak1-coop.zip` (Windows).
+3. In the launcher: Jak 1 > Features > Mods > **Add from File**, then pick the renamed file. The launcher builds the mod from your game files (about as long as a Jak 1 install).
+4. Start the mod from the mods list. Its settings and saves are separate from your normal Jak 1.
+
+## Playing together
+
+- **Title screen > Local co-op > New co-op game** (or *Load co-op game*). On the join screen, player 2 presses any button on their controller.
+- Or join during a game: Options > Game Options > Misc Options > Local co-op.
+- Each half of the screen is marked **P1** (blue) or **P2** (orange). The split can be side by side or top/bottom.
+- A player who falls comes back next to the other one; only when both are down does the game go back to the checkpoint.
+- The whole game is playable in co-op, including the zoomer and flut flut sections, the minigames and the bosses. Options: friendly fire (on by default), "every ring for both" in Precursor Basin, tougher bosses.
+- Co-op saves are kept apart from single-player saves.
+
+Not tested yet: two people with real controllers, Windows, macOS, and installing through the launcher's own UI. Known limitations are listed in [COMPATIBILITY.md](docs/splitscreen/COMPATIBILITY.md).
+
+## For developers
+
+- How the co-op works: [ARCHITECTURE.md](docs/splitscreen/ARCHITECTURE.md). Test plan and results: [TESTING.md](docs/splitscreen/TESTING.md). Packaging and releases: [MOD.md](docs/splitscreen/MOD.md).
+- The co-op code lives on the branch `feature/jak1-local-splitscreen` (the default branch); `master` mirrors upstream. Most of it is in `goal_src/jak1/pc/features/splitscreen*.gc`, with short hooks in upstream files.
+- Building works as for upstream OpenGOAL: see [Setting up a Development Environment](#setting-up-a-development-environment) below. Co-op starts from the REPL with `(coop-start)`.
+- Work is tracked in [the issues](https://github.com/Clodmony/jak-project/issues).
+
+This co-op mod was written with AI assistance.
+
+---
+
+*The rest of this README is upstream OpenGOAL's.*
+
 <p align="center">
   <img width="500" height="100%" src="./docs/img/logo-text-colored-new.png">
 </p>
