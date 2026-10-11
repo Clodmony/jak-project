@@ -426,7 +426,9 @@ RuntimeExitStatus exec_runtime(GameLaunchOptions game_options, int argc, const c
 
   bool enable_display = !game_options.disable_display;
   g_game_version = game_options.game_version;
-  g_server_port = game_options.server_port;
+  // tests start the runtime without a port: use the game's default one, as the compiler does
+  g_server_port = game_options.server_port >= 0 ? game_options.server_port
+                                                : DECI2_PORT - 1 + (int)g_game_version;
 
   gStartTime = time(nullptr);
   prof().instant_event("ROOT");
