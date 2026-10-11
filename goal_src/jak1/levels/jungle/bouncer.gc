@@ -73,7 +73,7 @@
 (defstate bouncer-fire (springbox)
   :code
     (behavior ()
-      (cpad-set-buzz! (-> *cpad-list* cpads 0) 1 178 (seconds 0.1))
+      (cpad-set-buzz! (coop-player-cpad) 1 178 (seconds 0.1)) ;; og:preserve-this coop: the player who bounced (was pad 0)
       (ja-no-eval :group! bounceytarp-idle-ja :num! (seek!) :frame-num (ja-aframe 6.0 0))
       (until (ja-done? 0)
         (suspend)

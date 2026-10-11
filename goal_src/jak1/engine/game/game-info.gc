@@ -503,8 +503,9 @@
        ;; sound and controller vibration.
        (when (not (and (= (handle->process source-handle) (handle->process (-> this eco-source)))
                        (not (time-elapsed? (-> this eco-source-time) (seconds 0.5)))))
-         (cpad-set-buzz! (-> *cpad-list* cpads 0) 1 127 (seconds 0.2))
-         (cpad-set-buzz! (-> *cpad-list* cpads 0) 0 17 (seconds 0.2))
+         ;; og:preserve-this coop: the pad of the player who picked it up (was pad 0)
+         (cpad-set-buzz! (-> (the-as target (-> this process)) control cpad) 1 127 (seconds 0.2))
+         (cpad-set-buzz! (-> (the-as target (-> this process)) control cpad) 0 17 (seconds 0.2))
          (case kind
            (((pickup-type eco-blue)) (sound-play "get-blue-eco"))
            (((pickup-type eco-green)) (sound-play "get-green-eco"))
