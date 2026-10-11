@@ -255,6 +255,23 @@
            ((< d2 (- d1 margin)) (logior! (-> proc mask) (process-mask coop-p2-near)) 1)
            (else 0)))))))
 
+(defun coop-nearest-player-at ((proc process) (pos vector))
+  "The player nearest to pos, with the same hysteresis as coop-nearest-player-for (coop-p2-near bit)."
+  (cond
+    ((not (-> *coop-players* valid 1)) 0)
+    ((not (-> *coop-players* valid 0)) 1)
+    (else
+     (let ((d1 (vector-vector-distance pos (-> *coop-players* pos 0)))
+           (d2 (vector-vector-distance pos (-> *coop-players* pos 1)))
+           (margin (-> *coop* near-hysteresis)))
+       (cond
+         ((process-mask? (-> proc mask) coop-p2-near)
+          (cond
+            ((< d1 (- d2 margin)) (logclear! (-> proc mask) (process-mask coop-p2-near)) 0)
+            (else 1)))
+         ((< d2 (- d1 margin)) (logior! (-> proc mask) (process-mask coop-p2-near)) 1)
+         (else 0))))))
+
 (defun coop-owner-player ((proc process))
   "0 or 1 for processes owned by a player (target, daxter, cameras), -1 for world processes."
   (cond
@@ -355,6 +372,14 @@
       ((>= owner 0) owner)
       ((>= (coop-pinned-player proc) 0) (coop-pinned-player proc))
       ((and (-> *coop* nearest-world?) (type-type? (-> proc type) process-drawable)) (coop-nearest-player-for (the-as process-drawable proc)))
+      ;; world code without a body of its own that a level actor placed (Geyser Rock's tutorial
+      ;; cameras, task triggers): the player nearest to the actor. Before #24 it always ran for player 1,
+      ;; so these never triggered for player 2.
+      ((and (-> *coop* nearest-world?)
+            (-> proc entity)
+            (nonzero? (-> proc entity))
+            (type-type? (-> proc entity type) entity-actor))
+       (coop-nearest-player-at proc (-> (the-as entity-actor (-> proc entity)) extra trans)))
       (else 0))))
 
 (defun coop-context-for-process ((proc process))
