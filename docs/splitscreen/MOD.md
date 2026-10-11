@@ -39,8 +39,9 @@ data/custom_assets/...
 data/log/                       (empty)
 ```
 
-The launcher passes no custom arguments to a mod, so co-op is switched on in game: Options >
-Game Options > Misc Options > "Local co-op" (works without `-debug`).
+The launcher passes no custom arguments to a mod, so co-op is switched on in game: on the title
+screen "Local co-op" > "New co-op game" / "Load co-op game", or during play Options > Game Options >
+Misc Options > "Local co-op" (works without `-debug`).
 
 ## Build a portable (static) build
 
@@ -179,8 +180,8 @@ What it checks (each problem stops the run before anything is written, unless th
 3. The launcher unpacks the archive into `<install>/features/jak1/mods/_local/<name>`
    (`<name>` = file name without `.zip`/`.tar.gz`), then runs the mod's extractor to decompile
    and compile. This takes about as long as a fresh Jak 1 install.
-4. Open the mod in the Mods list and press **Play**. In game: Options > Game Options > Misc
-   Options > "Local co-op".
+4. Open the mod in the Mods list and press **Play**. On the title screen: "Local co-op" > "New
+   co-op game" or "Load co-op game".
 
 If something fails, look at the launcher's log folder: `extractor-jak1.log` (decompile and
 compile) and `game-jak1-<name>.log` (the running game). The launcher ignores errors while
@@ -307,7 +308,7 @@ Actions > "Cut Mod Release ⭐" > Run workflow > branch `feature/jak1-local-spli
   "mods": {
     "jak1-coop": {
       "displayName": "Jak 1 local co-op (split screen)",
-      "description": "Split-screen local co-op for two players. Turn it on in Options > Game Options > Misc Options > Local co-op.",
+      "description": "Split-screen local co-op for two players. Start it on the title screen: Local co-op > New co-op game.",
       "authors": ["Clodmony"],
       "tags": ["co-op"],
       "supportedGames": ["jak1"],

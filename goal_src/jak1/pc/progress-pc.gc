@@ -793,6 +793,13 @@
             :name (text-id load-game)
             :scale #t
             :param3 (game-option-menu load-game))
+       ;; og:preserve-this coop: new or load a co-op game
+       (new 'static
+            'game-option
+            :option-type (game-option-type menu)
+            :name (text-id local-coop)
+            :scale #t
+            :param3 (game-option-menu coop-title))
        (new 'static
             'game-option
             :option-type (game-option-type menu)
@@ -811,6 +818,17 @@
             :name (text-id quit-game)
             :scale #t
             :param3 (game-option-menu quit-title))
+       (new 'static 'game-option :option-type (game-option-type button) :name (text-id back) :scale #t)))
+
+;; og:preserve-this coop: title menu "Local co-op". Co-op starts when one is chosen, so the save
+;; slots that follow are the co-op ones (saves/coop/); coming back here stops it again.
+(define *coop-title-options*
+  (new 'static
+       'boxed-array
+       :type
+       game-option
+       (new 'static 'game-option :option-type (game-option-type button) :name (text-id local-coop-new-game) :scale #t)
+       (new 'static 'game-option :option-type (game-option-type button) :name (text-id local-coop-load-game) :scale #t)
        (new 'static 'game-option :option-type (game-option-type button) :name (text-id back) :scale #t)))
 
 (define *speedrun-options*
@@ -2143,6 +2161,7 @@
   (set! (-> *options-remap* (progress-screen speedrun-options)) *speedrun-options*)
   (set! (-> *options-remap* (progress-screen speedrun-il-options)) *speedrun-il-options*)
   (set! (-> *options-remap* (progress-screen speedrun-cat-ext-options)) *speedrun-cat-ext-options*)
+  (set! (-> *options-remap* (progress-screen coop-title)) *coop-title-options*) ;; og:preserve-this coop
   ;; set default params
   (set! (-> *progress-state* aspect-ratio-choice) (get-aspect-ratio))
   (set! (-> *progress-state* video-mode-choice) (get-video-mode))
@@ -2233,6 +2252,10 @@
        (set! (-> *options-remap* (-> obj display-state)) *secrets-title*)
        (set! (-> *options-remap* (-> obj display-state)) *secrets*)))
     (((progress-screen monitor)) (build-monitor-options))
+    ;; og:preserve-this coop: the title menus pick single player or co-op, so co-op is off there
+    ;; (not while leaving one: "new/load co-op game" starts co-op on the way out)
+    (((progress-screen title) (progress-screen coop-title))
+     (if (and (coop-active?) (= (-> obj next-display-state) (-> obj display-state))) (coop-stop)))
     (((progress-screen select-controller)) (build-controller-options))
     (((progress-screen controller-binds) (progress-screen keyboard-binds) (progress-screen mouse-binds))
      (build-binding-reassignment-options (-> obj display-state))))
@@ -2509,6 +2532,18 @@
                   ;; exit demo!
                   (set! *master-exit* 'force)
                   (set-master-mode 'game))
+                 ;; og:preserve-this coop: start co-op, then the usual new game / load screens (co-op save slots)
+                 (((text-id local-coop-new-game) (text-id local-coop-load-game))
+                  (cpad-clear! 0 x)
+                  (cpad-clear! 0 circle)
+                  (coop-start)
+                  (push! obj)
+                  (sound-play "select-option")
+                  (set! (-> obj next-display-state)
+                        (set-memcard-screen obj
+                                            (if (= (-> options (-> obj option-index) name) (text-id local-coop-new-game))
+                                              (progress-screen save-game-title)
+                                              (progress-screen load-game)))))
                  (((text-id back))
                   ;; go back!
                   (if (= (-> obj display-state) (progress-screen settings)) (sound-play "menu-stats") (sound-play "cursor-options"))
@@ -2957,6 +2992,7 @@
            (cond
              ((-> *progress-state* yes-no-choice)
               (set! *quit-to-title* #t)
+              (coop-stop) ;; og:preserve-this coop: the title starts single player or co-op again
               (sound-play "start-options")
               (sound-volume-off)
               (set! (-> *game-info* mode) 'play)
@@ -3504,7 +3540,8 @@
               (progress-screen aspect-ratio)
               (progress-screen secrets)
               (progress-screen cheats)
-              (progress-screen monitor))
+              (progress-screen monitor)
+              (progress-screen coop-title)) ;; og:preserve-this coop
              (hide-progress-icons)
              (draw-options self 115 25 0.82))
             (((progress-screen settings) (progress-screen settings-title)) (hide-progress-icons) (draw-options self 115 25 0.78))
