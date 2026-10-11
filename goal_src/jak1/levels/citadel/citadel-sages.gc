@@ -282,7 +282,7 @@
       ((-> (method-of-type process-taskable hidden) enter))))
 
 (defbehavior citb-sage-draw-beam citb-sage ()
-  (if (< (vector-vector-distance (ear-trans) (-> self spawn-pos)) 409600.0)
+  (if (< (coop-sound-ear-distance (-> self spawn-pos)) 409600.0) ;; og:preserve-this coop
     (sound-play-by-name (string->sound-name (-> self sound-name))
                         (-> self sound-id)
                         1024

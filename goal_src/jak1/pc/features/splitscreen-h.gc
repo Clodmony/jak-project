@@ -348,6 +348,7 @@
 ;; defined in splitscreen.gc
 (define-extern coop-draw-player2-view (function none))
 (define-extern coop-switch-context (function int int))
+(define-extern coop-execute-p2-ambients (function none))
 (define-extern coop-start (function symbol))
 (define-extern coop-stop (function none))
 (define-extern coop-player-target (function int target))
