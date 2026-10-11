@@ -892,6 +892,41 @@ void InputManager::coop_auto_assign() {
   m_coop_mapping_dirty = true;
 }
 
+/// Join screen: co-op input on, player 1 keeps the pad that drives port 0 now (else keyboard/mouse),
+/// player 2 waits for a button press.
+void InputManager::coop_prepare_join() {
+  const std::lock_guard<std::mutex> lock(m_coop_mtx);
+  m_coop_slots.prepare_join(m_coop_controllers, coop_port0_controller_instance_id());
+  m_coop_explicit_assignment = true;
+  m_coop_enabled = true;
+  m_coop_mapping_dirty = true;
+  lg::info("[coop] join screen: waiting for player 2");
+}
+
+void InputManager::coop_swap_slots() {
+  const std::lock_guard<std::mutex> lock(m_coop_mtx);
+  m_coop_slots.swap_slots();
+  m_coop_explicit_assignment = true;
+  m_coop_mapping_dirty = true;
+}
+
+std::string InputManager::coop_slot_device_name(const int slot) {
+  const std::lock_guard<std::mutex> lock(m_coop_mtx);
+  if (slot < 0 || slot >= coop::kMaxPlayers) {
+    return "";
+  }
+  const auto& s = m_coop_slots.slot(slot);
+  if (s.kind != coop::DeviceKind::CONTROLLER || !s.connected) {
+    return "";
+  }
+  for (const auto& controller : m_available_controllers) {
+    if (controller->get_sdl_instance_id() == s.instance_id) {
+      return controller->get_name();
+    }
+  }
+  return "";
+}
+
 u32 InputManager::coop_slot_status(const int slot) {
   const std::lock_guard<std::mutex> lock(m_coop_mtx);
   return m_coop_slots.status_bits(slot);

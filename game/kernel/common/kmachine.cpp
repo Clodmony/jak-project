@@ -824,6 +824,40 @@ void pc_coop_auto_assign() {
   }
 }
 
+void pc_coop_prepare_join() {
+  if (Display::GetMainDisplay()) {
+    Display::GetMainDisplay()->get_input_manager()->coop_prepare_join();
+  }
+}
+
+void pc_coop_swap_players() {
+  if (Display::GetMainDisplay()) {
+    Display::GetMainDisplay()->get_input_manager()->coop_swap_slots();
+  }
+}
+
+/// The name of the controller of a co-op slot, in the game font; #f for keyboard/mouse or none.
+u64 pc_coop_slot_name(u32 slot, u32 str_dest_ptr) {
+  std::string name = "";
+  if (Display::GetMainDisplay()) {
+    name = Display::GetMainDisplay()->get_input_manager()->coop_slot_device_name((int)slot);
+  }
+  if (name.empty()) {
+    return bool_to_symbol(false);
+  }
+  if (g_game_version == GameVersion::Jak1) {
+    // The Jak 1 font has only caps
+    name = str_util::to_upper(name);
+  }
+  if (name.size() > 60) {
+    name = name.substr(0, 60);
+  }
+  const auto encoded_name =
+      get_font_bank_from_game_version(g_game_version)->convert_utf8_to_game(name.c_str());
+  strcpy(Ptr<String>(str_dest_ptr).c()->data(), encoded_name.c_str());
+  return bool_to_symbol(true);
+}
+
 u64 pc_coop_slot_status(u32 slot) {
   if (Display::GetMainDisplay()) {
     return Display::GetMainDisplay()->get_input_manager()->coop_slot_status((int)slot);
@@ -1230,6 +1264,9 @@ void init_common_pc_port_functions(
   make_func_symbol_func("pc-coop-begin-join!", (void*)pc_coop_begin_join);
   make_func_symbol_func("pc-coop-auto-assign!", (void*)pc_coop_auto_assign);
   make_func_symbol_func("pc-coop-slot-status", (void*)pc_coop_slot_status);
+  make_func_symbol_func("pc-coop-prepare-join!", (void*)pc_coop_prepare_join);
+  make_func_symbol_func("pc-coop-swap-players!", (void*)pc_coop_swap_players);
+  make_func_symbol_func("pc-coop-slot-name", (void*)pc_coop_slot_name);
   make_func_symbol_func("pc-set-keyboard-enabled!", (void*)pc_set_keyboard_enabled);
   make_func_symbol_func("pc-set-mouse-options!", (void*)pc_set_mouse_options);
   make_func_symbol_func("pc-set-mouse-camera-sens!", (void*)pc_set_mouse_camera_sens);

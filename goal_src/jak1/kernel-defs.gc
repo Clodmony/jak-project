@@ -489,6 +489,9 @@
 (define-extern pc-coop-begin-join! (function int none)) ;; -1 cancels
 (define-extern pc-coop-auto-assign! (function none))
 (define-extern pc-coop-slot-status (function int int)) ;; bits: 0-1 kind (1 kbm, 2 pad), 2 connected, 3 joining
+(define-extern pc-coop-prepare-join! (function none)) ;; join screen: P1 keeps their device, P2 joins with a button
+(define-extern pc-coop-swap-players! (function none))
+(define-extern pc-coop-slot-name (function int string symbol)) ;; controller name of a slot, #f for keyboard/none
 
 (define-extern pc-set-mouse-options! (function symbol symbol symbol none))
 

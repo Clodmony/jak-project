@@ -21,10 +21,11 @@ the load-time code of every edited engine file (this caught a load-order crash d
 It also compiles all Jak 2/3/X code, which caught an edit to a file shared with Jak 2/3.
 
 New unit tests (`build/goalc-test --gtest_filter='CoopSlots*:SplitscreenLayout*:MemcardNamespace*'`):
-- `test/test_coop_slots.cpp` (13 tests): default assignment for 0/1/2 controllers, one device can't
+- `test/test_coop_slots.cpp` (16 tests): default assignment for 0/1/2 controllers, one device can't
   feed two players, identical controllers (same GUID) are separate players, disconnect keeps the
   claim and never moves another player's device, reconnect of the same model (an idle pad of
-  the same model can't take over), join flow.
+  the same model can't take over), join flow, join screen (player 1 keeps their pad or the
+  keyboard, the keyboard can join as player 2 while player 1 uses a pad), swapping players.
 - `test/test_splitscreen_layout.cpp` (4 tests): view rects for both layouts, divider, bounds for
   odd and tiny framebuffers.
 - `test/test_memcard_namespace.cpp` (2 tests): the co-op save folder name is accepted, path-like
@@ -99,6 +100,10 @@ connect, then `(coop-start)`. Turn on "Local Co-op" > "Show co-op info" for the 
 | 34 | Title screen: "Local co-op" > "New co-op game", pick a slot (or continue without saving) | The co-op save slots show (`saves/coop/`); the intro plays full screen, then both players start in Geyser Rock, split |
 | 35 | Title screen: "Local co-op" > "Load co-op game", pick a co-op save | It loads with both players; Back from the slot list returns to the co-op title menu with co-op off |
 | 36 | Pause menu > "Quit game" during co-op, then "New game" on the title | Co-op is off on the title screen; the new game is single player with the single-player slots |
+| 37 | Join screen (title "New co-op game", or Misc Options > "Local co-op" on): press a button on player 2's pad | Player 1's controller is listed by name, player 2 "press any button on your controller" until then, then player 2's controller name; "Start" only works once both have a device |
+| 38 | Join screen: "Swap players", then Start | Each pad drives the other player than before |
+| 39 | Join screen with one pad, player 1 on the pad: press a key | The keyboard joins as player 2 |
+| 40 | Join screen: Back (or close the menu) | Co-op stays off, both pads/keyboard work the single-player game as before |
 
 ## Runtime results
 
@@ -156,6 +161,7 @@ menus, unplugging) went through the pads. No keyboard input was injected: the de
 | Gol and Maia (#20) | Scripted (`finalboss` scenario, "finalboss-fight" checkpoint, 11 checks; phases forced with REPL state changes, the boss can't be fought with scripted input): both players' cameras are in the boss camera; tougher bosses: 8 hits instead of 5; the eye beam hits player 2 standing in it (frozen in the air on the beam) and not player 1, who is nearer to the boss; red shot rings hit both players standing on the ring; a dark eco bomb knocks out player 2 below while player 1 is out of reach (frozen 22 m up), the boss moves on to the next phase and player 2 respawns next to player 1 once player 1 stands again; the ending from the white eco: both scenes play, the second puts the other player next to the one at the big door, player 2 holding X speeds the credits up, without 100 cells both are back at the start; the 100-cell door opened by player 2 holds player 1 next to them with the door camera in both views; the last scene ends at the title screen as in single player. Not tested: the eco platforms with either player's yellow eco, a full fight with real input |
 | Level streaming (#69) | Scripted (`streaming` scenario, 4 checks; players moved in small steps so they cross the load boundaries as when walking): player 2 goes from Sandover to Sentinel Beach, the beach is displayed for them, they stay there 245 m from player 1 with both levels displayed and no leash; player 1 crossing the boundary toward Forbidden Jungle while player 2 is on the beach is held back next to player 2 and the beach stays; the same with the roles swapped; with both in Sandover, player 1's crossing loads the jungle and nobody is held back. Found on the way: Sandover's level boxes reach onto the beach, so "the level a player is in" can be two levels; a Keira hint near the test path grabbed both players (the hold-back waits for that) |
 | Title screen (#40) | Scripted (`title-coop` scenario, 14 checks, all menu input through the virtual pad): the title menu has "Local co-op" as its 3rd entry and opens the co-op title menu with co-op still off; "New co-op game" starts co-op and opens the new game slot choice with the co-op slots, Back returns with co-op off again; "continue without saving" starts the intro with co-op on, after it (skipped with cutscene skips) both players are in Geyser Rock, split; a save there goes to `saves/coop/`; pause menu > Quit game > yes stops co-op and shows the title; "Load co-op game" opens the co-op slots and loads that save with both players; "New game" on the title stays single player. By hand: the intro played to the end with co-op on, then both players at Geyser Rock |
+| Join screen (#37) | Scripted (`join-screen` scenario, 11 checks; `title-coop` goes through it too), all input through the virtual pads: Misc Options > "Local co-op" on opens the join screen with co-op still off; player 1's pad is listed by name ("XBOX ONE S CONTROLLER"), player 2 waits; Start is locked; a button on player 1's pad doesn't join them twice; a button on the other pad joins it and shows its name; "Swap players" swaps which pad drives which player, and back; Back leaves co-op and co-op input off; again with Start: Misc Options shows "Local co-op" on, player 2 spawns next to player 1, each pad drives its own player; turning the option off stops co-op at once. Not tested in game: the keyboard joining (unit tests only; no keyboard input is injected) and real controllers (#8) |
 | Warp gates (#22) | Scripted (`warp` scenario): the gate menu holds both players, whoever uses the gate (player 1 or player 2) picks the destination, both jump into the gate, player 2 comes out of the gate at the destination right behind player 1, both stand 1 m apart, no leash teleport. Sandover to Geyser Rock |
 
 ## Performance
