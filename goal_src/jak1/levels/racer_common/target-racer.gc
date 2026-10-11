@@ -364,7 +364,7 @@
 
 (defbehavior racer-buzz target ((arg0 float))
   (let ((f1-0 (lerp-scale 0.2 1.0 (-> self control ctrl-xz-vel) 0.0 (-> self racer transv-max))))
-    (cpad-set-buzz! (-> *cpad-list* cpads 0) 1 (the int (* 255.0 (fmin 1.0 (* arg0 f1-0)))) (seconds 0.05)))
+    (cpad-set-buzz! (-> self control cpad) 1 (the int (* 255.0 (fmin 1.0 (* arg0 f1-0)))) (seconds 0.05))) ;; og:preserve-this coop: this player's pad (was pad 0)
   0
   (none))
 
@@ -528,7 +528,7 @@
       (let ((v1-258 (rand-vu-int-range 3 (+ (-> self node-list length) -1))))
         (launch-particles (-> *part-id-table* 2229)
                           (vector<-cspace! (new 'stack-no-clear 'vector) (-> self node-list data v1-258)))))
-    (cpad-set-buzz! (-> *cpad-list* cpads 0) 0 1 (seconds 0.1)))
+    (cpad-set-buzz! (-> self control cpad) 0 1 (seconds 0.1))) ;; og:preserve-this coop: this player's pad (was pad 0)
   (when (logtest? (-> self control status) (cshape-moving-flags twall))
     (let* ((gp-8 (racer-find-prop-point (new 'stack-no-clear 'vector) (-> self control wall-contact-pt)))
            (v1-274 (-> self control wall-pat material))
@@ -542,7 +542,7 @@
                            (lerp-scale 0.2 10.0 (-> self control ctrl-xz-vel) 0.0 (-> self racer transv-max)))
                      (-> *part-id-table* 2225)))))
       (launch-particles a1-54 gp-8))
-    (cpad-set-buzz! (-> *cpad-list* cpads 0) 0 51 (seconds 0.05))
+    (cpad-set-buzz! (-> self control cpad) 0 51 (seconds 0.05)) ;; og:preserve-this coop: this player's pad (was pad 0)
     (sound-play-by-name (sound-name-with-material 'zoom-hit (-> self control wall-pat) "")
                         (-> self racer scrape-sound-id)
                         1024
