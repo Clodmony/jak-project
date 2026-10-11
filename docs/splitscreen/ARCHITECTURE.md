@@ -207,7 +207,7 @@ the same behaviour as the existing PC "force actors" option, without changing th
 - `process-grab?`/`process-release?` (cutscenes, talks, elevators) hold and release both players. The
   grab and the release can name different players (the grabber's `*target*` can change in between),
   so the pair is recorded and releasing either player releases both. Only one pair is tracked.
-- Rumble from target code, eco and crates goes to the pad of the player involved (`coop-player-cpad`).
+- Rumble goes to the pad of the player it is about: target code, crates and orbs (`coop-player-cpad`); eco pickups, the zoomer and the flut flut use the player's own pad (`control cpad`), yellow and blue eco shots the shooter's (`projectile-owner-cpad`), the jungle bouncer the player who bounced.
 - Moving platforms reserve at least two rider slots.
 - Pause: right before `determine-pause-mode`, player 2's Start/Select are merged into pad 0, and a
   player 2 controller loss injects a pause (`coop-merge-pause-buttons`; player 1's loss pauses as in
