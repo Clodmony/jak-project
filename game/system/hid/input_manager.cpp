@@ -84,6 +84,10 @@ void InputManager::refresh_device_list() {
   prof().instant_event("ROOT");
   {
     auto p = scoped_prof("input_manager::refresh_device_list");
+    // Local co-op: the game thread reads the controller list and the port mapping in the pc-coop-*
+    // calls (join screen names, player 1's pad, auto-assign) under m_coop_mtx, while this rebuild
+    // runs on the graphics thread (hotplug, co-op turned off). Hold the lock for the whole rebuild.
+    const std::lock_guard<std::mutex> coop_lock(m_coop_mtx);
     m_available_controllers.clear();
     m_controller_port_mapping.clear();
     // Enumerate devices
@@ -147,9 +151,9 @@ void InputManager::refresh_device_list() {
       m_settings->_keyboard_temp_enabled = false;
     }
 
-    // Local co-op: keep each player's claim across hotplug and override the legacy mapping.
+    // Local co-op: keep each player's claim across hotplug and override the legacy mapping
+    // (m_coop_mtx is held, see above).
     {
-      const std::lock_guard<std::mutex> lock(m_coop_mtx);
       m_coop_controllers.clear();
       for (const auto& controller : m_available_controllers) {
         m_coop_controllers.push_back({controller->get_sdl_instance_id(), controller->get_guid()});
