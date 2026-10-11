@@ -1721,6 +1721,10 @@
   (local-coop-start #x1712)
   (local-coop-swap #x1713)
   (local-coop-controller #x1714)
+  (local-coop-pad-lost #x1715)
+  (local-coop-pad-back #x1716)
+  (local-coop-pad-reconnect #x1717)
+  (local-coop-press-start #x1718)
 ;; GAME-TEXT-ID ENUM ENDS
   )
 

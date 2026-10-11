@@ -1760,10 +1760,80 @@
         (coop-switch-context prev))))
   (none))
 
+(deftype coop-pad-watch (structure)
+  ((lost      symbol 2) ;; the player's controller is disconnected (it was connected before)
+   (back-time time-frame 2) ;; when it came back (the "connected" message shows for a while)
+   (connected symbol 2))) ;; last frame's state
+
+(define *coop-pad-watch* (new 'static 'coop-pad-watch))
+
+(defun coop-pad-messages ()
+  "Every frame (also paused): a player whose controller disconnects gets a message until it is back
+   (losing a controller pauses the game), then \"controller connected\" for 3 s or while still paused.
+   Keyboard/mouse and a slot that never had a device don't count. Each message shows in that
+   player's view when split."
+  (dotimes (i 2)
+    (let* ((status (pc-coop-slot-status i))
+           (has-pad (= (logand status 3) 2))
+           (connected (and has-pad (logtest? status 4))))
+      (cond
+        ((and has-pad (not connected) (-> *coop-pad-watch* connected i))
+         (format 0 "[coop] player ~D's controller disconnected~%" (+ i 1))
+         (set! (-> *coop-pad-watch* lost i) #t))
+        ((and connected (-> *coop-pad-watch* lost i))
+         (format 0 "[coop] player ~D's controller connected again~%" (+ i 1))
+         (set! (-> *coop-pad-watch* lost i) #f)
+         (set! (-> *coop-pad-watch* back-time i) (-> *display* real-frame-counter)))
+        ((not has-pad) (set! (-> *coop-pad-watch* lost i) #f)))
+      (set! (-> *coop-pad-watch* connected i) connected)
+      ;; "connected" shows for 3 s, and on while the game is still paused (with "press start")
+      (when (and (nonzero? (-> *coop-pad-watch* back-time i))
+                 (!= *master-mode* 'pause)
+                 (>= (- (-> *display* real-frame-counter) (-> *coop-pad-watch* back-time i)) (seconds 3)))
+        (set! (-> *coop-pad-watch* back-time i) 0))
+      (let ((lost (-> *coop-pad-watch* lost i))
+            (back (nonzero? (-> *coop-pad-watch* back-time i))))
+        (when (or lost back)
+          (let ((prev (coop-switch-context i))
+                (font (new 'stack
+                           'font-context
+                           *font-default-matrix*
+                           6
+                           ;; above the game's "PAUSE"; both at once (one view while paused): player 2's
+                           ;; below player 1's
+                           (if (and (not (coop-split-frame?)) (= i 1)) 88 34)
+                           0.0
+                           (if (zero? i) (font-color cyan) (font-color orange))
+                           (font-flags shadow kerning middle large))))
+            (set-width! font 500)
+            (set-height! font 20)
+            (set-scale! font 0.7)
+            (print-game-text (lookup-text! *common-text* (if (zero? i) (text-id local-coop-player-1) (text-id local-coop-player-2)) #f)
+                             font
+                             #f
+                             128
+                             22)
+            (set! (-> font origin y) (+ (-> font origin y) 18.0))
+            (set-color! font (font-color default))
+            (print-game-text (lookup-text! *common-text* (if lost (text-id local-coop-pad-lost) (text-id local-coop-pad-back)) #f)
+                             font
+                             #f
+                             128
+                             22)
+            (set! (-> font origin y) (+ (-> font origin y) 18.0))
+            (set-scale! font 0.55)
+            (cond
+              (lost (print-game-text (lookup-text! *common-text* (text-id local-coop-pad-reconnect) #f) font #f 128 22))
+              ((= *master-mode* 'pause)
+               (print-game-text (lookup-text! *common-text* (text-id local-coop-press-start) #f) font #f 128 22)))
+            (coop-switch-context prev))))))
+  (none))
+
 (defun coop-update ()
   "Once per frame: split decision and listener. In game mode also player positions, player 2 respawn
    and the distance leash."
   (coop-draw-player-labels)
+  (coop-pad-messages)
   (set! (-> *coop* split?) (if (coop-want-split?) #t #f))
   ;; one listener for the session: player 1 (level streaming and ambients follow player 1 too)
   (let ((p1 (coop-player-target 0)))
@@ -1934,6 +2004,10 @@
     (set! (-> *coop-timers* p2-missing) 0)
     (set! *coop-hold-back-pending* 0)
     (set! *coop-p2-boundary-valid?* #f)
+    (dotimes (i 2)
+      (set! (-> *coop-pad-watch* lost i) #f)
+      (set! (-> *coop-pad-watch* connected i) #f)
+      (set! (-> *coop-pad-watch* back-time i) 0))
     (set! *player-context-for-process* coop-context-for-process)
     (set! *player-context-for-event* coop-context-for-event)
     (set! *player-context-restore* coop-context-restore)

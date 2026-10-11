@@ -209,7 +209,12 @@ the same behaviour as the existing PC "force actors" option, without changing th
 - Rumble from target code, eco and crates goes to the pad of the player involved (`coop-player-cpad`).
 - Moving platforms reserve at least two rider slots.
 - Pause: right before `determine-pause-mode`, player 2's Start/Select are merged into pad 0, and a
-  player 2 controller loss injects a pause (`coop-merge-pause-buttons`).
+  player 2 controller loss injects a pause (`coop-merge-pause-buttons`; player 1's loss pauses as in
+  single player). While a player's controller is disconnected the screen says so ("Player 2 /
+  controller disconnected / connect it again to play on"); once it is back, "controller connected"
+  shows for 3 s, and with "press start to continue" for as long as the game is still paused
+  (`coop-pad-messages`, in that player's view when split). Keyboard/mouse and a slot that never had
+  a device get no message.
 - Pad 1 debug/cheat binds (Billy skip, plant boss skip, lightning mole, balloon lurker steering,
   retail debug cheats) are disabled while co-op runs, since pad 1 is player 2.
 
