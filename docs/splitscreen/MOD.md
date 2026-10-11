@@ -319,16 +319,16 @@ before cutting the real release (`gh run download <run id> -n release-dry-run`, 
       "authors": ["Clodmony"],
       "tags": ["co-op"],
       "supportedGames": ["jak1"],
-      "websiteUrl": "https://github.com/Clodmony/jak-project/tree/feature/jak1-local-splitscreen",
+      "websiteUrl": "https://github.com/Clodmony/opengoal-coop/tree/feature/jak1-local-splitscreen",
       "versions": [
         {
           "version": "0.1.0",
           "publishedDate": "2026-10-09T00:00:00Z",
           "supportedGames": ["jak1"],
           "assets": {
-            "windows": "https://github.com/Clodmony/jak-project/releases/download/v0.1.0/windows-v0.1.0.zip",
-            "linux": "https://github.com/Clodmony/jak-project/releases/download/v0.1.0/linux-v0.1.0.tar.gz",
-            "macos": "https://github.com/Clodmony/jak-project/releases/download/v0.1.0/macos-intel-v0.1.0.tar.gz"
+            "windows": "https://github.com/Clodmony/opengoal-coop/releases/download/v0.1.0/windows-v0.1.0.zip",
+            "linux": "https://github.com/Clodmony/opengoal-coop/releases/download/v0.1.0/linux-v0.1.0.tar.gz",
+            "macos": "https://github.com/Clodmony/opengoal-coop/releases/download/v0.1.0/macos-intel-v0.1.0.tar.gz"
           }
         }
       ]
