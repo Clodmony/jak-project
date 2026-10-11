@@ -346,9 +346,9 @@
        (when (not (-> *pc-settings* use-vis?))
          (let ((base-x (-> this particles 0 init-pos x)))
            (set! (-> this particles 1 init-pos x)
-                 (+ base-x (* (-> *pc-settings* aspect-ratio-reciprocal) (- (-> this particles 1 init-pos x) base-x))))
+                 (+ base-x (* (coop-hud-aspect-reciprocal) (- (-> this particles 1 init-pos x) base-x)))) ;; og:preserve-this coop
            (set! (-> this particles 2 init-pos x)
-                 (+ base-x (* (-> *pc-settings* aspect-ratio-reciprocal) (- (-> this particles 2 init-pos x) base-x)))))))))
+                 (+ base-x (* (coop-hud-aspect-reciprocal) (- (-> this particles 2 init-pos x) base-x))))))))) ;; og:preserve-this coop
   0
   (none))
 
@@ -643,6 +643,9 @@
   (cond
     (arg0 (set! (-> this x-scale) 0.0123) (set! (-> this y-scale) -0.0145) (set! (-> this y-pos) 86))
     (else (set! (-> this x-scale) 0.0095) (set! (-> this y-scale) -0.011) (set! (-> this y-pos) 79)))
+  ;; og:preserve-this coop: the glow sits one unit right of the orb icon (400 vs 399), barely visible
+  ;; full screen; in a split view the orb fills more of the glow and the offset shows. Centre it there.
+  (if (> (-> this nb-of-particles) 0) (set! (-> this particles 0 init-pos x) (if (coop-split-frame?) 399.0 400.0)))
   (when arg1
     (set! (-> this x-scale) (* 1.1 (-> this x-scale)))
     (set! (-> this y-scale) (* 1.2 (-> this y-scale)))
@@ -1410,14 +1413,14 @@
   ;; og:preserve-this
   (#when PC_PORT
     (let ((base-x (-> this particles 2 init-pos x)))
-      (+! base-x (* (- 512.0 base-x) (- 1.0 (-> *pc-settings* aspect-ratio-reciprocal))))
+      (+! base-x (* (- 512.0 base-x) (- 1.0 (coop-hud-aspect-reciprocal)))) ;; og:preserve-this coop
       (set! (-> this particles 0 init-pos x) 435.0)
       (set! (-> this particles 1 init-pos x) 432.0)
       (set! (-> this particles 2 init-pos x) 435.0)
       (when (not (-> *pc-settings* use-vis?))
         (dotimes (i (-> this nb-of-particles))
           (set! (-> this particles i init-pos x)
-                (+ base-x (* (-> *pc-settings* aspect-ratio-reciprocal) (- (-> this particles i init-pos x) base-x))))))))
+                (+ base-x (* (coop-hud-aspect-reciprocal) (- (-> this particles i init-pos x) base-x)))))))) ;; og:preserve-this coop
   0
   (none))
 

@@ -467,8 +467,11 @@
            (when (not (-> *pc-settings* use-vis?))
              ;; when the game is in widescreen, HUD sprites are generally enlarged, which looks terrible.
              ;; this reverts that.
-             (*! f1-0 (-> *pc-settings* aspect-ratio-scale))
-             (*! f0-1 (-> *pc-settings* aspect-ratio-scale)))
+             ;; og:preserve-this coop: relative-x-scale-reciprical is aspect-ratio-scale, except on
+             ;; split-screen frames, where it is the scale of one view (update-video-hacks). The
+             ;; perspective here is that view's, so the full-screen scale squeezed or widened HUD sprites.
+             (*! f1-0 (-> *video-parms* relative-x-scale-reciprical))
+             (*! f0-1 (-> *video-parms* relative-x-scale-reciprical)))
            (when (pc-cheats? (-> *pc-settings* cheats) mirror)
              (*! f1-0 -1.0)
              (*! f0-1 -1.0)))
