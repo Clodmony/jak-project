@@ -102,7 +102,9 @@ C++ (`OpenGLRenderer::dispatch_buckets`, Jak 1 path only):
 - `count_jak1_views` peeks the chain for a second `CALL` header.
 - each view renders at the origin of its own framebuffer (`m_view_fbos`), so the GS scissor
   emulation, depth cue, distort sprites and stencil shadows stay inside the view;
-- each view is copied into its rect of the game framebuffer (`SplitscreenLayout.h`, 2+ px divider);
+- each view is copied into its rect of the game framebuffer (`SplitscreenLayout.h`); the divider
+  between them (4+ px) is half blue next to player 1's view and half orange next to player 2's
+  (`divider_rects`, `kPlayerColors`);
 - the normal present path (pcrtc, brightness, blackout) runs once.
 - occlusion vis is ignored on split frames (one vis buffer per level, written by one camera).
 
@@ -118,6 +120,10 @@ reads the frame. Both views share one framebuffer (`m_view_fbo`), freed 600 fram
 split frame.
 
 Menus, pause and cutscenes (`movie?`) use one full-screen view of player 1 (`coop-want-split?`).
+
+Telling the players apart: on split frames each view shows a small "P1" (cyan) or "P2" (orange) in
+its bottom right corner, the corner the game's HUD uses least (`coop-draw-player-labels`, drawn
+in each player's context so it lands in their view's buckets). The divider uses the same colours.
 
 ## Input
 

@@ -26,8 +26,8 @@ New unit tests (`build/goalc-test --gtest_filter='CoopSlots*:SplitscreenLayout*:
   claim and never moves another player's device, reconnect of the same model (an idle pad of
   the same model can't take over), join flow, join screen (player 1 keeps their pad or the
   keyboard, the keyboard can join as player 2 while player 1 uses a pad), swapping players.
-- `test/test_splitscreen_layout.cpp` (4 tests): view rects for both layouts, divider, bounds for
-  odd and tiny framebuffers.
+- `test/test_splitscreen_layout.cpp` (5 tests): view rects for both layouts, divider, bounds for
+  odd and tiny framebuffers, the divider's two halves fill the gap next to their player's view.
 - `test/test_memcard_namespace.cpp` (2 tests): the co-op save folder name is accepted, path-like
   names (`..`, slashes, too long) are rejected.
 
@@ -104,6 +104,7 @@ connect, then `(coop-start)`. Turn on "Local Co-op" > "Show co-op info" for the 
 | 38 | Join screen: "Swap players", then Start | Each pad drives the other player than before |
 | 39 | Join screen with one pad, player 1 on the pad: press a key | The keyboard joins as player 2 |
 | 40 | Join screen: Back (or close the menu) | Co-op stays off, both pads/keyboard work the single-player game as before |
+| 41 | Play split (both layouts) | A small "P1" (blue) / "P2" (orange) in the bottom right corner of each view; the divider is blue on player 1's side, orange on player 2's; menus and cutscenes show neither |
 
 ## Runtime results
 
@@ -162,6 +163,7 @@ menus, unplugging) went through the pads. No keyboard input was injected: the de
 | Level streaming (#69) | Scripted (`streaming` scenario, 4 checks; players moved in small steps so they cross the load boundaries as when walking): player 2 goes from Sandover to Sentinel Beach, the beach is displayed for them, they stay there 245 m from player 1 with both levels displayed and no leash; player 1 crossing the boundary toward Forbidden Jungle while player 2 is on the beach is held back next to player 2 and the beach stays; the same with the roles swapped; with both in Sandover, player 1's crossing loads the jungle and nobody is held back. Found on the way: Sandover's level boxes reach onto the beach, so "the level a player is in" can be two levels; a Keira hint near the test path grabbed both players (the hold-back waits for that) |
 | Title screen (#40) | Scripted (`title-coop` scenario, 14 checks, all menu input through the virtual pad): the title menu has "Local co-op" as its 3rd entry and opens the co-op title menu with co-op still off; "New co-op game" starts co-op and opens the new game slot choice with the co-op slots, Back returns with co-op off again; "continue without saving" starts the intro with co-op on, after it (skipped with cutscene skips) both players are in Geyser Rock, split; a save there goes to `saves/coop/`; pause menu > Quit game > yes stops co-op and shows the title; "Load co-op game" opens the co-op slots and loads that save with both players; "New game" on the title stays single player. By hand: the intro played to the end with co-op on, then both players at Geyser Rock |
 | Join screen (#37) | Scripted (`join-screen` scenario, 11 checks; `title-coop` goes through it too), all input through the virtual pads: Misc Options > "Local co-op" on opens the join screen with co-op still off; player 1's pad is listed by name ("XBOX ONE S CONTROLLER"), player 2 waits; Start is locked; a button on player 1's pad doesn't join them twice; a button on the other pad joins it and shows its name; "Swap players" swaps which pad drives which player, and back; Back leaves co-op and co-op input off; again with Start: Misc Options shows "Local co-op" on, player 2 spawns next to player 1, each pad drives its own player; turning the option off stops co-op at once. Not tested in game: the keyboard joining (unit tests only; no keyboard input is injected) and real controllers (#8) |
+| Telling players apart (#42) | Scripted (`player-labels` scenario, 4 checks, pixel colours of screenshots): side by side, the divider's columns go blue then orange from player 1's view to player 2's; the bottom right corner of player 1's view has cyan text and no orange, player 2's the other way round; the same with top/bottom (blue row above, orange below); in the pause menu (one view) neither colour is there |
 | Warp gates (#22) | Scripted (`warp` scenario): the gate menu holds both players, whoever uses the gate (player 1 or player 2) picks the destination, both jump into the gate, player 2 comes out of the gate at the destination right behind player 1, both stand 1 m apart, no leash teleport. Sandover to Geyser Rock |
 
 ## Performance
