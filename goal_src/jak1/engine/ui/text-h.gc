@@ -812,6 +812,10 @@
   (local-coop-start #x1712) ;; og:preserve-this coop
   (local-coop-swap #x1713) ;; og:preserve-this coop
   (local-coop-controller #x1714) ;; og:preserve-this coop
+  (local-coop-pad-lost #x1715) ;; og:preserve-this coop
+  (local-coop-pad-back #x1716) ;; og:preserve-this coop
+  (local-coop-pad-reconnect #x1717) ;; og:preserve-this coop
+  (local-coop-press-start #x1718) ;; og:preserve-this coop
   ;; GAME-TEXT-ID ENUM ENDS
   )
 
