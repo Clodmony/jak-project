@@ -53,8 +53,11 @@ Consequences, by design:
   player's rig while co-op runs.
 - Manager process `coop-manager` (default pool, once per frame, also while paused so menus get a
   single full-screen view): split decision and listener; in game mode also the player position
-  cache, player 2 respawn next to player 1 after `respawn-delay`, hold-backs that had to wait, the
-  distance leash (`leash-distance`, 1000 m, a safety net since #69).
+  cache, player 2's first spawn next to player 1 after `respawn-delay`, the players' level pairs
+  (`coop-wants-update`), the distance leash (`leash-distance`, 1000 m, a safety net since #69).
+  A player who dies while the other plays on comes back next to the other player, or at the last
+  checkpoint when that is nearer to where they died (`target-coop-respawn`; since #110, four level
+  slots: the players can be levels apart).
 - Title screen (all builds): "Local co-op" > "New co-op game" / "Load co-op game" (`*coop-title-options*`,
   screen `coop-title`, `progress-pc.gc`). Choosing one opens the join screen; its "Start" starts co-op,
   then the normal new game slot choice or load screen follows, so their slots are the co-op ones.
@@ -141,22 +144,29 @@ them (the join screen counts as choosing: `SlotAssigner::prepare_join`, `swap_sl
 
 ## Streaming and world simulation
 
-Jak 1 holds two levels. Load boundaries (`load-boundary-data.gc`) switch them as the camera or the
-player crosses: `(load a b)`, `(display a on/off)`, `(vis a)`, `(checkpt name)`. With co-op both
-players cross them (#69):
+Jak 1 held two levels; co-op holds four (#110), so each player can stand in their own level and
+cross a border at the same time (a player needs at most two: the one they are in and the next one
+while crossing). Load boundaries (`load-boundary-data.gc`) switch them as the camera or the player
+crosses: `(load a b)`, `(display a on/off)`, `(vis a)`, `(checkpt name)`. With co-op both players
+cross them (#69):
 - player 1's crossings use the original points in `*load-boundary-target*`; player 2's camera and
   position are checked in a second pass over the boundary list (`coop-check-boundaries-p2`, which
   lends player 2's points to `check-boundary`);
-- a move of more than 10 m in one frame (respawn, warp, being held back) is not a crossing
-  (`coop-boundary-skip-jumps`);
-- every crossing command goes through `coop-boundary-command-ok?`: a load may not drop a displayed
-  level whose boxes contain the other player (boxes overlap near borders, so a player can be in two:
-  all of them must stay, `coop-level-keeps-player?`). Such a load is not done and the crossing
-  player is held back: put next to the other player (`coop-hold-back`, retried each tick while that
-  can't happen yet). Turning off the display of the other player's level is ignored. Vis and
-  checkpoints follow player 1 only;
+- a move of more than 10 m in one frame (respawn, warp) is not a crossing (`coop-boundary-skip-jumps`);
+- every crossing command goes through `coop-boundary-command-ok?`. A load `(load a b)` is the crossing
+  player's own pair of levels (`*coop-wants*`); the game's wants become the union of both players'
+  pairs, the crossing player's first (`coop-want-levels`, the `want-levels` hook; at most four names,
+  so nobody's level goes away for the other player's loads). A script's load (boats, warp gates,
+  cutscenes take both players along) sets both pairs. A player who got into a level without crossing
+  a boundary (respawned elsewhere, teleported) gets the levels whose boxes hold them as their pair
+  (`coop-wants-update`, once per frame); a checkpoint reload gives both players the checkpoint's two
+  levels (`coop-wants-reset`). Turning off the display of the other player's level is ignored. Vis
+  and checkpoints follow player 1 only;
+- the DGO loader, the login state and the loading heap are global, so levels load one at a time:
+  with four wants two can be missing at once, and `load-state update!` adds the next one only when no
+  slot is loading or logging in (`level-load-in-progress?`; the original never had two missing wants);
 - the continue point, `level-distance`, vis, music, ambients and the sound listener stay with player 1.
-So two players can be anywhere in the same level or two neighbouring levels. Safety nets:
+So two players can be anywhere in the loaded levels, each in their own. Safety nets:
 - residency guard: right before a level is discarded or hidden (`load-state update!`, `level.gc`),
   `coop-on-level-leaving` brings player 2 to player 1 if player 2 stands in it (scripts like the
   fisherman's boat or a warp gate still switch levels for both);

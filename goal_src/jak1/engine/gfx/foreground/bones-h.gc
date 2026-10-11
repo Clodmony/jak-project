@@ -71,6 +71,12 @@
   ((count   uint32)
    (globals merc-globals 8 :inline)))
 
+;; og:preserve-this coop: room for the foreground engines of the two extra level slots (issue #110):
+;; three globals per slot and two for the default level, 14 in all. The extra ones follow globals
+;; directly, so (-> arr globals 13) reaches them. *merc-global-array* is allocated as this type.
+(deftype coop-merc-global-array (merc-global-array)
+  ((globals-extra merc-globals 6 :inline)))
+
 (define *merc-globals* (the-as merc-globals #f))
 
 (deftype shadow-dma-packet (structure)

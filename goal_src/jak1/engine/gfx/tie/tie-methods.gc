@@ -30,14 +30,12 @@
             (the uint128 0)))
     (set! (-> dma-buf base) (the pointer (&+ packet 32)))))
 
-(defun tie-init-buffers ((arg0 dma-buffer))
-  "Initialize the TIE buckets.
-  Note: the buffer passed in here is _not_ used.
-  this function should be called _after_ all TIE drawing is done.
-  It will skip setup if there is nothing drawn."
+(defun tie-init-bucket ((bucket bucket-id))
+  "og:preserve-this coop (issue #110): what tie-init-buffers did for tie-0 and tie-1, for any slot's TIE
+   bucket: splice the engine init at the start and the end data at the end. Skips an empty bucket."
   ;; the TIE buckets are only used by TIE - so we can safely splice things at the beginning/end without
   ;; messing things up.
-  (let ((gp-0 (-> *display* frames (-> *display* on-screen) frame bucket-group (bucket-id tie-0))))
+  (let ((gp-0 (-> *display* frames (-> *display* on-screen) frame bucket-group bucket))) ;; og:preserve-this coop
     ;; only if we have something in the bucket.
     (when (!= gp-0 (-> gp-0 last))
       (let* ((s5-0 (-> *display* frames (-> *display* on-screen) frame global-buf))
@@ -51,7 +49,7 @@
           (set! (-> (the-as dma-packet v1-8) vif1) (new 'static 'vif-tag))
           (set! (-> s5-0 base) (&+ (the-as pointer v1-8) 16)))
         (set! (-> gp-0 next) (the-as uint s4-1)))))
-  (let ((gp-1 (-> *display* frames (-> *display* on-screen) frame bucket-group (bucket-id tie-0))))
+  (let ((gp-1 (-> *display* frames (-> *display* on-screen) frame bucket-group bucket))) ;; og:preserve-this coop
     ;; only if we have something in teh bucket
     (when (!= gp-1 (-> gp-1 last))
       (let* ((s4-2 (-> *display* frames (-> *display* on-screen) frame global-buf))
@@ -66,31 +64,17 @@
             (set! (-> s4-2 base) (&+ (the-as pointer a0-17) 16)))
           (set! (-> (the-as (pointer uint32) (-> gp-1 last)) 1) (the-as uint s5-1))
           (set! (-> gp-1 last) (the-as (pointer dma-tag) v1-19))))))
-  ;; same as above, but for level 1's tie.
-  (let ((gp-2 (-> *display* frames (-> *display* on-screen) frame bucket-group (bucket-id tie-1))))
-    (when (!= gp-2 (-> gp-2 last))
-      (let* ((s5-2 (-> *display* frames (-> *display* on-screen) frame global-buf))
-             (s4-4 (-> s5-2 base)))
-        (tie-init-engine s5-2 (new 'static 'gs-test :atst (gs-atest not-equal) :zte #x1 :ztst (gs-ztest greater-equal)) 0)
-        (let ((v1-28 (the-as object (-> s5-2 base))))
-          (set! (-> (the-as dma-packet v1-28) dma) (new 'static 'dma-tag :id (dma-tag-id next) :addr (-> gp-2 next)))
-          (set! (-> (the-as dma-packet v1-28) vif0) (new 'static 'vif-tag))
-          (set! (-> (the-as dma-packet v1-28) vif1) (new 'static 'vif-tag))
-          (set! (-> s5-2 base) (&+ (the-as pointer v1-28) 16)))
-        (set! (-> gp-2 next) (the-as uint s4-4)))))
-  (let ((gp-3 (-> *display* frames (-> *display* on-screen) frame bucket-group (bucket-id tie-1))))
-    (when (!= gp-3 (-> gp-3 last))
-      (let* ((s4-5 (-> *display* frames (-> *display* on-screen) frame global-buf))
-             (s5-3 (-> s4-5 base)))
-        (tie-end-buffer s4-5)
-        (let ((v1-39 (-> s4-5 base)))
-          (let ((a0-36 (the-as object (-> s4-5 base))))
-            (set! (-> (the-as dma-packet a0-36) dma) (new 'static 'dma-tag :id (dma-tag-id next)))
-            (set! (-> (the-as dma-packet a0-36) vif0) (new 'static 'vif-tag))
-            (set! (-> (the-as dma-packet a0-36) vif1) (new 'static 'vif-tag))
-            (set! (-> s4-5 base) (&+ (the-as pointer a0-36) 16)))
-          (set! (-> (the-as (pointer uint32) (-> gp-3 last)) 1) (the-as uint s5-3))
-          (set! (-> gp-3 last) (the-as (pointer dma-tag) v1-39))))))
+  (none))
+
+(defun tie-init-buffers ((arg0 dma-buffer))
+  "Initialize the TIE buckets.
+  Note: the buffer passed in here is _not_ used.
+  this function should be called _after_ all TIE drawing is done.
+  It will skip setup if there is nothing drawn."
+  ;; og:preserve-this coop: the TIE bucket of every slot in use (issue #110); the original did tie-0
+  ;; and tie-1 by hand (tie-init-bucket is that code).
+  (dotimes (s (-> *level* length))
+    (tie-init-bucket (level-bucket tie- (level-slot-index s))))
   #|
   ;; level 0's tie near
   (let ((gp-4 (-> *display* frames (-> *display* on-screen) frame bucket-group (bucket-id tie-near-0))))
@@ -402,7 +386,7 @@
                         (set! (-> (the-as dma-packet v1-94) vif1) (new 'static 'vif-tag))
                         (set! (-> s1-1 base) (&+ (the-as pointer v1-94) 16)))
                       (dma-bucket-insert-tag (-> *display* frames (-> *display* on-screen) frame bucket-group)
-                                             (if (zero? (-> arg1 index)) (bucket-id tie-0) (bucket-id tie-1))
+                                             (level-bucket tie- (-> arg1 index)) ;; og:preserve-this coop: any slot
                                              s2-2
                                              (the-as (pointer dma-tag) a3-11)))))
                 (let ((v1-100 *dma-mem-usage*))

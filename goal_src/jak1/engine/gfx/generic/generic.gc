@@ -4,26 +4,27 @@
 (require "engine/level/level-h.gc")
 (require "engine/dma/dma-bucket.gc")
 (require "engine/gfx/lights.gc")
+;; og:preserve-this coop: sinks for four level slots (issue #110). The original table had 9 entries:
+;; tfrag and pris of level 0 and 1, of the default level, shrub-generic1, water of level 0 and 1.
+;; Now: tfrag and pris of each slot (0..7), of the default level (8, 9), shrub-generic1 (10), water of
+;; each slot (11..14).
+(defconstant GENERIC_SINK_COUNT 15)
+
+(defconstant GENERIC_SINK_FIRST_WATER 11)
+
 (define *generic-foreground-sinks*
-  (new 'static 'boxed-array :type generic-dma-foreground-sink :length 0 :allocated-length 9))
+  (new 'static 'boxed-array :type generic-dma-foreground-sink :length 0 :allocated-length GENERIC_SINK_COUNT))
 
-(set! (-> *generic-foreground-sinks* 0) (-> *level* level0 tfrag-tex-foreground-sink-group generic-sink))
+(dotimes (s COOP_LEVEL_SLOTS)
+  (set! (-> *generic-foreground-sinks* (* 2 s)) (-> (level-slot s) tfrag-tex-foreground-sink-group generic-sink))
+  (set! (-> *generic-foreground-sinks* (+ (* 2 s) 1)) (-> (level-slot s) pris-tex-foreground-sink-group generic-sink))
+  (set! (-> *generic-foreground-sinks* (+ GENERIC_SINK_FIRST_WATER s)) (-> (level-slot s) water-tex-foreground-sink-group generic-sink)))
 
-(set! (-> *generic-foreground-sinks* 1) (-> *level* level0 pris-tex-foreground-sink-group generic-sink))
+(set! (-> *generic-foreground-sinks* 8) (-> *level* level-default tfrag-tex-foreground-sink-group generic-sink))
 
-(set! (-> *generic-foreground-sinks* 2) (-> *level* level1 tfrag-tex-foreground-sink-group generic-sink))
+(set! (-> *generic-foreground-sinks* 9) (-> *level* level-default pris-tex-foreground-sink-group generic-sink))
 
-(set! (-> *generic-foreground-sinks* 3) (-> *level* level1 pris-tex-foreground-sink-group generic-sink))
-
-(set! (-> *generic-foreground-sinks* 4) (-> *level* level-default tfrag-tex-foreground-sink-group generic-sink))
-
-(set! (-> *generic-foreground-sinks* 5) (-> *level* level-default pris-tex-foreground-sink-group generic-sink))
-
-(set! (-> *generic-foreground-sinks* 6) (new 'static 'generic-dma-foreground-sink :bucket (bucket-id shrub-generic1)))
-
-(set! (-> *generic-foreground-sinks* 7) (-> *level* level0 water-tex-foreground-sink-group generic-sink))
-
-(set! (-> *generic-foreground-sinks* 8) (-> *level* level1 water-tex-foreground-sink-group generic-sink))
+(set! (-> *generic-foreground-sinks* 10) (new 'static 'generic-dma-foreground-sink :bucket (bucket-id shrub-generic1)))
 
 (defun generic-dma-foreground-sink-init ((arg0 generic-dma-foreground-sink))
   (set! (-> arg0 state gifbuf-adr) (the-as uint 837))
@@ -34,12 +35,12 @@
   (vu-lights-default! *default-lights*)
   (let ((gp-0 (new 'static 'gs-zbuf :zbp #x1c0 :psm (gs-psm ct24)))
         (s5-0 (new 'static 'gs-zbuf :zbp #x1c0 :psm (gs-psm ct24) :zmsk #x1)))
-    (dotimes (s4-0 9)
+    (dotimes (s4-0 GENERIC_SINK_COUNT) ;; og:preserve-this coop: was 9, water from 7
       (let ((s1-0 (-> *generic-foreground-sinks* s4-0)))
         (when s1-0
           (let ((s3-0 (-> s1-0 bucket)))
             (with-dma-buffer-add-bucket ((s0-0 (-> (current-frame) global-buf)) s3-0)
-              (if (>= s4-0 7) (generic-init-buf s0-0 1 s5-0) (generic-init-buf s0-0 1 gp-0))
+              (if (>= s4-0 GENERIC_SINK_FIRST_WATER) (generic-init-buf s0-0 1 s5-0) (generic-init-buf s0-0 1 gp-0))
               (generic-dma-foreground-sink-init s1-0)))))))
   #f)
 

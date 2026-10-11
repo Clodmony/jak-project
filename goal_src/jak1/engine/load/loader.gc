@@ -173,7 +173,7 @@
              (success #f))
         (when janim
           ;; a countdown with a label right at the start
-          (let ((s3-1 3))
+          (let ((s3-1 LEVEL_INDEX_COUNT)) ;; og:preserve-this coop: all slots and the default level (was 3)
             (while (begin
                      (label cfg-22)
                      (nonzero? s3-1))
@@ -207,7 +207,7 @@
              (janim (if (and (nonzero? art-elt) (type-type? (-> art-elt type) art-joint-anim)) (the-as art-joint-anim art-elt)))
              (success #f))
         (when janim
-          (let ((s2-0 3))
+          (let ((s2-0 LEVEL_INDEX_COUNT)) ;; og:preserve-this coop: all slots and the default level (was 3)
             (while (begin
                      (label cfg-16)
                      (nonzero? s2-0))

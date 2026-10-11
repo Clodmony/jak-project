@@ -81,7 +81,7 @@
   "Get the level that the entity belongs to."
   ;; loop over levels
   (dotimes (v1-0 (-> *level* length))
-    (let ((a1-3 (-> *level* level v1-0)))
+    (let ((a1-3 (level-slot v1-0))) ;; og:preserve-this coop: slot loop
       ;; only if the level is active
       (when (= (-> a1-3 status) 'active)
         ;; check if we are inside the heap
@@ -96,7 +96,7 @@
   -cameras, for each level.
    All the searching is in the bsp."
   (dotimes (s5-0 (-> *level* length))
-    (let ((s4-0 (-> *level* level s5-0)))
+    (let ((s4-0 (level-slot s5-0))) ;; og:preserve-this coop: slot loop
       (when (= (-> s4-0 status) 'active)
         (let ((s3-0 (-> s4-0 bsp actors)))
           (when (nonzero? s3-0)
@@ -116,7 +116,7 @@
   "Get an entity-actor with the _exactly_ the given type.
    Searches over all entity-actors in all levels, looking in the bsp"
   (dotimes (s5-0 (-> *level* length))
-    (let ((v1-3 (-> *level* level s5-0)))
+    (let ((v1-3 (level-slot s5-0))) ;; og:preserve-this coop: slot loop
       (when (= (-> v1-3 status) 'active)
         (let ((s4-0 (-> v1-3 bsp actors)))
           (when (nonzero? s4-0)
@@ -129,7 +129,7 @@
   "Get an entity by actor-id.  This looks through the entity-links-array, so it
    will require that the level is somewhat loaded."
   (dotimes (v1-0 (-> *level* length))
-    (let ((a1-3 (-> *level* level v1-0)))
+    (let ((a1-3 (level-slot v1-0))) ;; og:preserve-this coop: slot loop
       (when (= (-> a1-3 status) 'active)
         (let ((a1-4 (-> a1-3 entity)))
           (when (nonzero? a1-4)
@@ -149,7 +149,7 @@
 (defun entity-by-meters ((arg0 float) (arg1 float) (arg2 float))
   "Get an entity by position. The coordinate are rounded to the nearest 1/4096th of a meter."
   (dotimes (v1-0 (-> *level* length))
-    (let ((a3-3 (-> *level* level v1-0)))
+    (let ((a3-3 (level-slot v1-0))) ;; og:preserve-this coop: slot loop
       (when (= (-> a3-3 status) 'active)
         (let ((a3-5 (-> a3-3 bsp actors)))
           (when (nonzero? a3-5)
@@ -170,7 +170,7 @@
   "Count the number of entities with a process. If arg0 is 'vis, will count visible entities."
   (let ((gp-0 0))
     (dotimes (s4-0 (-> *level* length))
-      (let ((s3-0 (-> *level* level s4-0)))
+      (let ((s3-0 (level-slot s4-0))) ;; og:preserve-this coop: slot loop
         (when (= (-> s3-0 status) 'active)
           (let ((s2-0 (-> s3-0 bsp level entity)))
             (dotimes (s1-0 (-> s2-0 length))
@@ -184,7 +184,7 @@
   "Count the number of entities. Uses the entity-links"
   (let ((v0-0 0))
     (dotimes (v1-0 (-> *level* length))
-      (let ((a0-3 (-> *level* level v1-0)))
+      (let ((a0-3 (level-slot v1-0))) ;; og:preserve-this coop: slot loop
         (when (= (-> a0-3 status) 'active)
           (let ((a0-6 (-> a0-3 bsp level entity)))
             (dotimes (a1-3 (-> a0-6 length))
@@ -326,7 +326,7 @@
           0
           0)
   (dotimes (s3-0 (-> this length))
-    (let ((s2-0 (-> this level s3-0)))
+    (let ((s2-0 (level-slot s3-0 :group this))) ;; og:preserve-this coop: slot loop
       (when (= (-> s2-0 status) 'active)
         (case mode
           (('art-group)
@@ -418,7 +418,7 @@
   (local-vars (v1-10 symbol) (sv-16 process))
   (format 0 "call to update-vis-volumes, which may have a compiler bug.~%")
   (dotimes (s5-0 (-> this length))
-    (let ((v1-3 (-> this level s5-0)))
+    (let ((v1-3 (level-slot s5-0 :group this))) ;; og:preserve-this coop: slot loop
       (when (= (-> v1-3 status) 'active)
         (let ((s4-0 (-> v1-3 bsp level entity)))
           (dotimes (s3-0 (-> s4-0 length))
@@ -456,7 +456,7 @@
   Probably only used for debugging."
   ;; loop over levels
   (dotimes (s5-0 (-> this length))
-    (let ((v1-3 (-> this level s5-0)))
+    (let ((v1-3 (level-slot s5-0 :group this))) ;; og:preserve-this coop: slot loop
       (when (= (-> v1-3 status) 'active) ;; only active levels
         ;; loop over entities
         (let ((s4-0 (-> v1-3 bsp level entity)))
@@ -507,7 +507,7 @@
    Excludes crate, fuel-cell and springbox."
   (local-vars (sv-16 type))
   (dotimes (s5-0 (-> this length))
-    (let ((v1-3 (-> this level s5-0)))
+    (let ((v1-3 (level-slot s5-0 :group this))) ;; og:preserve-this coop: slot loop
       (when (= (-> v1-3 status) 'active)
         (let ((s4-0 (-> v1-3 bsp level entity)))
           (dotimes (s3-0 (-> s4-0 length))
@@ -557,7 +557,7 @@
 (defmethod debug-draw-actors ((this level-group) (arg0 symbol))
   (when (and arg0 (not (or (= *master-mode* 'menu) (= *master-mode* 'progress))))
     (dotimes (s4-0 (-> this length))
-      (let ((v1-8 (-> this level s4-0)))
+      (let ((v1-8 (level-slot s4-0 :group this))) ;; og:preserve-this coop: slot loop
         (when (= (-> v1-8 status) 'active)
           (let ((s3-0 (-> v1-8 bsp level entity)))
             (dotimes (s2-0 (-> s3-0 length))
@@ -616,7 +616,7 @@
   (when (and *display-actor-vis* (not (or *display-actor-anim* *display-process-anim*)))
     (let ((s5-1 *display-actor-vis*))
       (dotimes (s4-1 (-> this length))
-        (let ((s3-1 (-> this level s4-1)))
+        (let ((s3-1 (level-slot s4-1 :group this))) ;; og:preserve-this coop: slot loop
           (when (= (-> s3-1 status) 'active)
             (let ((s2-1 (-> s3-1 bsp level entity)))
               (dotimes (s1-2 (-> s2-1 length))
@@ -731,7 +731,7 @@
   |#
   (when *display-split-boxes*
     (dotimes (s5-4 (-> this length))
-      (let ((s4-4 (-> this level s5-4)))
+      (let ((s4-4 (level-slot s5-4 :group this))) ;; og:preserve-this coop: slot loop
         (when (= (-> s4-4 status) 'active)
           (when (nonzero? (-> s4-4 bsp boxes))
             (let ((s3-4 (-> s4-4 bsp boxes)))
@@ -751,7 +751,7 @@
             *display-ambient-ocean-near-off-marks*
             *display-ambient-music-marks*)
     (dotimes (s5-5 (-> this length))
-      (let ((v1-214 (-> this level s5-5)))
+      (let ((v1-214 (level-slot s5-5 :group this))) ;; og:preserve-this coop: slot loop
         (when (= (-> v1-214 status) 'active)
           (let ((s4-5 (-> v1-214 bsp ambients)))
             (when (nonzero? s4-5)
@@ -973,7 +973,7 @@
                  (else 1663)))
          (s4-0 *game-info*))
     (dotimes (s3-0 (-> *level* length))
-      (let ((v1-4 (-> *level* level s3-0)))
+      (let ((v1-4 (level-slot s3-0))) ;; og:preserve-this coop: slot loop
         (when (= (-> v1-4 status) 'active)
           (let ((s2-0 (-> v1-4 bsp level entity)))
             (dotimes (s1-0 (-> s2-0 length))
@@ -996,7 +996,7 @@
 (defun reset-cameras ()
   (remove-all *camera-engine*)
   (dotimes (gp-0 (-> *level* length))
-    (let ((v1-5 (-> *level* level gp-0)))
+    (let ((v1-5 (level-slot gp-0))) ;; og:preserve-this coop: slot loop
       (when (= (-> v1-5 status) 'active)
         (let ((s5-0 (-> v1-5 bsp cameras))) (when (nonzero? s5-0) (dotimes (s4-0 (-> s5-0 length)) (birth! (-> s5-0 s4-0))))))))
   0
@@ -1030,7 +1030,7 @@
     (let ((sv-16 (camera-pos))
           (sv-24 0))
       (dotimes (s5-2 (-> this length))
-        (let ((s4-2 (-> this level s5-2)))
+        (let ((s4-2 (level-slot s5-2 :group this))) ;; og:preserve-this coop: slot loop
           (when (= (-> s4-2 status) 'active)
             (cond
               ((= (-> s4-2 display?) 'special)

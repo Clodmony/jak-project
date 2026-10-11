@@ -1,4 +1,7 @@
 #pragma once
+
+#include <array>
+
 /*!
  * Matches the bucket-id enum in GOAL
  */
@@ -74,9 +77,197 @@ enum class BucketId {
   DEBUG = 67,
   DEBUG_NO_ZBUF = 68,
   SUBTITLE = 69,
-  MAX_BUCKETS = 70
+  // Local co-op: the buckets of level slots 2 and 3 (issue #110). Appended so the original ids keep
+  // their values; the chain is linked in draw order instead (kBucketDrawOrder below).
+  TFRAG_TEX_LEVEL2 = 70,
+  TFRAG_LEVEL2 = 71,
+  TFRAG_NEAR_LEVEL2 = 72,
+  TIE_NEAR_LEVEL2 = 73,
+  TIE_LEVEL2 = 74,
+  MERC_TFRAG_TEX_LEVEL2 = 75,
+  GENERIC_TFRAG_TEX_LEVEL2 = 76,
+  TFRAG_TEX_LEVEL3 = 77,
+  TFRAG_LEVEL3 = 78,
+  TFRAG_NEAR_LEVEL3 = 79,
+  TIE_NEAR_LEVEL3 = 80,
+  TIE_LEVEL3 = 81,
+  MERC_TFRAG_TEX_LEVEL3 = 82,
+  GENERIC_TFRAG_TEX_LEVEL3 = 83,
+  SHRUB_TEX_LEVEL2 = 84,
+  SHRUB_NORMAL_LEVEL2 = 85,
+  // 86
+  SHRUB_BILLBOARD_LEVEL2 = 87,
+  SHRUB_TRANS_LEVEL2 = 88,
+  SHRUB_GENERIC_LEVEL2 = 89,
+  SHRUB_TEX_LEVEL3 = 90,
+  SHRUB_NORMAL_LEVEL3 = 91,
+  // 92
+  SHRUB_BILLBOARD_LEVEL3 = 93,
+  SHRUB_TRANS_LEVEL3 = 94,
+  SHRUB_GENERIC_LEVEL3 = 95,
+  ALPHA_TEX_LEVEL2 = 96,
+  TFRAG_TRANS2_AND_SKY_BLEND_LEVEL2 = 97,
+  // 98
+  TFRAG_DIRT_LEVEL2 = 99,
+  // 100
+  TFRAG_ICE_LEVEL2 = 101,
+  // 102
+  ALPHA_TEX_LEVEL3 = 103,
+  TFRAG_TRANS3_AND_SKY_BLEND_LEVEL3 = 104,
+  // 105
+  TFRAG_DIRT_LEVEL3 = 106,
+  // 107
+  TFRAG_ICE_LEVEL3 = 108,
+  // 109
+  PRIS_TEX_LEVEL2 = 110,
+  MERC_PRIS_LEVEL2 = 111,
+  GENERIC_PRIS_LEVEL2 = 112,
+  PRIS_TEX_LEVEL3 = 113,
+  MERC_PRIS_LEVEL3 = 114,
+  GENERIC_PRIS_LEVEL3 = 115,
+  WATER_TEX_LEVEL2 = 116,
+  MERC_WATER_LEVEL2 = 117,
+  GENERIC_WATER_LEVEL2 = 118,
+  WATER_TEX_LEVEL3 = 119,
+  MERC_WATER_LEVEL3 = 120,
+  GENERIC_WATER_LEVEL3 = 121,
+  MAX_BUCKETS = 122
 };
+
+// Local co-op (issue #110): the game holds up to four level slots. Slot s (0..3) draws into the
+// per-level buckets numbered s above; the array index of the slot in the game's level-group is
+// 0, 1, 3, 4 (index 2 is the default level), which the renderer never sees.
+constexpr int kLevelSlots = 4;
+
+// The buckets of one level slot, in draw order within their group. Kind k of slot s is
+// level_bucket(k, s).
+enum class LevelBucketKind {
+  TFRAG_TEX,
+  TFRAG,
+  TFRAG_NEAR,
+  TIE_NEAR,
+  TIE,
+  MERC_TFRAG_TEX,
+  GENERIC_TFRAG_TEX,
+  SHRUB_TEX,
+  SHRUB_NORMAL,
+  SHRUB_NEAR,  // unused by the game, no renderer
+  SHRUB_BILLBOARD,
+  SHRUB_TRANS,
+  SHRUB_GENERIC,
+  ALPHA_TEX,
+  TFRAG_TRANS_AND_SKY_BLEND,
+  TFRAG_TRANS_NEAR,
+  TFRAG_DIRT,
+  TFRAG_DIRT_NEAR,
+  TFRAG_ICE,
+  TFRAG_ICE_NEAR,
+  PRIS_TEX,
+  MERC_PRIS,
+  GENERIC_PRIS,
+  WATER_TEX,
+  MERC_WATER,
+  GENERIC_WATER,
+  COUNT
+};
+
+constexpr BucketId level_bucket(LevelBucketKind kind, int slot) {
+  const int k = (int)kind;
+  // group of the kind: first bucket id of the group for slot 0, its stride per slot in the original
+  // (slots 0 and 1) layout, and its first id for slot 2 in the appended layout
+  int group_first_l0 = 0, group_size = 0, group_first_l2 = 0, kind_in_group = 0;
+  if (k < (int)LevelBucketKind::SHRUB_TEX) {
+    group_first_l0 = (int)BucketId::TFRAG_TEX_LEVEL0;
+    group_size = 7;
+    group_first_l2 = (int)BucketId::TFRAG_TEX_LEVEL2;
+    kind_in_group = k;
+  } else if (k < (int)LevelBucketKind::ALPHA_TEX) {
+    group_first_l0 = (int)BucketId::SHRUB_TEX_LEVEL0;
+    group_size = 6;
+    group_first_l2 = (int)BucketId::SHRUB_TEX_LEVEL2;
+    kind_in_group = k - (int)LevelBucketKind::SHRUB_TEX;
+  } else if (k < (int)LevelBucketKind::PRIS_TEX) {
+    group_first_l0 = (int)BucketId::ALPHA_TEX_LEVEL0;
+    group_size = 7;
+    group_first_l2 = (int)BucketId::ALPHA_TEX_LEVEL2;
+    kind_in_group = k - (int)LevelBucketKind::ALPHA_TEX;
+  } else if (k < (int)LevelBucketKind::WATER_TEX) {
+    group_first_l0 = (int)BucketId::PRIS_TEX_LEVEL0;
+    group_size = 3;
+    group_first_l2 = (int)BucketId::PRIS_TEX_LEVEL2;
+    kind_in_group = k - (int)LevelBucketKind::PRIS_TEX;
+  } else {
+    group_first_l0 = (int)BucketId::WATER_TEX_LEVEL0;
+    group_size = 3;
+    group_first_l2 = (int)BucketId::WATER_TEX_LEVEL2;
+    kind_in_group = k - (int)LevelBucketKind::WATER_TEX;
+  }
+  if (slot < 2) {
+    return (BucketId)(group_first_l0 + group_size * slot + kind_in_group);
+  }
+  return (BucketId)(group_first_l2 + group_size * (slot - 2) + kind_in_group);
 }
+
+static_assert(level_bucket(LevelBucketKind::TFRAG_TEX, 1) == BucketId::TFRAG_TEX_LEVEL1);
+static_assert(level_bucket(LevelBucketKind::SHRUB_GENERIC, 1) == BucketId::SHRUB_GENERIC_LEVEL1);
+static_assert(level_bucket(LevelBucketKind::TFRAG_ICE_NEAR, 1) == (BucketId)44);
+static_assert(level_bucket(LevelBucketKind::GENERIC_PRIS, 1) == BucketId::GENERIC_PRIS_LEVEL1);
+static_assert(level_bucket(LevelBucketKind::GENERIC_WATER, 1) == BucketId::GENERIC_WATER_LEVEL1);
+static_assert(level_bucket(LevelBucketKind::TFRAG_TEX, 2) == BucketId::TFRAG_TEX_LEVEL2);
+static_assert(level_bucket(LevelBucketKind::GENERIC_TFRAG_TEX, 3) == BucketId::GENERIC_TFRAG_TEX_LEVEL3);
+static_assert(level_bucket(LevelBucketKind::SHRUB_GENERIC, 3) == BucketId::SHRUB_GENERIC_LEVEL3);
+static_assert(level_bucket(LevelBucketKind::ALPHA_TEX, 2) == BucketId::ALPHA_TEX_LEVEL2);
+static_assert(level_bucket(LevelBucketKind::TFRAG_ICE_NEAR, 3) == (BucketId)109);
+static_assert(level_bucket(LevelBucketKind::GENERIC_PRIS, 3) == BucketId::GENERIC_PRIS_LEVEL3);
+static_assert(level_bucket(LevelBucketKind::GENERIC_WATER, 3) == BucketId::GENERIC_WATER_LEVEL3);
+
+// The order the buckets are drawn in (the game links the DMA chain in this order, see
+// dma-buffer-patch-buckets in dma-bucket.gc). Each group of per-level buckets runs over the four
+// slots, then the common buckets of that group follow as in the original two-level layout.
+constexpr std::array<BucketId, (int)BucketId::MAX_BUCKETS> make_bucket_draw_order() {
+  std::array<BucketId, (int)BucketId::MAX_BUCKETS> order{};
+  int n = 0;
+  auto add = [&](int first, int count) {
+    for (int i = 0; i < count; i++) {
+      order[n++] = (BucketId)(first + i);
+    }
+  };
+  auto add_level_group = [&](LevelBucketKind first_kind, int group_size) {
+    for (int slot = 0; slot < kLevelSlots; slot++) {
+      add((int)level_bucket(first_kind, slot), group_size);
+    }
+  };
+  add(0, 5);  // 0, 1, 2, sky, ocean
+  add_level_group(LevelBucketKind::TFRAG_TEX, 7);
+  add_level_group(LevelBucketKind::SHRUB_TEX, 6);
+  add_level_group(LevelBucketKind::ALPHA_TEX, 7);
+  add((int)BucketId::MERC_AFTER_ALPHA, 3);  // merc/generic alpha, shadow
+  add_level_group(LevelBucketKind::PRIS_TEX, 3);
+  add((int)BucketId::MERC_EYES_AFTER_PRIS, 3);  // eyes, common pris merc/generic
+  add_level_group(LevelBucketKind::WATER_TEX, 3);
+  add((int)BucketId::OCEAN_NEAR, 7);  // ocean near .. subtitle
+  return order;
+}
+
+constexpr std::array<BucketId, (int)BucketId::MAX_BUCKETS> kBucketDrawOrder = make_bucket_draw_order();
+
+constexpr bool bucket_draw_order_is_permutation() {
+  std::array<bool, (int)BucketId::MAX_BUCKETS> seen{};
+  for (auto id : kBucketDrawOrder) {
+    if ((int)id < 0 || (int)id >= (int)BucketId::MAX_BUCKETS || seen[(int)id]) {
+      return false;
+    }
+    seen[(int)id] = true;
+  }
+  return true;
+}
+static_assert(bucket_draw_order_is_permutation());
+static_assert(kBucketDrawOrder[0] == BucketId::BUCKET0);  // the chain starts at bucket 0
+static_assert(kBucketDrawOrder[5] == BucketId::TFRAG_TEX_LEVEL0);
+static_assert(kBucketDrawOrder[19] == BucketId::TFRAG_TEX_LEVEL2);
+static_assert(kBucketDrawOrder[33] == BucketId::SHRUB_TEX_LEVEL0);
+static_assert(kBucketDrawOrder[(int)BucketId::MAX_BUCKETS - 1] == BucketId::SUBTITLE);
+}  // namespace jak1
 
 namespace jak2 {
 

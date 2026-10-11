@@ -12,6 +12,33 @@
 
 (defconstant LEVEL_COUNT 2) ;; there are two levels in memory!
 
+;; og:preserve-this coop: level slots (issue #110). Co-op holds up to four levels so that each player can
+;; stand in their own level and cross a border at the same time. The original level-group keeps its
+;; layout (level0, level1, level-default, see coop-level-group below): the extra slots sit behind the
+;; default level, so the array index of a slot is 0, 1, 3 or 4 and index 2 stays level-default.
+;; (-> *level* length) is the number of slots in use: LEVEL_COUNT without co-op, COOP_LEVEL_SLOTS once
+;; co-op has run (coop-alloc-extra-levels!).
+(defconstant COOP_LEVEL_SLOTS 4) ;; slots with co-op
+(defconstant LEVEL_DEFAULT_INDEX 2) ;; array index of level-default
+(defconstant LEVEL_INDEX_COUNT 5) ;; array indices 0..4: four slots and the default level
+
+(defmacro level-slot-index (slot)
+  "Array index of level slot slot (0 1 2 3 -> 0 1 3 4): index 2 is level-default."
+  (if (integer? slot)
+    (if (< slot 2) slot (+ slot 1)) ;; (2 = LEVEL_DEFAULT_INDEX, not visible to goos)
+    `(let ((s ,slot)) (if (< s LEVEL_DEFAULT_INDEX) s (+ s 1)))))
+
+(defmacro level-index->slot (idx)
+  "Slot of a level from its array index (0 1 3 4 -> 0 1 2 3). Not for level-default."
+  (if (integer? idx)
+    (if (< idx 2) idx (- idx 1))
+    `(let ((i ,idx)) (if (< i LEVEL_DEFAULT_INDEX) i (- i 1)))))
+
+(defmacro level-slot (slot &key (group *level*))
+  "The level in slot slot (0 .. (-> *level* length)). Use this for loops over the slots: the array index
+   skips level-default."
+  `(-> ,group level (level-slot-index ,slot)))
+
 (declare-type bsp-header basic)
 
 (declare-type drawable basic)
@@ -239,6 +266,78 @@
 
 (defun-extern level-update-after-load level login-state level)
 
+;; og:preserve-this coop: the level-group with the two extra slots (issue #110). level-group itself keeps
+;; its layout (the decompiler's all-types.gc must match it): level3 and level4 lie over its trailing pad,
+;; right after level-default, so (-> *level* level 3) and (-> *level* level 4) reach them.
+(deftype coop-level-group (level-group)
+  ((level3 level :inline :offset 7920) ;; 96 + 3 * 2608
+   (level4 level :inline :offset 10528)))
+
+(defmacro coop-static-level-slot (index bucket-slot)
+  "A static level for an extra slot, set up like level1 but with the slot's own buckets
+   (merc-tfrag-tex<bucket-slot> and so on)."
+  (let ((b (lambda (base) (string->symbol (string-append (symbol->string base) (int->string bucket-slot))))))
+    `(new 'static
+          'level
+          :name #f
+          :index ,index
+          :status 'inactive
+          :tfrag-tex-foreground-sink-group
+          (new 'static
+               'dma-foreground-sink-group
+               :sink
+               (new 'static
+                    'array
+                    dma-foreground-sink
+                    3
+                    (new 'static 'dma-foreground-sink :bucket (bucket-id ,(b 'merc-tfrag-tex)) :foreground-texture-level ,index)
+                    (new 'static
+                         'generic-dma-foreground-sink
+                         :bucket (bucket-id ,(b 'generic-tfrag-tex))
+                         :foreground-texture-level ,index
+                         :foreground-output-bucket 1)))
+          :pris-tex-foreground-sink-group
+          (new 'static
+               'dma-foreground-sink-group
+               :sink
+               (new 'static
+                    'array
+                    dma-foreground-sink
+                    3
+                    (new 'static
+                         'dma-foreground-sink
+                         :bucket (bucket-id ,(b 'merc-pris))
+                         :foreground-texture-page 1
+                         :foreground-texture-level ,index)
+                    (new 'static
+                         'generic-dma-foreground-sink
+                         :bucket (bucket-id ,(b 'generic-pris))
+                         :foreground-texture-page 1
+                         :foreground-texture-level ,index
+                         :foreground-output-bucket 1)))
+          :water-tex-foreground-sink-group
+          (new 'static
+               'dma-foreground-sink-group
+               :sink
+               (new 'static
+                    'array
+                    dma-foreground-sink
+                    3
+                    (new 'static
+                         'dma-foreground-sink
+                         :bucket (bucket-id ,(b 'merc-water))
+                         :foreground-texture-page 2
+                         :foreground-texture-level ,index)
+                    (new 'static
+                         'generic-dma-foreground-sink
+                         :bucket (bucket-id ,(b 'generic-water))
+                         :foreground-texture-page 2
+                         :foreground-texture-level ,index
+                         :foreground-output-bucket 1)))
+          :inside-sphere? #f
+          :inside-boxes? #f
+          :force-inside? #f)))
+
 ;; Initialize the level structure. This assigns DMA buckets to each level.
 ;; there are 3 foreground sinks per texture bucket: merc, generic, and an unused one.
 ;; TODO: figure out exactly which buckets are used for what.
@@ -247,7 +346,7 @@
 (if (zero? *level*)
   (set! *level*
         (new 'static
-             'level-group
+             'coop-level-group ;; og:preserve-this coop: level-group with two extra slots
              :length 2
              :log-in-level-bsp #f
              :loading-level #f
@@ -412,7 +511,10 @@
                                  :foreground-output-bucket 1)))
                   :inside-sphere? #f
                   :inside-boxes? #f
-                  :force-inside? #f))))
+                  :force-inside? #f)
+             ;; og:preserve-this coop: the extra slots (array indices 3 and 4, buckets xxx2 and xxx3)
+             :level3 (coop-static-level-slot 3 2)
+             :level4 (coop-static-level-slot 4 3))))
 
 (define-extern *level-load-list* pair)
 

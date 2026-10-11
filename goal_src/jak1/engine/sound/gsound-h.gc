@@ -365,6 +365,11 @@
 
 (define *sound-bank-2* #f)
 
+;; og:preserve-this coop: banks for the two extra level slots (issue #110), used once co-op has run
+(define *sound-bank-3* #f)
+
+(define *sound-bank-4* #f)
+
 ;; added for PC port
 (defun-debug music-flava->string ((f music-flava))
   "print the name of a music-flava"

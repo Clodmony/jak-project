@@ -1027,48 +1027,53 @@
   (if (and (pair? arg0) (= (car arg0) 'quote)) (command-get-param (car (cdr arg0)) arg1) (command-get-param arg0 arg1)))
 
 (defmethod reset! ((this load-state))
-  (set! (-> this want 0 name) #f)
-  (set! (-> this want 0 display?) #f)
-  (set! (-> this want 0 force-vis?) #f)
-  (set! (-> this want 0 force-inside?) #f)
-  (set! (-> this want 1 name) #f)
-  (set! (-> this want 1 display?) #f)
-  (set! (-> this want 1 force-vis?) #f)
-  (set! (-> this want 1 force-inside?) #f)
+  ;; og:preserve-this coop: all want entries, not only the two original ones (issue #110)
+  (dotimes (i COOP_LEVEL_SLOTS)
+    (load-want-clear! (load-want this i)))
   (set! (-> this command-list) '())
   (dotimes (v1-1 256)
     (set! (-> this object-name v1-1) #f)
     (set! (-> this object-status v1-1) (the-as basic 0)))
   this)
 
+(defun load-state-want-names ((this load-state) (names (pointer symbol)) (count int))
+  "og:preserve-this coop (issue #110): make the want entries the given count names (#f ones are
+   skipped). Entries already holding one of the names keep their settings, the other entries are
+   emptied and then filled with the new names (settings off), in order. The original want-levels
+   with two names."
+  (dotimes (i (load-want-count))
+    (let ((want (load-want this i))
+          (keep #f))
+      (dotimes (n count)
+        (when (and (-> names n) (= (-> want name) (-> names n)))
+          (set! (-> names n) #f)
+          (set! keep #t)))
+      (if (not keep) (set! (-> want name) #f))))
+  (dotimes (n count)
+    (when (-> names n)
+      (dotimes (i (load-want-count))
+        (let ((want (load-want this i)))
+          (when (not (-> want name))
+            (load-want-clear! want)
+            (set! (-> want name) (-> names n))
+            (set! i (load-want-count)))))))
+  0)
+
 (defmethod want-levels ((this load-state) (arg0 symbol) (arg1 symbol))
-  (dotimes (v1-0 2)
-    (cond
-      ((= (-> this want v1-0 name) arg0) (set! arg0 #f))
-      ((= (-> this want v1-0 name) arg1) (set! arg1 #f))
-      (else (set! (-> this want v1-0 name) #f))))
-  (when arg0
-    (dotimes (v1-4 2)
-      (when (not (-> this want v1-4 name))
-        (set! (-> this want v1-4 name) arg0)
-        (set! (-> this want v1-4 display?) #f)
-        (set! (-> this want v1-4 force-vis?) #f)
-        (set! (-> this want v1-4 force-inside?) #f)
-        (set! v1-4 2))))
-  (when arg1
-    (dotimes (v1-10 2)
-      (when (not (-> this want v1-10 name))
-        (set! (-> this want v1-10 name) arg1)
-        (set! (-> this want v1-10 display?) #f)
-        (set! (-> this want v1-10 force-vis?) #f)
-        (set! (-> this want v1-10 force-inside?) #f)
-        (set! v1-10 2))))
+  ;; og:preserve-this coop: with co-op each player has their own pair of levels, the wants are the
+  ;; union (coop-want-levels); without it the two names are the wants, as in the original.
+  (if (coop-active?)
+    (coop-want-levels this arg0 arg1)
+    (let ((names (new 'stack-no-clear 'array 'symbol 2)))
+      (set! (-> names 0) arg0)
+      (set! (-> names 1) arg1)
+      (load-state-want-names this (the-as (pointer symbol) names) 2)))
   0)
 
 (defmethod want-display-level ((this load-state) (arg0 symbol) (arg1 symbol))
-  (dotimes (v1-0 2)
-    (when (= (-> this want v1-0 name) arg0)
-      (set! (-> this want v1-0 display?) arg1)
+  (dotimes (v1-0 (load-want-count)) ;; og:preserve-this coop: all want entries
+    (when (= (-> (load-want this v1-0) name) arg0)
+      (set! (-> (load-want this v1-0) display?) arg1)
       (return 0)))
   (if arg1 (format 0 "ERROR: can't display ~A because it isn't loaded~%" arg0))
   0)
@@ -1078,17 +1083,17 @@
   0)
 
 (defmethod want-force-vis ((this load-state) (arg0 symbol) (arg1 symbol))
-  (dotimes (v1-0 2)
-    (when (= (-> this want v1-0 name) arg0)
-      (set! (-> this want v1-0 force-vis?) arg1)
+  (dotimes (v1-0 (load-want-count)) ;; og:preserve-this coop: all want entries
+    (when (= (-> (load-want this v1-0) name) arg0)
+      (set! (-> (load-want this v1-0) force-vis?) arg1)
       (return 0)))
   (format 0 "ERROR: can't force vis on ~A because it isn't loaded~%" arg0)
   0)
 
 (defmethod set-force-inside! ((this load-state) (arg0 symbol) (arg1 symbol))
-  (dotimes (v1-0 2)
-    (when (= (-> this want v1-0 name) arg0)
-      (set! (-> this want v1-0 force-inside?) arg1)
+  (dotimes (v1-0 (load-want-count)) ;; og:preserve-this coop: all want entries
+    (when (= (-> (load-want this v1-0) name) arg0)
+      (set! (-> (load-want this v1-0) force-inside?) arg1)
       (return 0)))
   (format 0 "ERROR: can't force inside on ~A because it isn't loaded~%" arg0)
   0
@@ -1108,14 +1113,14 @@
 
 (define *display-load-commands* #f)
 
-(define *backup-load-state* (new 'global 'load-state))
+(define *backup-load-state* (new 'global 'coop-load-state)) ;; og:preserve-this coop: wants for 4 slots
 
 (defmethod backup-load-state-and-set-cmds ((this load-state) (arg0 pair))
   (dotimes (s4-0 256)
     (when (-> this object-name s4-0)
       (format 0 "WARNING: load state somehow aquired object command ~A~%" (-> this object-name s4-0))
       (set! (-> this object-name s4-0) #f)))
-  (mem-copy! (&-> *backup-load-state* type) (&-> this type) 2092)
+  (mem-copy! (&-> *backup-load-state* type) (&-> this type) (size-of coop-load-state)) ;; og:preserve-this coop: was 2092, the load-state size
   (set! (-> *backup-load-state* command-list) '())
   (set! (-> this command-list) arg0)
   0)
@@ -1128,13 +1133,13 @@
         (set! (-> a0-3 extra perm status) (the-as entity-perm-status (-> this object-status s5-0)))
         (if (-> a0-3 extra process) (kill! a0-3)))
       (set! (-> this object-name s5-0) #f)))
-  (mem-copy! (&-> this type) (&-> *backup-load-state* type) 2092)
+  (mem-copy! (&-> this type) (&-> *backup-load-state* type) (size-of coop-load-state)) ;; og:preserve-this coop
   0)
 
 (defmethod restore-load-state ((this load-state))
   (dotimes (v1-0 256)
     (if (-> this object-name v1-0) (set! (-> this object-name v1-0) #f)))
-  (mem-copy! (&-> this type) (&-> *backup-load-state* type) 2092)
+  (mem-copy! (&-> this type) (&-> *backup-load-state* type) (size-of coop-load-state)) ;; og:preserve-this coop
   0)
 
 ;; ERROR: Failed load: (set! a0-1 (l.wu (+ a0-0 -4))) at op 11
@@ -1313,7 +1318,7 @@
                    (set! (-> *time-of-day-proc* 0 frame) 0)
                    (set! (-> *time-of-day-proc* 0 time-ratio) 0.0))))))
            ((= v1-4 'save)
-            (mem-copy! (&-> *backup-load-state* type) (&-> this type) 2092)
+            (mem-copy! (&-> *backup-load-state* type) (&-> this type) (size-of coop-load-state)) ;; og:preserve-this coop
             (set! (-> *backup-load-state* command-list) '())
             (dotimes (v1-112 256)
               (if (-> *backup-load-state* object-name v1-112) (set! (-> *backup-load-state* object-name v1-112) #f))))
@@ -1381,4 +1386,4 @@
   (label cfg-28)
   (none))
 
-(define-perm *load-state* load-state (new 'global 'load-state))
+(define-perm *load-state* load-state (new 'global 'coop-load-state)) ;; og:preserve-this coop: wants for 4 slots

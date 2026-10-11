@@ -1202,9 +1202,13 @@
        (let ((level-idx (-> *level* loading-level index)))
          ;; these will handle TFRAG. These allocators will then switch the allocator
          ;; to common for everything else.
+         ;; og:preserve-this coop: the extra slots (array indices 3 and 4, issue #110) share the near
+         ;; regions of slots 0 and 1: on PC a level's near textures are mapped again by its own texture
+         ;; bucket every frame (upload-vram-pages sends the page, the renderer maps all of segment 2), so
+         ;; two levels can take turns in one region.
          (cond
-           ((zero? level-idx) (texture-page-near-allocate-0 pool page heap mode))
-           ((= level-idx 1) (texture-page-near-allocate-1 pool page heap mode)))))))
+           ((or (zero? level-idx) (= level-idx 3)) (texture-page-near-allocate-0 pool page heap mode)) ;; og:preserve-this coop
+           ((or (= level-idx 1) (= level-idx 4)) (texture-page-near-allocate-1 pool page heap mode)))))))
   page)
 
 (defun texture-page-size-check ((pool texture-pool) (level level) (hide-prints symbol))
@@ -1302,7 +1306,8 @@
     ;; login the texture. If the texture isn't there, it will try to load it
     ;; and allocate with the given allocation function.
     (let ((tfrag-dir-entry (texture-page-login (-> id-array 0)
-                                               (if (= (-> level index) 1) texture-page-near-allocate-1 texture-page-near-allocate-0)
+                                               ;; og:preserve-this coop: slots 0 and 2 share near region 0, slots 1 and 3 region 1 (#110)
+                                               (if (or (= (-> level index) 1) (= (-> level index) 4)) texture-page-near-allocate-1 texture-page-near-allocate-0)
                                                loading-level)))
       (if tfrag-dir-entry (set! (-> level texture-page 0) (-> tfrag-dir-entry page)))))
   (if (>= max-page-kind 1) ;; pris.
@@ -1335,7 +1340,7 @@
   (when (= tex-page-kind (tpage-kind tfrag)) ;; TFRAG (0)
     ;; get the texture page, bucket to add to, and an effective distance from the closest thing.
     (let ((tfrag-page (-> level texture-page 0))
-          (tfrag-bucket (if (zero? (-> level index)) (bucket-id tfrag-tex0) (bucket-id tfrag-tex1)))
+          (tfrag-bucket (level-bucket tfrag-tex (-> level index))) ;; og:preserve-this coop: any slot (issue #110)
           ;; not really sure how this is calculated, but it's a distance.
           (distance (fmin (fmin (-> level closest-object 0)
                                 (if (and (< 0.0 (-> level level-distance)) (< (+ (meters 100) (-> level level-distance)) (-> level closest-object 5)))
@@ -1362,7 +1367,7 @@
   (if (= tex-page-kind (tpage-kind pris)) ;; PRIS (1)
     (let ((pris-page (-> level texture-page 1)))
       (if (and pris-page (nonzero? pris-page))
-        (let ((pris-bucket (if (zero? (-> level index)) (bucket-id pris-tex0) (bucket-id pris-tex1))))
+        (let ((pris-bucket (level-bucket pris-tex (-> level index)))) ;; og:preserve-this coop: any slot
           ;; just upload the whole thing always.
           ;; use the cache mask as requested by the level.
           (set! (-> level upload-size 1)
@@ -1372,7 +1377,7 @@
           (shrub-closest (-> level closest-object 2)) ;; I guess this is the shrub closest.
           )
       (if (and shrub-page (nonzero? shrub-page))
-        (let ((shrub-bucket (if (zero? (-> level index)) (bucket-id shrub-tex0) (bucket-id shrub-tex1)))
+        (let ((shrub-bucket (level-bucket shrub-tex (-> level index))) ;; og:preserve-this coop: any slot
               (shrub-mode (cond
                             ((= shrub-closest (meters 999999))
                              -3 ;; nothing
@@ -1391,7 +1396,7 @@
     (let ((alpha-page (-> level texture-page 3))
           (alpha-closest (-> level closest-object 3)))
       (if (and alpha-page (nonzero? alpha-page))
-        (let ((alpha-bucket (if (zero? (-> level index)) (bucket-id alpha-tex0) (bucket-id alpha-tex1)))
+        (let ((alpha-bucket (level-bucket alpha-tex (-> level index))) ;; og:preserve-this coop: any slot
               (alpha-mode (cond
                             ((< (meters 85) alpha-closest)
                              0 ;; segment 0
@@ -1412,7 +1417,7 @@
   (if (= tex-page-kind (tpage-kind water)) ;; WATER (4)
     (let ((water-page (-> level texture-page 4)))
       (if (and water-page (nonzero? water-page))
-        (let ((water-bucket (if (zero? (-> level index)) (bucket-id water-tex0) (bucket-id water-tex1))))
+        (let ((water-bucket (level-bucket water-tex (-> level index)))) ;; og:preserve-this coop: any slot
           (set! (-> level upload-size 4)
                 (upload-vram-pages-pris this (-> this segment-common) water-page water-bucket (the-as int (-> level texture-mask 8))))))))
   (none))
@@ -1432,35 +1437,21 @@
 (defmethod add-irq-to-tex-buckets! ((this level))
   "Adds a packet that will cause a VIF interrupt to the end of all texture
    buckets for a given level.  This will trigger a VU1 profiler bar"
-  (cond
-    ((zero? (-> this index))
-     ;; use bucket numbers for the 0th level
-     ;; TFRAG
-     (with-dma-buffer-add-bucket ((v1-4 (-> (current-frame) global-buf)) (bucket-id tfrag-tex0))
-       (dma-buffer-add-cnt-vif2 v1-4 0 (new 'static 'vif-tag :cmd (vif-cmd nop)) (new 'static 'vif-tag :cmd (vif-cmd nop) :irq 1)))
-     ;; the rest are the same
-     ;; PRIS
-     (with-dma-buffer-add-bucket ((v1-12 (-> (current-frame) global-buf)) (bucket-id pris-tex0))
-       (dma-buffer-add-cnt-vif2 v1-12 0 (new 'static 'vif-tag :cmd (vif-cmd nop)) (new 'static 'vif-tag :cmd (vif-cmd nop) :irq 1)))
-     ;; SHRUB
-     (with-dma-buffer-add-bucket ((v1-20 (-> (current-frame) global-buf)) (bucket-id shrub-tex0))
-       (dma-buffer-add-cnt-vif2 v1-20 0 (new 'static 'vif-tag :cmd (vif-cmd nop)) (new 'static 'vif-tag :cmd (vif-cmd nop) :irq 1)))
-     ;; ALPHA
-     (with-dma-buffer-add-bucket ((v1-28 (-> (current-frame) global-buf)) (bucket-id alpha-tex0))
-       (dma-buffer-add-cnt-vif2 v1-28 0 (new 'static 'vif-tag :cmd (vif-cmd nop)) (new 'static 'vif-tag :cmd (vif-cmd nop) :irq 1))))
-    (else
-     ;; TFRAG
-     (with-dma-buffer-add-bucket ((v1-36 (-> (current-frame) global-buf)) (bucket-id tfrag-tex1))
-       (dma-buffer-add-cnt-vif2 v1-36 0 (new 'static 'vif-tag :cmd (vif-cmd nop)) (new 'static 'vif-tag :cmd (vif-cmd nop) :irq 1)))
-     ;; PRIS
-     (with-dma-buffer-add-bucket ((v1-44 (-> (current-frame) global-buf)) (bucket-id pris-tex1))
-       (dma-buffer-add-cnt-vif2 v1-44 0 (new 'static 'vif-tag :cmd (vif-cmd nop)) (new 'static 'vif-tag :cmd (vif-cmd nop) :irq 1)))
-     ;; SHRUB
-     (with-dma-buffer-add-bucket ((v1-52 (-> (current-frame) global-buf)) (bucket-id shrub-tex1))
-       (dma-buffer-add-cnt-vif2 v1-52 0 (new 'static 'vif-tag :cmd (vif-cmd nop)) (new 'static 'vif-tag :cmd (vif-cmd nop) :irq 1)))
-     ;; ALPHA
-     (with-dma-buffer-add-bucket ((v1-60 (-> (current-frame) global-buf)) (bucket-id alpha-tex1))
-       (dma-buffer-add-cnt-vif2 v1-60 0 (new 'static 'vif-tag :cmd (vif-cmd nop)) (new 'static 'vif-tag :cmd (vif-cmd nop) :irq 1)))))
+  ;; og:preserve-this coop: the level's own buckets, any of the four slots (issue #110)
+  (let ((idx (-> this index)))
+    ;; TFRAG
+    (with-dma-buffer-add-bucket ((v1-4 (-> (current-frame) global-buf)) (level-bucket tfrag-tex idx))
+      (dma-buffer-add-cnt-vif2 v1-4 0 (new 'static 'vif-tag :cmd (vif-cmd nop)) (new 'static 'vif-tag :cmd (vif-cmd nop) :irq 1)))
+    ;; the rest are the same
+    ;; PRIS
+    (with-dma-buffer-add-bucket ((v1-12 (-> (current-frame) global-buf)) (level-bucket pris-tex idx))
+      (dma-buffer-add-cnt-vif2 v1-12 0 (new 'static 'vif-tag :cmd (vif-cmd nop)) (new 'static 'vif-tag :cmd (vif-cmd nop) :irq 1)))
+    ;; SHRUB
+    (with-dma-buffer-add-bucket ((v1-20 (-> (current-frame) global-buf)) (level-bucket shrub-tex idx))
+      (dma-buffer-add-cnt-vif2 v1-20 0 (new 'static 'vif-tag :cmd (vif-cmd nop)) (new 'static 'vif-tag :cmd (vif-cmd nop) :irq 1)))
+    ;; ALPHA
+    (with-dma-buffer-add-bucket ((v1-28 (-> (current-frame) global-buf)) (level-bucket alpha-tex idx))
+      (dma-buffer-add-cnt-vif2 v1-28 0 (new 'static 'vif-tag :cmd (vif-cmd nop)) (new 'static 'vif-tag :cmd (vif-cmd nop) :irq 1))))
   0
   (none))
 
@@ -2094,7 +2085,7 @@
             (/ (- (-> pool cur) (-> pool top)) 256)
             (/ (- #xa0000 (-> pool cur)) 256)))
   (dotimes (level-idx (-> *level* length))
-    (let ((lev (-> *level* level level-idx)))
+    (let ((lev (level-slot level-idx))) ;; og:preserve-this coop: slot loop
       (if (= (-> lev status) 'active) (texture-page-size-check *texture-pool* lev #f))))
   (format #t "~Tlength: ~D~%" (-> dir length))
   (format #t "~Tdata[~D]: @ #x~X~%" (-> dir length) (-> dir entries))

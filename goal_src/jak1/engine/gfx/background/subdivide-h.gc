@@ -21,6 +21,40 @@
       (set! (-> v0-0 far v1-2) arg1))
     v0-0))
 
+;; og:preserve-this coop: close/far for the two extra level slots (issue #110). The original arrays hold
+;; level array indices 0, 1 and 2 (the default level) and the debug menu's override in 3, so indices
+;; 3 and 4 live here. *subdivide-settings* is allocated as this type.
+(deftype coop-subdivide-settings (subdivide-settings)
+  ((close-extra float 2)
+   (far-extra   float 2)))
+
+(defconstant SUBDIVIDE_OVERRIDE_INDEX -1) ;; update-subdivide-settings! with the debug menu's values
+
+(defun subdivide-level-close ((settings subdivide-settings) (idx int))
+  "The close distance of the level with array index idx, or the debug menu's for SUBDIVIDE_OVERRIDE_INDEX."
+  (cond
+    ((< idx 0) (-> settings close 3))
+    ((< idx 3) (-> settings close idx))
+    (else (-> (the-as coop-subdivide-settings settings) close-extra (- idx 3)))))
+
+(defun subdivide-level-far ((settings subdivide-settings) (idx int))
+  "The far distance of the level with array index idx, or the debug menu's for SUBDIVIDE_OVERRIDE_INDEX."
+  (cond
+    ((< idx 0) (-> settings far 3))
+    ((< idx 3) (-> settings far idx))
+    (else (-> (the-as coop-subdivide-settings settings) far-extra (- idx 3)))))
+
+(defun subdivide-level-set! ((settings subdivide-settings) (idx int) (close float) (far float))
+  "Set the close and far distances of the level with array index idx."
+  (cond
+    ((< idx 3)
+     (set! (-> settings close idx) close)
+     (set! (-> settings far idx) far))
+    (else
+     (set! (-> (the-as coop-subdivide-settings settings) close-extra (- idx 3)) close)
+     (set! (-> (the-as coop-subdivide-settings settings) far-extra (- idx 3)) far)))
+  (none))
+
 (deftype subdivide-dists (structure)
   ((data   uint32 32 :offset 0)
    (vector vector 8 :inline :overlay-at (-> data 0))

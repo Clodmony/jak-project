@@ -226,7 +226,7 @@
 
 (defun-debug merc-stats ()
   "Iterate through all merc-ctrls and print."
-  (dotimes (gp-0 3) ;; levels
+  (dotimes (gp-0 LEVEL_INDEX_COUNT) ;; levels (og:preserve-this coop: all slots and the default level)
     (let ((s5-0 (-> *level* level gp-0 art-group)))
       (when (nonzero? s5-0)
         (dotimes (s4-0 (-> s5-0 art-group-array length))
@@ -240,7 +240,7 @@
 
 (defun-debug merc-edge-stats ()
   "Print the longest edges in each."
-  (dotimes (gp-0 3)
+  (dotimes (gp-0 LEVEL_INDEX_COUNT) ;; og:preserve-this coop: all slots and the default level
     (let ((s5-0 (-> *level* level gp-0 art-group)))
       (when (nonzero? s5-0)
         (dotimes (s4-0 (-> s5-0 art-group-array length))
@@ -352,43 +352,31 @@
 (defun merc-vu1-init-buffers ()
   "Setup merc DMA buffers. Call this _after_ drawing."
   (when (logtest? *vu1-enable-user* (vu1-renderer-mask merc))
-    (merc-vu1-init-buffer (bucket-id merc-tfrag-tex0)
-                          (new 'static 'gs-test :ate #x1 :atst (gs-atest greater-equal) :aref #x26 :zte #x1 :ztst (gs-ztest greater-equal))
-                          0)
-    (merc-vu1-init-buffer (bucket-id merc-pris0)
-                          (new 'static 'gs-test :ate #x1 :atst (gs-atest greater-equal) :aref #x26 :zte #x1 :ztst (gs-ztest greater-equal))
-                          0)
-    (merc-vu1-init-buffer (bucket-id merc-tfrag-tex1)
-                          (new 'static 'gs-test :ate #x1 :atst (gs-atest greater-equal) :aref #x26 :zte #x1 :ztst (gs-ztest greater-equal))
-                          0)
-    (merc-vu1-init-buffer (bucket-id merc-pris1)
-                          (new 'static 'gs-test :ate #x1 :atst (gs-atest greater-equal) :aref #x26 :zte #x1 :ztst (gs-ztest greater-equal))
-                          0)
+    ;; og:preserve-this coop: the tfrag, pris and water buckets of every slot in use (issue #110)
+    (dotimes (s (-> *level* length))
+      (let ((idx (level-slot-index s)))
+        (merc-vu1-init-buffer (level-bucket merc-tfrag-tex idx)
+                              (new 'static 'gs-test :ate #x1 :atst (gs-atest greater-equal) :aref #x26 :zte #x1 :ztst (gs-ztest greater-equal))
+                              0)
+        (merc-vu1-init-buffer (level-bucket merc-pris idx)
+                              (new 'static 'gs-test :ate #x1 :atst (gs-atest greater-equal) :aref #x26 :zte #x1 :ztst (gs-ztest greater-equal))
+                              0)))
     (merc-vu1-init-buffer (bucket-id merc-alpha-tex)
                           (new 'static 'gs-test :ate #x1 :atst (gs-atest greater-equal) :aref #x26 :zte #x1 :ztst (gs-ztest greater-equal))
                           0)
     (merc-vu1-init-buffer (bucket-id merc-pris-common)
                           (new 'static 'gs-test :ate #x1 :atst (gs-atest greater-equal) :aref #x26 :zte #x1 :ztst (gs-ztest greater-equal))
                           0)
-    (merc-vu1-init-buffer (bucket-id merc-water0)
-                          (new 'static
-                               'gs-test
-                               :ate #x1
-                               :atst (gs-atest greater-equal)
-                               :aref #x80
-                               :afail #x1
-                               :zte #x1
-                               :ztst (gs-ztest greater-equal))
-                          0)
-    (merc-vu1-init-buffer (bucket-id merc-water1)
-                          (new 'static
-                               'gs-test
-                               :ate #x1
-                               :atst (gs-atest greater-equal)
-                               :aref #x80
-                               :afail #x1
-                               :zte #x1
-                               :ztst (gs-ztest greater-equal))
-                          0))
+    (dotimes (s (-> *level* length)) ;; og:preserve-this coop
+      (merc-vu1-init-buffer (level-bucket merc-water (level-slot-index s))
+                            (new 'static
+                                 'gs-test
+                                 :ate #x1
+                                 :atst (gs-atest greater-equal)
+                                 :aref #x80
+                                 :afail #x1
+                                 :zte #x1
+                                 :ztst (gs-ztest greater-equal))
+                            0)))
   0
   (none))

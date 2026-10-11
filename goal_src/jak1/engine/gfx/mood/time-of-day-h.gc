@@ -91,6 +91,48 @@
    (sun-fade             float)
    (title-updated        symbol)))
 
+;; og:preserve-this coop: moods and light masks for the two extra level slots (issue #110). The original
+;; arrays hold the levels with array index 0 and 1 (index 2 is the default level, which has no mood);
+;; indices 3 and 4 live here. *time-of-day-context* is allocated as this type.
+(deftype coop-time-of-day-context (time-of-day-context)
+  ((moods-extra         mood-context 2)
+   (light-masks-0-extra uint8 2)
+   (light-masks-1-extra uint8 2)
+   (light-interp-extra  float 2)))
+
+(defmacro tod-mood (tod idx)
+  "The mood of the level with array index idx."
+  `(let ((i ,idx)) (if (< i 3) (-> ,tod moods i) (-> (the-as coop-time-of-day-context ,tod) moods-extra (- i 3)))))
+
+(defmacro tod-light-mask-0 (tod idx)
+  `(let ((i ,idx)) (if (< i 3) (-> ,tod light-masks-0 i) (-> (the-as coop-time-of-day-context ,tod) light-masks-0-extra (- i 3)))))
+
+(defmacro tod-light-mask-1 (tod idx)
+  `(let ((i ,idx)) (if (< i 3) (-> ,tod light-masks-1 i) (-> (the-as coop-time-of-day-context ,tod) light-masks-1-extra (- i 3)))))
+
+(defmacro tod-light-interp (tod idx)
+  `(let ((i ,idx)) (if (< i 3) (-> ,tod light-interp i) (-> (the-as coop-time-of-day-context ,tod) light-interp-extra (- i 3)))))
+
+(defun tod-mood-set! ((tod time-of-day-context) (idx int) (mood mood-context))
+  "Set the mood of the level with array index idx."
+  (if (< idx 3)
+    (set! (-> tod moods idx) mood)
+    (set! (-> (the-as coop-time-of-day-context tod) moods-extra (- idx 3)) mood))
+  (none))
+
+(defun tod-light-set! ((tod time-of-day-context) (idx int) (mask0 uint) (mask1 uint) (interp float))
+  "Set the light masks and interpolation of the level with array index idx."
+  (cond
+    ((< idx 3)
+     (set! (-> tod light-masks-0 idx) mask0)
+     (set! (-> tod light-masks-1 idx) mask1)
+     (set! (-> tod light-interp idx) interp))
+    (else
+     (set! (-> (the-as coop-time-of-day-context tod) light-masks-0-extra (- idx 3)) mask0)
+     (set! (-> (the-as coop-time-of-day-context tod) light-masks-1-extra (- idx 3)) mask1)
+     (set! (-> (the-as coop-time-of-day-context tod) light-interp-extra (- idx 3)) interp)))
+  (none))
+
 ;; dma memory layout for time of day palette interpolation
 (deftype time-of-day-dma (structure)
   ((outa  uint32 256)
@@ -102,4 +144,4 @@
 (define *time-of-day-mode* 8)
 
 ;; the global time of day context - this is used to access all mood and time of day data.
-(define *time-of-day-context* (new 'static 'time-of-day-context))
+(define *time-of-day-context* (new 'static 'coop-time-of-day-context)) ;; og:preserve-this coop: moods for 4 level slots

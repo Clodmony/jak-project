@@ -164,7 +164,8 @@
 ;; order that textures are uploaded and things are drawn.
 
 ;; there is typically a texture upload bucket followed by renderer-specific draw buckets.
-(defconstant BUCKET_COUNT (#if PC_PORT 70 69))
+;; og:preserve-this coop: 52 more buckets for the two extra level slots (issue #110)
+(defconstant BUCKET_COUNT (#if PC_PORT 122 69))
 
 (defenum bucket-id
   :type int32
@@ -239,7 +240,77 @@
   (debug 67)
   (debug-no-zbuf 68)
   ;; extra buckets for pc port
-  (subtitle 69))
+  (subtitle 69)
+  ;; og:preserve-this coop: the buckets of level slots 2 and 3 (array indices 3 and 4, issue #110).
+  ;; Appended so the original ids keep their values; the chain is linked in draw order instead
+  ;; (*bucket-draw-order*, the renderer's table), where each of these sits behind its level 1 twin.
+  (tfrag-tex2 70)
+  (tfrag-2 71)
+  (tfrag-near-2 72)
+  (tie-near-2 73)
+  (tie-2 74)
+  (merc-tfrag-tex2 75)
+  (generic-tfrag-tex2 76)
+  (tfrag-tex3 77)
+  (tfrag-3 78)
+  (tfrag-near-3 79)
+  (tie-near-3 80)
+  (tie-3 81)
+  (merc-tfrag-tex3 82)
+  (generic-tfrag-tex3 83)
+  (shrub-tex2 84)
+  (shrub2 85)
+  ;; 86 (shrub near)
+  (shrub-billboard2 87)
+  (shrub-trans2 88)
+  (shrub-generic2 89)
+  (shrub-tex3 90)
+  (shrub3 91)
+  ;; 92 (shrub near)
+  (shrub-billboard3 93)
+  (shrub-trans3 94)
+  (shrub-generic3 95)
+  (alpha-tex2 96)
+  (tfrag-trans-2 97)
+  (tfrag-trans-near-2 98)
+  (tfrag-dirt-2 99)
+  (tfrag-dirt-near-2 100)
+  (tfrag-ice-2 101)
+  (tfrag-ice-near-2 102)
+  (alpha-tex3 103)
+  (tfrag-trans-3 104)
+  (tfrag-trans-near-3 105)
+  (tfrag-dirt-3 106)
+  (tfrag-dirt-near-3 107)
+  (tfrag-ice-3 108)
+  (tfrag-ice-near-3 109)
+  (pris-tex2 110)
+  (merc-pris2 111)
+  (generic-pris2 112)
+  (pris-tex3 113)
+  (merc-pris3 114)
+  (generic-pris3 115)
+  (water-tex2 116)
+  (merc-water2 117)
+  (generic-water2 118)
+  (water-tex3 119)
+  (merc-water3 120)
+  (generic-water3 121))
+
+;; og:preserve-this coop: per-slot buckets (issue #110)
+(defmacro level-bucket (base idx)
+  "The bucket base<n> of the level with array index idx: slots 0 1 2 3 (indices 0 1 3 4) use the
+   buckets named base0 base1 base2 base3. base is the bucket name without the slot number, e.g.
+   tfrag-tex for tfrag-tex0 or tfrag- for tfrag-0. Not for level-default (index 2)."
+  (let ((b (lambda (n) (string->symbol (string-append (symbol->string base) (int->string n))))))
+    (if (integer? idx)
+      `(bucket-id ,(b (if (< idx 2) idx (- idx 1))))
+      `(the-as bucket-id
+               (case ,idx
+                 ((0) (bucket-id ,(b 0)))
+                 ((1) (bucket-id ,(b 1)))
+                 ((3) (bucket-id ,(b 2)))
+                 (else (bucket-id ,(b 3))))))))
 
 ;; A DMA bucket is a way of sorting data within a dma buffer.
 ;; The buckets themselves live inside in the dma buffer.
