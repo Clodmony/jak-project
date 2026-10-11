@@ -1237,6 +1237,14 @@
   (set! (-> *display* frames (-> *display* on-screen) frame bucket-group) (-> *coop-frame* groups 0))
   (none))
 
+(defun coop-at-title? ()
+  "Is player 1 on the title screen (the game's end leads there with co-op still on)? No player 2 there."
+  (let ((p1 (coop-player-target 0)))
+    (and p1
+         (-> p1 state)
+         (let ((name (-> p1 state name)))
+           (or (= name 'target-title) (= name 'target-title-play) (= name 'target-title-wait))))))
+
 (defun coop-want-split? ()
   "Should the next frame show two views? Only during normal gameplay with both players around.
    Menus and cutscenes use one full-screen view of player 1."
@@ -1245,6 +1253,7 @@
        (handle->process (-> *coop-context-p2* combiner-handle))
        (= *master-mode* 'game)
        (not (movie?))
+       (not (coop-at-title?))
        ;; npc conversations and other cutscene cameras, except a minigame's screen while the other
        ;; player is free (it shows in the minigame player's view only)
        (or (zero? *camera-look-through-other*) (>= (coop-look-through-player) 0))
@@ -1817,6 +1826,10 @@
     (if p1 (set! (-> *coop-players* pos 0 quad) (-> p1 control trans quad)))
     (if p2 (set! (-> *coop-players* pos 1 quad) (-> p2 control trans quad)))
     (cond
+      ((coop-at-title?)
+       ;; the title screen: nobody to play next to (the title menu stops co-op)
+       (set! (-> *coop-timers* p2-missing) 0)
+       (if p2 (coop-despawn-player2)))
       ((not p2)
        ;; player 2 is missing (not spawned yet, died, or killed by a player 1 restart).
        ;; respawn next to player 1 after a short delay, once player 1 is in control.
