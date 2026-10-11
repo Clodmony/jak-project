@@ -143,6 +143,45 @@ TEST(CoopSlots, JoinFlow) {
   EXPECT_EQ(a.joining_slot(), -1);
 }
 
+TEST(CoopSlots, PrepareJoinKeepsPlayer1PadAndWaitsForPlayer2) {
+  SlotAssigner a;
+  a.prepare_join({{1, kXbox}, {2, kXbox}}, 2);
+  EXPECT_EQ(a.slot_for_controller(2), 0);
+  EXPECT_EQ(a.slot(1).kind, DeviceKind::NONE);
+  EXPECT_TRUE(a.status_bits(1) & StatusBits::JOINING);
+  // player 1's own pad can't join a second time
+  EXPECT_FALSE(a.on_controller_button(2, kXbox));
+  // the keyboard can join as player 2 while player 1 uses a pad
+  EXPECT_TRUE(a.on_keyboard_key());
+  EXPECT_EQ(a.keyboard_slot(), 1);
+  EXPECT_EQ(a.joining_slot(), -1);
+}
+
+TEST(CoopSlots, PrepareJoinWithoutPadUsesKeyboard) {
+  SlotAssigner a;
+  a.prepare_join({}, -1);
+  EXPECT_EQ(a.keyboard_slot(), 0);
+  EXPECT_FALSE(a.on_keyboard_key());
+  // a pad pressing a button joins as player 2
+  EXPECT_TRUE(a.on_controller_button(7, kDs4));
+  EXPECT_EQ(a.slot_for_controller(7), 1);
+}
+
+TEST(CoopSlots, SwapSlots) {
+  SlotAssigner a;
+  a.prepare_join({{1, kXbox}, {2, kDs4}}, 1);
+  // nobody joined yet: player 1's pad moves to player 2, player 1 is the joining one
+  a.swap_slots();
+  EXPECT_EQ(a.slot_for_controller(1), 1);
+  EXPECT_TRUE(a.status_bits(0) & StatusBits::JOINING);
+  EXPECT_TRUE(a.on_controller_button(2, kDs4));
+  EXPECT_EQ(a.slot_for_controller(2), 0);
+  a.swap_slots();
+  EXPECT_EQ(a.slot_for_controller(1), 0);
+  EXPECT_EQ(a.slot_for_controller(2), 1);
+  EXPECT_EQ(a.joining_slot(), -1);
+}
+
 TEST(CoopSlots, UnassignedButtonClaimsFirstFreeSlot) {
   SlotAssigner a;
   EXPECT_TRUE(a.on_controller_button(30, kDs4));

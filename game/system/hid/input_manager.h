@@ -162,6 +162,10 @@ class InputManager {
   void coop_begin_join(const int slot);
   void coop_cancel_join();
   void coop_auto_assign();
+  void coop_prepare_join();
+  void coop_swap_slots();
+  /// Name of the controller that drives this slot, "" for keyboard/mouse or no device.
+  std::string coop_slot_device_name(const int slot);
   u32 coop_slot_status(const int slot);
   /// false if co-op is enabled and no connected device feeds this port
   bool coop_port_connected(const int port);

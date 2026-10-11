@@ -1,5 +1,7 @@
 #include "coop_slots.h"
 
+#include <utility>
+
 namespace coop {
 
 bool SlotAssigner::assign_keyboard(int slot) {
@@ -157,6 +159,34 @@ void SlotAssigner::auto_assign(const std::vector<ConnectedController>& controlle
     assign_keyboard(0);
     if (controllers.size() == 1) {
       assign_controller(1, controllers[0].instance_id, controllers[0].guid);
+    }
+  }
+}
+
+void SlotAssigner::prepare_join(const std::vector<ConnectedController>& controllers,
+                                int player1_instance_id) {
+  note_controllers(controllers);
+  unassign_all();
+  bool assigned = false;
+  for (const auto& c : controllers) {
+    if (player1_instance_id >= 0 && c.instance_id == player1_instance_id) {
+      assigned = assign_controller(0, c.instance_id, c.guid);
+      break;
+    }
+  }
+  if (!assigned) {
+    assign_keyboard(0);
+  }
+  begin_join(1);
+}
+
+void SlotAssigner::swap_slots() {
+  std::swap(m_slots[0], m_slots[1]);
+  m_joining_slot = -1;
+  for (int i = 0; i < kMaxPlayers; i++) {
+    if (m_slots[i].kind == DeviceKind::NONE) {
+      m_joining_slot = i;
+      break;
     }
   }
 }

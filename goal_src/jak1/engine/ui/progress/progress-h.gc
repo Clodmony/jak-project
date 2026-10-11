@@ -130,6 +130,7 @@
      (speedrun-il-options)
      (speedrun-cat-ext-options)
      (coop-title) ;; og:preserve-this coop: title menu "Local co-op" (new/load co-op game)
+     (coop-join) ;; og:preserve-this coop: join screen (player 2 presses a button)
      ;; the last one!
      (max))
    (defenum game-option-type
