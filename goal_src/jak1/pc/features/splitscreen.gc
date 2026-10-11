@@ -1902,21 +1902,35 @@
   (set! *coop-want-player* -1)
   (none))
 
+(defun coop-pair-has? ((p int) (name symbol))
+  "Is the level called name in player p's pair?"
+  (or (= name (-> *coop-wants* name (* 2 p))) (= name (-> *coop-wants* name (+ (* 2 p) 1)))))
+
 (defun coop-wants-update ()
-  "Once per gameplay frame: a player who got somewhere without crossing a boundary (respawned next to
-   the other player, teleported) has a pair that doesn't hold the level they are in. Their pair becomes
-   that level alone and the wants are merged again, so the level stays loaded for them."
+  "Once per gameplay frame: a player who got somewhere without crossing a boundary (respawned
+   elsewhere, teleported) has a pair that doesn't hold the level they stand in. Their pair becomes
+   the levels whose boxes hold them (two near a border: level boxes overlap there, Sandover's reach
+   onto the beach) and the wants are merged again, so those levels stay loaded for them."
   (dotimes (p 2)
     (let ((tgt (coop-player-target p)))
       (when (and tgt (coop-player-in-play? tgt))
-        (let ((here (coop-level-containing *level* (-> tgt control trans) (the-as level #f))))
-          (when (and here
-                     (!= (-> here name) (-> *coop-wants* name (* 2 p)))
-                     (!= (-> here name) (-> *coop-wants* name (+ (* 2 p) 1)))
-                     (not (and (not (point-in-boxes? here (-> tgt control trans))) (-> *coop-wants* name (* 2 p)))))
-            (format 0 "[coop] player ~D is in ~A without having crossed into it, wanting it for them~%" (+ p 1) (-> here name))
+        (let ((a (the-as level #f))
+              (b (the-as level #f)))
+          (dotimes (i (-> *level* length))
+            (let ((l (level-slot i)))
+              (when (and (= (-> l status) 'active) (point-in-boxes? l (-> tgt control trans)))
+                (cond
+                  ((not a) (set! a l))
+                  ((not b) (set! b l))))))
+          ;; inside no level's boxes (between levels, in the air): the nearest one, but only for a
+          ;; player with no levels at all
+          (when (and (not a) (not (-> *coop-wants* name (* 2 p))))
+            (set! a (coop-level-containing *level* (-> tgt control trans) (the-as level #f))))
+          (when (and a (or (not (coop-pair-has? p (-> a name))) (and b (not (coop-pair-has? p (-> b name))))))
+            (format 0 "[coop] player ~D stands in ~A~A without having crossed into it, wanting it for them~%"
+                    (+ p 1) (-> a name) (if b " and another level" ""))
             (set! *coop-want-player* p)
-            (coop-want-levels *load-state* (-> here name) #f))))))
+            (coop-want-levels *load-state* (-> a name) (if b (-> b name) #f)))))))
   (none))
 
 (defun coop-alloc-extra-levels! ()

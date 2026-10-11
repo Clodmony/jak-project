@@ -1099,6 +1099,13 @@
                 (return 0))))))))
   0)
 
+(defun level-load-in-progress? () ;; og:preserve-this coop
+  "Is a level slot between load-begin and the end of its login? (co-op, issue #110)"
+  (dotimes (i (-> *level* length))
+    (case (-> (level-slot i) status)
+      (('loading 'loading-bt 'loading-done 'login) (return #t))))
+  #f)
+
 (defmethod update! ((this load-state))
   "Updates load requests."
   (update-sound-banks)
@@ -1137,7 +1144,12 @@
                 (when (and missing (or (= s4-1 -1) (and (-> want display?) (not (-> (load-want this s4-1) display?)))))
                   (set! s4-1 w))))))
         (when (!= s4-1 -1)
-          (when (or s5-1 (not (check-busy *load-dgo-rpc*)))
+          ;; og:preserve-this coop: the DGO loader, the login state and the loading heap are global, one
+          ;; level at a time. The original never had two missing wants at once (two wants, two slots);
+          ;; with four (issue #110) a second load would start between two objects of the first (the RPC is
+          ;; idle while an object links) and clobber it, so co-op waits until nothing is loading.
+          (when (and (not (and (coop-active?) (level-load-in-progress?)))
+                     (or s5-1 (not (check-busy *load-dgo-rpc*))))
             (format 0 "Adding level ~A~%" (-> (load-want this s4-1) name))
             (let ((s3-0 (level-get-for-use *level* (the-as symbol (-> (load-want this s4-1) name)) 'loaded)))
               (when (and s5-1 (-> (load-want this s4-1) display?))
