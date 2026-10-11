@@ -1867,6 +1867,34 @@
         (logclear! *coop-hold-back-pending* (ash 1 i)))))
   (none))
 
+(defun coop-full-display? ((mode symbol))
+  "Is mode a level display setting that draws the whole level and keeps its actors?"
+  (case mode
+    (('display 'display-self 'display-no-wait) #t)
+    (else #f)))
+
+(defun coop-player-in-level? ((tgt target) (name symbol))
+  "Is tgt inside the boxes of the active level called name?"
+  (dotimes (i (-> *level* length))
+    (let ((l (-> *level* level i)))
+      (if (and (= (-> l name) name) (= (-> l status) 'active) (point-in-boxes? l (-> tgt control trans))) (return #t))))
+  #f)
+
+(defun coop-keep-player-levels-displayed ()
+  "Once per gameplay frame: a level a player stands in is displayed in full. A boundary the other
+   player crossed earlier (or before player 2 walked in) may have set it to special / special-vis,
+   which leaves most of it undrawn and kills its actors (water volumes too: players fell through)."
+  (dotimes (i 2)
+    (let ((want (-> *load-state* want i)))
+      (when (and (-> want name) (-> want display?) (not (coop-full-display? (-> want display?))))
+        (dotimes (p 2)
+          (let ((tgt (coop-player-target p)))
+            (when (and (coop-player-in-play? tgt) (coop-player-in-level? tgt (-> want name)))
+              (format 0 "[coop] level ~A displayed in full again (was ~A): player ~D is in it~%" (-> want name) (-> want display?) (+ p 1))
+              (load-state-want-display-level (-> want name) 'display)
+              (set! p 2)))))))
+  (none))
+
 (defun coop-boundary-command-ok? ((crossing object))
   "check-boundary hook: may this crossing's command run? Always without co-op. A load that would drop
    the other player's level holds the crossing player back instead; turning that level's display off
@@ -1881,16 +1909,12 @@
        (cond
          ((or (not other?) (coop-level-keeps-player? other (the-as symbol (-> cmd lev0)) (the-as symbol (-> cmd lev1)))) #t)
          (else (coop-hold-back me) #f)))
-      ;; turning a level's display off: not while the other player is in it
+      ;; turning a level's display off or down to special / special-vis (most of it not drawn, its
+      ;; actors killed): not while the other player is in it
       (((load-boundary-cmd display))
-       (or (if (-> cmd lev1) #t #f)
+       (or (coop-full-display? (the-as symbol (-> cmd lev1)))
            (not other?)
-           (let ((keep #t))
-             (dotimes (i (-> *level* length))
-               (let ((l (-> *level* level i)))
-                 (if (and (= (-> l name) (the-as symbol (-> cmd lev0))) (= (-> l status) 'active) (point-in-boxes? l (-> other control trans)))
-                   (set! keep #f))))
-             keep)))
+           (not (coop-player-in-level? other (the-as symbol (-> cmd lev0))))))
       (((load-boundary-cmd vis) (load-boundary-cmd force-vis) (load-boundary-cmd checkpt)) (zero? me))
       (else #t))))
 
@@ -2093,6 +2117,7 @@
   (+! (-> *coop* sim-ticks) 1)
   (coop-log-tick)
   (coop-grab-watch)
+  (coop-keep-player-levels-displayed)
   (coop-hold-back-update)
   (coop-contact-update)
   ;; some cinematics freeze the player with process-mask sleep instead of a grab (power cell plants,
