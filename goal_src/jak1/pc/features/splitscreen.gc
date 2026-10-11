@@ -1123,6 +1123,15 @@
                   (if (and p (or (= p proc) (= p parent-node))) (return (-> *coop-pins* player i))))))))))
     -1))
 
+(defun coop-particle-target ((info sparticle-cpuinfo))
+  "The target of the player whose hud launched a 2d particle (hud-classes' health petals): particles
+   are simulated once for both huds, in whatever context process-particles runs in. *target* without
+   co-op or when the owner is unknown."
+  (if (coop-active?)
+    (let ((owner (coop-sprite-owner info)))
+      (if (>= owner 0) (coop-player-target owner) *target*))
+    *target*))
+
 (defun coop-add-hud-sprite-data ((dma-buff dma-buffer) (data pointer) (start int) (count int))
   "*coop-hud-sprite-hook*: screen sprites (HUD particles: health, the periscope's binocular mask, the
    frog game's crosshair) are simulated once and normally referenced by both views. On split frames
