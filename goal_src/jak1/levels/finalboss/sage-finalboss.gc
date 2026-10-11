@@ -103,7 +103,7 @@
       (if (= (-> self state-time) (current-time)) (set! (-> self path-pos) (-> self dest)))
       (seek! (-> self path-pos) (-> self dest) (* (-> self speed) (seconds-per-frame)))
       (eval-path-curve! (-> self path) (-> self basetrans) (-> self path-pos) 'interp)
-      (if (< (vector-vector-distance (-> self root trans) (ear-trans)) 81920.0)
+      (if (< (coop-sound-ear-distance (-> self root trans)) 81920.0) ;; og:preserve-this coop
         (sound-play "eco-plat-hover" :id (-> self sound-id) :position (the-as symbol (-> self root trans))))
       (plat-trans)
       (when (coop-powerup-player-near (-> self root trans) (meters 100000) (pickup-type eco-yellow)) ;; og:preserve-this coop: either player

@@ -417,7 +417,7 @@
                   (& sv-112)
                   *res-static-buf*)))
       (if a1-7 (effect-param->sound-spec gp-0 (the-as (pointer float) a1-7) (the-as int (-> sv-112 elt-count)))))
-    (if (and (nonzero? (-> gp-0 fo-max)) (< (* 4096.0 (the float (-> gp-0 fo-max))) (vector-vector-distance (ear-trans) s5-0)))
+    (if (and (nonzero? (-> gp-0 fo-max)) (< (* 4096.0 (the float (-> gp-0 fo-max))) (coop-sound-ear-distance s5-0))) ;; og:preserve-this coop
       (return 0))
     (when *debug-effect-control*
       (let ((sv-128 s0-0)) (string<-charp (clear *temp-string*) (the-as (pointer uint8) (& sv-128))))

@@ -212,11 +212,40 @@
   (set! (-> arg1 0) arg0)
   (none))
 
+;; og:preserve-this coop: local co-op uses one listener for the session (player 1), whatever player's
+;; context code runs in. Set once per tick by the co-op manager, #f otherwise.
+(define *ear-trans-override* (the-as vector #f))
+
+;; og:preserve-this coop: local co-op has one listener (player 1, *ear-trans-override*). Player 2's
+;; position is set here once per tick by the co-op manager (#f otherwise), so that a sound near player 2
+;; is heard as if player 2 were the listener: it is moved next to player 1 by its offset from player 2.
+(define *coop-ear2-trans* (the-as vector #f))
+
+(defun coop-sound-ear-distance ((pos vector))
+  "Distance from pos to the nearest listener: the ear, or player 2 in co-op. For the falloff culls."
+  (let ((d (vector-vector-distance (ear-trans) pos)))
+    (if *coop-ear2-trans* (fmin d (vector-vector-distance *coop-ear2-trans* pos)) d)))
+
+(defun sound-trans-convert-raw ((dest vector3w) (vec vector))
+  "sound-trans-convert without the co-op move (for the listener's own ear and camera)."
+  (set! (-> dest x) (the int (* (1/ 16) (-> vec x))))
+  (set! (-> dest y) (the int (* (1/ 16) (-> vec y))))
+  (set! (-> dest z) (the int (* (1/ 16) (-> vec z))))
+  0)
+
 (defun sound-trans-convert ((dest vector3w) (src vector))
   (let ((vec (if src src (ear-trans))))
-    (set! (-> dest x) (the int (* (1/ 16) (-> vec x))))
-    (set! (-> dest y) (the int (* (1/ 16) (-> vec y))))
-    (set! (-> dest z) (the int (* (1/ 16) (-> vec z)))))
+    ;; og:preserve-this coop: a sound nearer to player 2 than to the listener plays at the same
+    ;; offset from the listener as it has from player 2
+    (when (and src *coop-ear2-trans* *ear-trans-override* (not (or (movie?) *external-cam-mode*)))
+      (let ((ear1 *ear-trans-override*)
+            (ear2 *coop-ear2-trans*))
+        (when (< (vector-vector-distance ear2 src) (vector-vector-distance ear1 src))
+          (let ((moved (new 'stack-no-clear 'vector)))
+            (vector-! moved src ear2)
+            (vector+! moved moved ear1)
+            (set! vec moved)))))
+    (sound-trans-convert-raw dest vec))
   0)
 
 (defun sound-angle-convert ((deg float))
@@ -255,8 +284,8 @@
 (defun sound-set-ear-trans ((ear-trans vector) (cam-trans vector) (cam-angle float))
   (let ((cmd (the sound-rpc-set-ear-trans (get-sound-buffer-entry))))
     (set! (-> cmd command) (sound-command set-ear-trans))
-    (sound-trans-convert (-> cmd ear-trans) ear-trans)
-    (sound-trans-convert (-> cmd cam-trans) cam-trans)
+    (sound-trans-convert-raw (-> cmd ear-trans) ear-trans) ;; og:preserve-this coop: never moved
+    (sound-trans-convert-raw (-> cmd cam-trans) cam-trans)
     (set! (-> cmd cam-angle) (sound-angle-convert cam-angle)))
   0)
 
@@ -463,7 +492,7 @@
            (set! (-> spec mask) (sound-mask))
            (if (-> this params) (effect-param->sound-spec spec (-> this params) (-> this param-count))))
          (if (and (nonzero? (-> spec fo-max))
-                  (< (* 4096.0 (the float (-> spec fo-max))) (vector-vector-distance (ear-trans) (-> this trans))))
+                  (< (* 4096.0 (the float (-> spec fo-max))) (coop-sound-ear-distance (-> this trans)))) ;; og:preserve-this coop
            (return 0))
          (when (and *debug-effect-control* (>= (-> this time-base) 0))
            (with-pp
@@ -584,10 +613,6 @@
 (defun-extern target-pos int vector)
 
 (defun-extern camera-pos vector)
-
-;; og:preserve-this coop: local co-op uses one listener for the session (player 1), whatever player's
-;; context code runs in. Set once per tick by the co-op manager, #f otherwise.
-(define *ear-trans-override* (the-as vector #f))
 
 (defun ear-trans ()
   "Return the trans for the game ear"
