@@ -133,7 +133,7 @@
   (cond
     ((= (-> self keg-behavior) 1))
     (else
-     (if (< (vector-vector-distance (-> self root trans) (ear-trans)) 163840.0)
+     (if (< (coop-sound-ear-distance (-> self root trans)) 163840.0) ;; og:preserve-this coop
        (sound-play "barrel-roll" :id (-> self sound-id) :position (the-as symbol (-> self root trans))))))
   (transform-post))
 

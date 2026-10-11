@@ -1322,6 +1322,8 @@
 
 (define *coop-ear* (new 'global 'vector))
 
+(define *coop-ear2* (new 'global 'vector))
+
 (defun coop-player-in-play? ((tgt target))
   (and tgt
        (not (logtest? (-> tgt state-flags) (state-flags dying)))
@@ -1866,6 +1868,25 @@
             (coop-switch-context prev))))))
   (none))
 
+(defun coop-execute-p2-ambients ()
+  "After main executes the ambients around the listener (player 1): the sound ambients around player 2
+   too (birds, water, machines of the level), unless player 1's pass already ran them. The other
+   ambient types (music, hints, weather, light) stay with player 1."
+  (when (and (coop-active?) *coop-ear2-trans* *ear-trans-override*)
+    (let ((sphere (sphere<-vector+r! (new 'stack 'sphere) *coop-ear2-trans* 0.0))
+          (lst (-> (scratchpad-object terrain-context) work ambient ambient-list)))
+      (set! (-> lst num-items) 0)
+      (dotimes (i (-> *level* length))
+        (let ((lev (-> *level* level i)))
+          (if (= (-> lev status) 'active) (collect-ambients (-> lev bsp) sphere 0 lst))))
+      (countdown (i (-> lst num-items))
+        (let* ((amb (-> lst items i))
+               (f (-> amb ambient ambient-data function)))
+          (if (and (or (= f ambient-type-sound) (= f ambient-type-sound-loop))
+                   (>= (vector-vector-distance (-> amb bsphere) *ear-trans-override*) (-> amb bsphere w)))
+            (execute-ambient amb sphere))))))
+  (none))
+
 (defun coop-update ()
   "Once per frame: split decision and listener. In game mode also player positions, player 2 respawn
    and the distance leash."
@@ -1876,6 +1897,13 @@
   (let ((p1 (coop-player-target 0)))
     (set! (-> *coop-ear* quad) (-> (if p1 (-> p1 control trans) (camera-pos)) quad))
     (set! *ear-trans-override* *coop-ear*))
+  ;; sounds near player 2 are heard as if player 2 were the listener (sound-trans-convert)
+  (let ((p2 (coop-player-target 1)))
+    (cond
+      (p2 ;; also while dying: their death is heard
+       (set! (-> *coop-ear2* quad) (-> p2 control trans quad))
+       (set! *coop-ear2-trans* *coop-ear2*))
+      (else (set! *coop-ear2-trans* #f))))
   ;; during a cinematic that holds player 1 but not player 2 (some skip process-grab?), player 2 stands
   ;; still. Pad 0 is never touched: menus, the title screen and minigame prompts read it.
   (when (and (= *master-mode* 'game) (or (movie?) (nonzero? *camera-look-through-other*)))
@@ -2090,6 +2118,7 @@
     (set! (-> *coop* enabled?) #f)
     (set! (-> *coop* split?) #f)
     (set! *ear-trans-override* #f)
+    (set! *coop-ear2-trans* #f)
     (pc-coop-set-input-enabled! #f)
     (coop-set-save-folder "")
     (set! *sparticle-ignore-frustum?* #f)
