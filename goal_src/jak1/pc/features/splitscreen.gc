@@ -1740,9 +1740,30 @@
          (set! (-> *load-boundary-target* i quad) (-> *coop-p1-boundary-save* i quad))))))
   (none))
 
+(defun coop-draw-player-labels ()
+  "On split frames: a small P1 / P2 in a corner of each player's view, in the player's colour (the
+   divider between the views has the same colours, see SplitscreenLayout.h)."
+  (when (coop-split-frame?)
+    (dotimes (i 2)
+      (let ((prev (coop-switch-context i))
+            ;; bottom right: the corner the game's HUD uses least (yellow eco timer, zoomer heat)
+            (font (new 'stack
+                       'font-context
+                       *font-default-matrix*
+                       450
+                       190
+                       0.0
+                       (if (zero? i) (font-color cyan) (font-color orange))
+                       (font-flags shadow kerning large))))
+        (set-scale! font 0.75)
+        (print-game-text (if (zero? i) "P1" "P2") font #f 128 22)
+        (coop-switch-context prev))))
+  (none))
+
 (defun coop-update ()
   "Once per frame: split decision and listener. In game mode also player positions, player 2 respawn
    and the distance leash."
+  (coop-draw-player-labels)
   (set! (-> *coop* split?) (if (coop-want-split?) #t #f))
   ;; one listener for the session: player 1 (level streaming and ambients follow player 1 too)
   (let ((p1 (coop-player-target 0)))

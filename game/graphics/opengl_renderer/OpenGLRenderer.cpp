@@ -1451,6 +1451,32 @@ void OpenGLRenderer::dispatch_jak1_split_views(DmaFollower& dma,
                       GL_COLOR_BUFFER_BIT, GL_NEAREST);
   }
 
+  // the divider between the views, half in each player's colour (next to their view)
+  if (num_views > 1) {
+    const auto dividers =
+        splitscreen::divider_rects(settings.game_res_w, settings.game_res_h,
+                                   splitscreen::layout_from_int(settings.splitscreen_layout));
+    glBindFramebuffer(GL_FRAMEBUFFER, m_fbo_state.render_fbo->fbo_id);
+    const bool scissor_was_on = glIsEnabled(GL_SCISSOR_TEST);
+    GLint saved_scissor[4];
+    glGetIntegerv(GL_SCISSOR_BOX, saved_scissor);
+    glEnable(GL_SCISSOR_TEST);
+    for (int i = 0; i < splitscreen::kMaxViews; i++) {
+      const auto& d = dividers.at(i);
+      if (d.w <= 0 || d.h <= 0) {
+        continue;
+      }
+      const auto& c = splitscreen::kPlayerColors.at(i);
+      glScissor(d.x, d.y, d.w, d.h);
+      glClearColor(c[0], c[1], c[2], 1.0f);
+      glClear(GL_COLOR_BUFFER_BIT);
+    }
+    glScissor(saved_scissor[0], saved_scissor[1], saved_scissor[2], saved_scissor[3]);
+    if (!scissor_was_on) {
+      glDisable(GL_SCISSOR_TEST);
+    }
+  }
+
   m_render_state.use_occlusion_culling = saved_occlusion;
   m_render_state.render_fb = m_fbo_state.render_fbo->fbo_id;
   m_render_state.render_fb_x = 0;
