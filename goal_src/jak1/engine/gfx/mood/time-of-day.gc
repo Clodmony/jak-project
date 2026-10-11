@@ -237,7 +237,17 @@
         (dotimes (i (-> *level* length))
           (cond
             ((< (-> s4-0 i) (-> s4-0 idx-a)) (set! idx-b idx-a) (set! idx-a i))
-            ((and (!= i idx-a) (< (-> s4-0 i) (-> s4-0 idx-b))) (set! idx-b i)))))
+            ((and (!= i idx-a) (< (-> s4-0 i) (-> s4-0 idx-b))) (set! idx-b i))))
+        ;; og:preserve-this coop: current-interp is the weight of b, so a level that stays in the pair keeps
+        ;; its side. Picking the sides by distance swapped them when the two distances crossed and the mood
+        ;; jumped.
+        (let ((tod (the-as coop-time-of-day-context arg0)))
+          (when (or (= idx-a (-> tod blend-slot-b)) (= idx-b (-> tod blend-slot-a)))
+            (let ((t idx-a))
+              (set! idx-a idx-b)
+              (set! idx-b t)))))
+      (set! (-> (the-as coop-time-of-day-context arg0) blend-slot-a) idx-a)
+      (set! (-> (the-as coop-time-of-day-context arg0) blend-slot-b) idx-b)
       (let ((lev-a (level-slot idx-a))
             (lev-b (level-slot idx-b)))
       ;; now pick desired interpolation weights
