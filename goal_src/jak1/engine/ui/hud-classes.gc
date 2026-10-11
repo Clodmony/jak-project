@@ -338,9 +338,9 @@
        (when (not (-> *pc-settings* use-vis?))
          (let ((base-x (-> this particles 0 init-pos x)))
            (set! (-> this particles 1 init-pos x)
-                 (+ base-x (* (coop-hud-aspect-reciprocal) (- (-> this particles 1 init-pos x) base-x))))
+                 (+ base-x (* (coop-hud-aspect-reciprocal) (- (-> this particles 1 init-pos x) base-x)))) ;; og:preserve-this coop
            (set! (-> this particles 2 init-pos x)
-                 (+ base-x (* (coop-hud-aspect-reciprocal) (- (-> this particles 2 init-pos x) base-x)))))))))
+                 (+ base-x (* (coop-hud-aspect-reciprocal) (- (-> this particles 2 init-pos x) base-x))))))))) ;; og:preserve-this coop
   0
   (none))
 
@@ -1402,14 +1402,14 @@
   ;; og:preserve-this
   (#when PC_PORT
     (let ((base-x (-> this particles 2 init-pos x)))
-      (+! base-x (* (- 512.0 base-x) (- 1.0 (coop-hud-aspect-reciprocal))))
+      (+! base-x (* (- 512.0 base-x) (- 1.0 (coop-hud-aspect-reciprocal)))) ;; og:preserve-this coop
       (set! (-> this particles 0 init-pos x) 435.0)
       (set! (-> this particles 1 init-pos x) 432.0)
       (set! (-> this particles 2 init-pos x) 435.0)
       (when (not (-> *pc-settings* use-vis?))
         (dotimes (i (-> this nb-of-particles))
           (set! (-> this particles i init-pos x)
-                (+ base-x (* (coop-hud-aspect-reciprocal) (- (-> this particles i init-pos x) base-x))))))))
+                (+ base-x (* (coop-hud-aspect-reciprocal) (- (-> this particles i init-pos x) base-x)))))))) ;; og:preserve-this coop
   0
   (none))
 
