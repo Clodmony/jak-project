@@ -1320,6 +1320,155 @@
        (!= (-> tgt state name) 'target-death)
        (!= (-> tgt state name) 'target-coop-respawn)))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; event log for playtests
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; Lines starting with "[coop-log]" go to the game log (also in release builds), so a playtester only
+;; has to send that file. Per player: health changes with the attacker, deaths, state changes worth
+;; knowing, level changes, and a status line every *coop-log-status-interval*.
+
+(define *coop-log?* #t)
+
+(define *coop-log-status-interval* (seconds 1))
+
+(deftype coop-log-state (structure)
+  ((health      float 2)
+   (state       symbol 2)
+   (level       symbol 2)
+   (flags       uint32 2) ;; bit 0 grabbed, bit 1 dying, bit 2 zoomer, bit 3 flut flut
+   (exists      symbol 2)
+   (levels      symbol 2) ;; names in *level* slots 0 and 1, for load/unload lines
+   (last-status time-frame)))
+
+(define *coop-log-state* (new 'global 'coop-log-state))
+
+(defun coop-log-reset ()
+  (dotimes (i 2)
+    (set! (-> *coop-log-state* health i) -1.0)
+    (set! (-> *coop-log-state* state i) #f)
+    (set! (-> *coop-log-state* level i) #f)
+    (set! (-> *coop-log-state* flags i) (the-as uint 0))
+    (set! (-> *coop-log-state* exists i) #f)
+    (set! (-> *coop-log-state* levels i) #f))
+  (set! (-> *coop-log-state* last-status) 0)
+  (none))
+
+(coop-log-reset)
+
+(defmacro coop-log-time ()
+  "Game time in seconds, for the start of a log line."
+  `(* 0.0033333334 (the float (current-time))))
+
+(defun coop-log-attacker-name ((tgt target))
+  "Name of the process that last attacked tgt, or ?. The handle can be 0 (an attack sent without a
+   process), so it is checked before it is followed."
+  (let ((h (-> tgt attack-info attacker)))
+    (if (and (nonzero? h) (!= h (the-as handle #f)) (coop-goal-address? (-> h process)))
+      (let ((proc (handle->process h)))
+        (if proc (-> proc name) (quote ?)))
+      (quote ?))))
+
+(defun coop-log-attack-mode ((tgt target))
+  "The mode of the last attack on tgt (a symbol), or - if there is none yet."
+  (let ((m (-> tgt attack-info mode)))
+    (if (and (coop-goal-address? m) (= (rtype-of m) symbol)) m '-)))
+
+(defun coop-log-flags ((tgt target))
+  (let ((f 0))
+    (if (logtest? (-> tgt state-flags) (state-flags grabbed)) (logior! f 1))
+    (if (logtest? (-> tgt state-flags) (state-flags dying)) (logior! f 2))
+    (if (coop-player-racing? tgt) (logior! f 4))
+    (if (coop-player-on-flut? tgt) (logior! f 8))
+    (the-as uint f)))
+
+(defun coop-log-flag-change ((i int) (old uint) (new uint) (bit int) (on string) (off string))
+  (when (!= (logtest? old bit) (logtest? new bit))
+    (format 0 "[coop-log] t=~,,1f player ~D ~S~%" (coop-log-time) (+ i 1) (if (logtest? new bit) on off)))
+  (none))
+
+(defun coop-log-tick ()
+  "Once per gameplay frame (coop-update): log what changed for each player since the last frame."
+  (when *coop-log?*
+    (let ((st *coop-log-state*))
+      ;; levels loaded and unloaded
+      (dotimes (k 2)
+        (let* ((lev (-> *level* level k))
+               (name (if (= (-> lev status) 'inactive) #f (-> lev name))))
+          (when (!= name (-> st levels k))
+            (format 0 "[coop-log] t=~,,1f level slot ~D: ~A -> ~A~%" (coop-log-time) k (-> st levels k) name)
+            (set! (-> st levels k) name))))
+      (dotimes (i 2)
+        (let ((tgt (coop-player-target i)))
+          (cond
+            ((not tgt)
+             (when (-> st exists i)
+               (format 0 "[coop-log] t=~,,1f player ~D is gone~%" (coop-log-time) (+ i 1))
+               (set! (-> st exists i) #f)))
+            (else
+             (when (not (-> st exists i))
+               (format 0 "[coop-log] t=~,,1f player ~D is here, health ~,,1f~%" (coop-log-time) (+ i 1) (-> tgt fact health))
+               (set! (-> st exists i) #t)
+               (set! (-> st health i) (-> tgt fact health)))
+             ;; health
+             (let ((hp (-> tgt fact health))
+                   (old (-> st health i)))
+               (when (!= hp old)
+                 (if (< hp old)
+                   (begin
+                     (format 0
+                             "[coop-log] t=~,,1f player ~D hurt: health ~,,1f -> ~,,1f by ~A (mode ~A)"
+                             (coop-log-time)
+                             (+ i 1)
+                             old
+                             hp
+                             (coop-log-attacker-name tgt)
+                             (coop-log-attack-mode tgt))
+                     (format 0 " at ~,,1m ~,,1m ~,,1m~%" (-> tgt control trans x) (-> tgt control trans y) (-> tgt control trans z)))
+                   (format 0 "[coop-log] t=~,,1f player ~D health ~,,1f -> ~,,1f~%" (coop-log-time) (+ i 1) old hp))
+                 (set! (-> st health i) hp)))
+             ;; states worth knowing
+             (let ((name (if (-> tgt next-state) (-> tgt next-state name) #f)))
+               (when (and name (!= name (-> st state i)))
+                 (case name
+                   (('target-death 'target-coop-respawn 'target-hit 'target-grab 'target-continue)
+                    (format 0 "[coop-log] t=~,,1f player ~D state ~A (was ~A)" (coop-log-time) (+ i 1) name (-> st state i))
+                    (format 0 ", last attack ~A by ~A~%" (coop-log-attack-mode tgt) (coop-log-attacker-name tgt))))
+                 (set! (-> st state i) name)))
+             ;; flags
+             (let ((old (-> st flags i))
+                   (new (coop-log-flags tgt)))
+               (when (!= old new)
+                 (coop-log-flag-change i old new 1 "is grabbed (cinematic, door, npc)" "is free again")
+                 (coop-log-flag-change i old new 2 "is dying" "is no longer dying")
+                 (coop-log-flag-change i old new 4 "is on the zoomer" "left the zoomer")
+                 (coop-log-flag-change i old new 8 "is on the flut flut" "left the flut flut")
+                 (set! (-> st flags i) new)))
+             ;; the level the player stands in
+             (let ((lev (if (-> tgt current-level) (-> tgt current-level name) #f)))
+               (when (!= lev (-> st level i))
+                 (format 0 "[coop-log] t=~,,1f player ~D enters ~A~%" (coop-log-time) (+ i 1) lev)
+                 (set! (-> st level i) lev)))))))
+      ;; status line
+      (when (time-elapsed? (-> st last-status) *coop-log-status-interval*)
+        (set-time! (-> st last-status))
+        (format 0 "[coop-log] t=~,,1f status" (coop-log-time))
+        (dotimes (i 2)
+          (let ((tgt (coop-player-target i)))
+            (if tgt
+              (begin
+                (format 0
+                        " | p~D ~A ~,,1m ~,,1m ~,,1m"
+                        (+ i 1)
+                        (-> st level i)
+                        (-> tgt control trans x)
+                        (-> tgt control trans y)
+                        (-> tgt control trans z))
+                (format 0 " hp ~,,1f ~A" (-> tgt fact health) (if (-> tgt next-state) (-> tgt next-state name) #f)))
+              (format 0 " | p~D none" (+ i 1)))))
+        (format 0 "~%"))))
+  (none))
+
 (defun coop-clone-anim-state? ((name symbol))
   "Is name a state a player is in while a cinematic animates them: on foot, on the zoomer or on the
    flut flut."
@@ -1855,155 +2004,6 @@
               ((= *master-mode* 'pause)
                (print-game-text (lookup-text! *common-text* (text-id local-coop-press-start) #f) font #f 128 22)))
             (coop-switch-context prev))))))
-  (none))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; event log for playtests
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-;; Lines starting with "[coop-log]" go to the game log (also in release builds), so a playtester only
-;; has to send that file. Per player: health changes with the attacker, deaths, state changes worth
-;; knowing, level changes, and a status line every *coop-log-status-interval*.
-
-(define *coop-log?* #t)
-
-(define *coop-log-status-interval* (seconds 1))
-
-(deftype coop-log-state (structure)
-  ((health      float 2)
-   (state       symbol 2)
-   (level       symbol 2)
-   (flags       uint32 2) ;; bit 0 grabbed, bit 1 dying, bit 2 zoomer, bit 3 flut flut
-   (exists      symbol 2)
-   (levels      symbol 2) ;; names in *level* slots 0 and 1, for load/unload lines
-   (last-status time-frame)))
-
-(define *coop-log-state* (new 'global 'coop-log-state))
-
-(defun coop-log-reset ()
-  (dotimes (i 2)
-    (set! (-> *coop-log-state* health i) -1.0)
-    (set! (-> *coop-log-state* state i) #f)
-    (set! (-> *coop-log-state* level i) #f)
-    (set! (-> *coop-log-state* flags i) (the-as uint 0))
-    (set! (-> *coop-log-state* exists i) #f)
-    (set! (-> *coop-log-state* levels i) #f))
-  (set! (-> *coop-log-state* last-status) 0)
-  (none))
-
-(coop-log-reset)
-
-(defmacro coop-log-time ()
-  "Game time in seconds, for the start of a log line."
-  `(* 0.0033333334 (the float (current-time))))
-
-(defun coop-log-attacker-name ((tgt target))
-  "Name of the process that last attacked tgt, or ?. The handle can be 0 (an attack sent without a
-   process), so it is checked before it is followed."
-  (let ((h (-> tgt attack-info attacker)))
-    (if (and (nonzero? h) (!= h (the-as handle #f)) (coop-goal-address? (-> h process)))
-      (let ((proc (handle->process h)))
-        (if proc (-> proc name) (quote ?)))
-      (quote ?))))
-
-(defun coop-log-attack-mode ((tgt target))
-  "The mode of the last attack on tgt (a symbol), or - if there is none yet."
-  (let ((m (-> tgt attack-info mode)))
-    (if (and (coop-goal-address? m) (= (rtype-of m) symbol)) m '-)))
-
-(defun coop-log-flags ((tgt target))
-  (let ((f 0))
-    (if (logtest? (-> tgt state-flags) (state-flags grabbed)) (logior! f 1))
-    (if (logtest? (-> tgt state-flags) (state-flags dying)) (logior! f 2))
-    (if (coop-player-racing? tgt) (logior! f 4))
-    (if (coop-player-on-flut? tgt) (logior! f 8))
-    (the-as uint f)))
-
-(defun coop-log-flag-change ((i int) (old uint) (new uint) (bit int) (on string) (off string))
-  (when (!= (logtest? old bit) (logtest? new bit))
-    (format 0 "[coop-log] t=~,,1f player ~D ~S~%" (coop-log-time) (+ i 1) (if (logtest? new bit) on off)))
-  (none))
-
-(defun coop-log-tick ()
-  "Once per gameplay frame (coop-update): log what changed for each player since the last frame."
-  (when *coop-log?*
-    (let ((st *coop-log-state*))
-      ;; levels loaded and unloaded
-      (dotimes (k 2)
-        (let* ((lev (-> *level* level k))
-               (name (if (= (-> lev status) 'inactive) #f (-> lev name))))
-          (when (!= name (-> st levels k))
-            (format 0 "[coop-log] t=~,,1f level slot ~D: ~A -> ~A~%" (coop-log-time) k (-> st levels k) name)
-            (set! (-> st levels k) name))))
-      (dotimes (i 2)
-        (let ((tgt (coop-player-target i)))
-          (cond
-            ((not tgt)
-             (when (-> st exists i)
-               (format 0 "[coop-log] t=~,,1f player ~D is gone~%" (coop-log-time) (+ i 1))
-               (set! (-> st exists i) #f)))
-            (else
-             (when (not (-> st exists i))
-               (format 0 "[coop-log] t=~,,1f player ~D is here, health ~,,1f~%" (coop-log-time) (+ i 1) (-> tgt fact health))
-               (set! (-> st exists i) #t)
-               (set! (-> st health i) (-> tgt fact health)))
-             ;; health
-             (let ((hp (-> tgt fact health))
-                   (old (-> st health i)))
-               (when (!= hp old)
-                 (if (< hp old)
-                   (begin
-                     (format 0
-                             "[coop-log] t=~,,1f player ~D hurt: health ~,,1f -> ~,,1f by ~A (mode ~A)"
-                             (coop-log-time)
-                             (+ i 1)
-                             old
-                             hp
-                             (coop-log-attacker-name tgt)
-                             (coop-log-attack-mode tgt))
-                     (format 0 " at ~,,1m ~,,1m ~,,1m~%" (-> tgt control trans x) (-> tgt control trans y) (-> tgt control trans z)))
-                   (format 0 "[coop-log] t=~,,1f player ~D health ~,,1f -> ~,,1f~%" (coop-log-time) (+ i 1) old hp))
-                 (set! (-> st health i) hp)))
-             ;; states worth knowing
-             (let ((name (if (-> tgt next-state) (-> tgt next-state name) #f)))
-               (when (and name (!= name (-> st state i)))
-                 (case name
-                   (('target-death 'target-coop-respawn 'target-hit 'target-grab 'target-continue)
-                    (format 0 "[coop-log] t=~,,1f player ~D state ~A (was ~A)" (coop-log-time) (+ i 1) name (-> st state i))
-                    (format 0 ", last attack ~A by ~A~%" (coop-log-attack-mode tgt) (coop-log-attacker-name tgt))))
-                 (set! (-> st state i) name)))
-             ;; flags
-             (let ((old (-> st flags i))
-                   (new (coop-log-flags tgt)))
-               (when (!= old new)
-                 (coop-log-flag-change i old new 1 "is grabbed (cinematic, door, npc)" "is free again")
-                 (coop-log-flag-change i old new 2 "is dying" "is no longer dying")
-                 (coop-log-flag-change i old new 4 "is on the zoomer" "left the zoomer")
-                 (coop-log-flag-change i old new 8 "is on the flut flut" "left the flut flut")
-                 (set! (-> st flags i) new)))
-             ;; the level the player stands in
-             (let ((lev (if (-> tgt current-level) (-> tgt current-level name) #f)))
-               (when (!= lev (-> st level i))
-                 (format 0 "[coop-log] t=~,,1f player ~D enters ~A~%" (coop-log-time) (+ i 1) lev)
-                 (set! (-> st level i) lev)))))))
-      ;; status line
-      (when (time-elapsed? (-> st last-status) *coop-log-status-interval*)
-        (set-time! (-> st last-status))
-        (format 0 "[coop-log] t=~,,1f status" (coop-log-time))
-        (dotimes (i 2)
-          (let ((tgt (coop-player-target i)))
-            (if tgt
-              (begin
-                (format 0
-                        " | p~D ~A ~,,1m ~,,1m ~,,1m"
-                        (+ i 1)
-                        (-> st level i)
-                        (-> tgt control trans x)
-                        (-> tgt control trans y)
-                        (-> tgt control trans z))
-                (format 0 " hp ~,,1f ~A" (-> tgt fact health) (if (-> tgt next-state) (-> tgt next-state name) #f)))
-              (format 0 " | p~D none" (+ i 1)))))
-        (format 0 "~%"))))
   (none))
 
 (defun coop-update ()
