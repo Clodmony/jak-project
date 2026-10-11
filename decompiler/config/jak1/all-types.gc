@@ -1712,6 +1712,8 @@
   (local-coop-every-ring #x1703)
   (local-coop-friendly-fire #x1704)
   (local-coop-tougher-bosses #x1705)
+  (local-coop-new-game #x1706)
+  (local-coop-load-game #x1707)
 ;; GAME-TEXT-ID ENUM ENDS
   )
 
@@ -15960,6 +15962,7 @@
   (speedrun-options)
   (speedrun-il-options)
   (speedrun-cat-ext-options)
+  (coop-title)
 
   ;; the last one!
   (max)

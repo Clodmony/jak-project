@@ -55,6 +55,11 @@ Consequences, by design:
   single full-screen view): split decision and listener; in game mode also the player position
   cache, player 2 respawn next to player 1 after `respawn-delay`, hold-backs that had to wait, the
   distance leash (`leash-distance`, 1000 m, a safety net since #69).
+- Title screen (all builds): "Local co-op" > "New co-op game" / "Load co-op game" (`*coop-title-options*`,
+  screen `coop-title`, `progress-pc.gc`). Choosing one starts co-op right away, then the normal new game
+  slot choice or load screen follows, so their slots are the co-op ones. Back on the title menu (or
+  "Quit game") co-op stops again; on the title screen itself no player 2 is spawned and nothing is
+  split (`coop-at-title?`; the game's end leads there with co-op still on).
 - In-game options (all builds, so it works for a launcher mod): Options > Game Options > Misc Options
   > "Local co-op" (on/off), "Co-op split top/bottom", "Co-op assign devices", "Co-op: every ring for both" (race rings count only once both players flew through them; off by default), "Co-op: friendly fire" (on by default), "Co-op: tougher bosses" (bosses need 1.5x the hits, `coop-boss-hits`; off by default)
   (`goal_src/jak1/pc/progress-pc.gc`). Co-op is never saved as on: every session starts single player.
