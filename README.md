@@ -20,10 +20,10 @@ This is an unofficial fork of [OpenGOAL](https://github.com/open-goal/jak-projec
 - Or join during a game: Options > Game Options > Misc Options > Local co-op.
 - Each half of the screen is marked **P1** (blue) or **P2** (orange). The split can be side by side or top/bottom.
 - A player who falls comes back next to the other one; only when both are down does the game go back to the checkpoint.
-- The whole game is playable in co-op, including the zoomer and flut flut sections, the minigames and the bosses. Options: friendly fire (on by default), "every ring for both" in Precursor Basin, tougher bosses.
+- Every part of the game is adapted for two players and tested with scripted play, including the zoomer and flut flut sections, the minigames and the bosses. No area has been played start to end in co-op yet, so expect rough edges. Options: friendly fire (on by default), "every ring for both" in Precursor Basin, tougher bosses.
 - Co-op saves are kept apart from single-player saves.
 
-Not tested yet: two people with real controllers, Windows, macOS, and installing through the launcher's own UI. Known limitations are listed in [COMPATIBILITY.md](docs/splitscreen/COMPATIBILITY.md).
+Not tested yet: full playthroughs of each area in co-op, two people with real controllers, Windows, macOS, and installing through the launcher's own UI. Known limitations are listed in [COMPATIBILITY.md](docs/splitscreen/COMPATIBILITY.md).
 
 ## For developers
 
