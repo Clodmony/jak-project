@@ -46,6 +46,34 @@ TEST(SplitscreenLayout, ViewsStayInsideFramebuffer) {
   }
 }
 
+TEST(SplitscreenLayout, DividerHalvesFillTheGap) {
+  for (int w : {320, 1280, 1920, 2560, 3840}) {
+    for (int h : {240, 720, 1080, 1440, 2160}) {
+      {
+        const auto v = view_rects(w, h, Layout::SIDE_BY_SIDE);
+        const auto d = divider_rects(w, h, Layout::SIDE_BY_SIDE);
+        // player 1's half touches player 1's view, player 2's half player 2's, together the gap
+        EXPECT_EQ(d[0].x, v[0].x + v[0].w);
+        EXPECT_EQ(d[1].x, d[0].x + d[0].w);
+        EXPECT_EQ(d[1].x + d[1].w, v[1].x);
+        EXPECT_GE(d[0].w, 2);
+        EXPECT_GE(d[1].w, 2);
+        EXPECT_EQ(d[0].h, h);
+      }
+      {
+        const auto v = view_rects(w, h, Layout::TOP_BOTTOM);
+        const auto d = divider_rects(w, h, Layout::TOP_BOTTOM);
+        EXPECT_EQ(d[1].y, v[1].y + v[1].h);
+        EXPECT_EQ(d[0].y, d[1].y + d[1].h);
+        EXPECT_EQ(d[0].y + d[0].h, v[0].y);
+        EXPECT_GE(d[0].h, 2);
+        EXPECT_GE(d[1].h, 2);
+        EXPECT_EQ(d[0].w, w);
+      }
+    }
+  }
+}
+
 TEST(SplitscreenLayout, LayoutFromInt) {
   EXPECT_EQ(layout_from_int(0), Layout::SIDE_BY_SIDE);
   EXPECT_EQ(layout_from_int(1), Layout::TOP_BOTTOM);
