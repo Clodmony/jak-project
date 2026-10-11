@@ -349,7 +349,7 @@
   (defmethod set-pos-and-scale ((this hud-bike-heat) (arg0 symbol) (arg1 symbol))
     (with-pc
       (let ((base-x (-> this particles 0 init-pos x)))
-        (*! base-x (-> *pc-settings* aspect-ratio-reciprocal))
+        (*! base-x (coop-hud-aspect-reciprocal))
         (set! (-> this particles 0 init-pos x) 13.0)
         (set! (-> this particles 1 init-pos x) 70.0)
         (set! (-> this particles 2 init-pos x) 20.0)
@@ -357,19 +357,19 @@
         (when (not (-> *pc-settings* use-vis?))
           (dotimes (i (-> this nb-of-particles))
             (set! (-> this particles i init-pos x)
-                  (+ base-x (* (-> *pc-settings* aspect-ratio-reciprocal) (- (-> this particles i init-pos x) base-x))))))))
+                  (+ base-x (* (coop-hud-aspect-reciprocal) (- (-> this particles i init-pos x) base-x))))))))
     (none))
   (defmethod set-pos-and-scale ((this hud-bike-speed) (arg0 symbol) (arg1 symbol))
     (with-pc
       (let ((base-x (-> this particles 1 init-pos x)))
-        (+! base-x (* (- 512.0 base-x) (- 1.0 (-> *pc-settings* aspect-ratio-reciprocal))))
+        (+! base-x (* (- 512.0 base-x) (- 1.0 (coop-hud-aspect-reciprocal))))
         (set! (-> this particles 0 init-pos x) 433.0)
         (set! (-> this particles 1 init-pos x) 378.0)
         (set! (-> this particles 2 init-pos x) 415.0)
         (when (not (-> *pc-settings* use-vis?))
           (dotimes (i (-> this nb-of-particles))
             (set! (-> this particles i init-pos x)
-                  (+ base-x (* (-> *pc-settings* aspect-ratio-reciprocal) (- (-> this particles i init-pos x) base-x))))))))
+                  (+ base-x (* (coop-hud-aspect-reciprocal) (- (-> this particles i init-pos x) base-x))))))))
     (none)))
 
 (defpartgroup group-racer-trans-pad
