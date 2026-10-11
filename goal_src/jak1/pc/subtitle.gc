@@ -433,7 +433,8 @@
    player only; one without a position (a voice for everybody) goes to both views."
   (if (not (and (coop-active?) (coop-split-frame?))) (return 0))
   (let ((hint (the-as level-hint (if *hint-semaphore* (ppointer->process *hint-semaphore*)))))
-    (if (not (and hint (-> hint trans))) (return 3))
+    ;; a level hint (not an npc line) leaves trans unset: 0, not #f
+    (if (not (and hint (>= (the-as uint (-> hint trans)) #x10000) (< (the-as uint (-> hint trans)) #x8000000))) (return 3))
     (let ((p1 (coop-player-target 0))
           (p2 (coop-player-target 1))
           (pos (-> hint trans)))
