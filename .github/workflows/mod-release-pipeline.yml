@@ -1,8 +1,9 @@
 # Copied from OpenGOAL-Mods/OG-Mod-Base (commit 2c4ee857, ISC licence, OpenGOAL Team).
 # Changes for this fork (AI-assisted): actions/checkout, upload-artifact and download-artifact
 # use the same versions as the other workflows in this repository, the optional `customTag`
-# input is passed to github-tag-action as `custom_tag`, and `dryRun` builds and bundles everything
-# without a tag or a release (the assets stay workflow artifacts). Everything else is unchanged.
+# input is passed to github-tag-action as `custom_tag`, `dryRun` builds and bundles everything
+# without a tag or a release (the assets stay workflow artifacts), and each bundle job downloads its
+# build artifact by name. Everything else is unchanged.
 # Called by cut-release.yaml; see docs/splitscreen/MOD.md.
 name: "Mod Release Pipeline"
 on:
@@ -164,10 +165,13 @@ jobs:
       - name: Prepare Artifact Folder
         run: mkdir -p ./ci-artifacts
 
+      # by name: without one, a single finished artifact is extracted without its folder (this
+      # bundle then can't find ./ci-artifacts/opengoal-windows-static; happened in the v0.1.0 run)
       - uses: actions/download-artifact@v8
-        name: Download all Artifacts
+        name: Download the windows build
         with:
-          path: ./ci-artifacts/
+          name: opengoal-windows-static
+          path: ./ci-artifacts/opengoal-windows-static/
 
       - name: Display structure of downloaded files
         run: ls -Rl ./ci-artifacts/
@@ -221,10 +225,13 @@ jobs:
       - name: Prepare Artifact Folder
         run: mkdir -p ./ci-artifacts
 
+      # by name: without one, a single finished artifact is extracted without its folder (this
+      # bundle then can't find ./ci-artifacts/opengoal-linux-static; happened in the v0.1.0 run)
       - uses: actions/download-artifact@v8
-        name: Download all Artifacts
+        name: Download the linux build
         with:
-          path: ./ci-artifacts/
+          name: opengoal-linux-static
+          path: ./ci-artifacts/opengoal-linux-static/
 
       - name: Display structure of downloaded files
         run: ls -Rl ./ci-artifacts/
@@ -280,10 +287,13 @@ jobs:
       - name: Prepare Artifact Folder
         run: mkdir -p ./ci-artifacts
 
+      # by name: without one, a single finished artifact is extracted without its folder (this
+      # bundle then can't find ./ci-artifacts/opengoal-macos-static; happened in the v0.1.0 run)
       - uses: actions/download-artifact@v8
-        name: Download all Artifacts
+        name: Download the macos build
         with:
-          path: ./ci-artifacts/
+          name: opengoal-macos-static
+          path: ./ci-artifacts/opengoal-macos-static/
 
       - name: Display structure of downloaded files
         run: ls -Rl ./ci-artifacts/
