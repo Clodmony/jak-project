@@ -426,6 +426,40 @@
     (#when PC_SUBTITLE_DEBUG
       (draw-debug-text-box (-> self font)))))
 
+;; og:preserve-this coop
+(defun coop-subtitle-views ()
+  "Which split-screen views show the subtitle: a bit mask (1 = player 1's view, 2 = player 2's), 0 when
+   the frame is not split. A hint or npc line with a position (a talking npc) is heard by the nearer
+   player only; one without a position (a voice for everybody) goes to both views."
+  (if (not (and (coop-active?) (coop-split-frame?))) (return 0))
+  (let ((hint (if *hint-semaphore* (ppointer->process *hint-semaphore*))))
+    (if (not (and hint (-> hint trans))) (return 3))
+    (let ((p1 (coop-player-target 0))
+          (p2 (coop-player-target 1))
+          (pos (-> hint trans)))
+      (cond
+        ((not p2) 1)
+        ((not p1) 2)
+        ((< (vector-vector-distance pos (-> p2 control trans)) (vector-vector-distance pos (-> p1 control trans))) 2)
+        (else 1)))))
+
+;; og:preserve-this coop: the :post drawing of subtitle-process, run once per view that shows it
+(defbehavior subtitle-post-draw subtitle ()
+      (setup-subtitle-font)
+      (draw-subtitle)
+      (cond
+        ((!= *master-mode* 'game))
+        ((and (< (time-passed) (seconds 5)) (= (-> self notice-id) (text-id subtitle-hint)))
+         (when (not (-> *pc-settings* subtitles?))
+           (set-scale! (-> self font) (* (-> *SUBTITLE-bank* scale) 1.5))
+           (print-game-subtitle (lookup-text! *common-text* (-> self notice-id) #f) (-> self font) #f 128 22)))
+        ((and (= (-> self cur-channel) (pc-subtitle-channel movie))
+              (< (time-passed) (seconds 2))
+              (< (mod (time-passed) (seconds 1)) (seconds 0.8)))
+         (set! (-> self font origin y) (* (-> *SUBTITLE-bank* notice-height) 224))
+         (print-game-subtitle (lookup-text! *common-text* (-> self notice-id) #f) (-> self font) #f 128 22)))
+  (none))
+
 (defstate subtitle-process (subtitle)
   :event
     (behavior ((from process) (argc int) (msg symbol) (block event-message-block))
@@ -522,19 +556,13 @@
       (none))
   :post
     (behavior ()
-      (setup-subtitle-font)
-      (draw-subtitle)
-      (cond
-        ((!= *master-mode* 'game))
-        ((and (< (time-passed) (seconds 5)) (= (-> self notice-id) (text-id subtitle-hint)))
-         (when (not (-> *pc-settings* subtitles?))
-           (set-scale! (-> self font) (* (-> *SUBTITLE-bank* scale) 1.5))
-           (print-game-subtitle (lookup-text! *common-text* (-> self notice-id) #f) (-> self font) #f 128 22)))
-        ((and (= (-> self cur-channel) (pc-subtitle-channel movie))
-              (< (time-passed) (seconds 2))
-              (< (mod (time-passed) (seconds 1)) (seconds 0.8)))
-         (set! (-> self font origin y) (* (-> *SUBTITLE-bank* notice-height) 224))
-         (print-game-subtitle (lookup-text! *common-text* (-> self notice-id) #f) (-> self font) #f 128 22)))
+      ;; og:preserve-this coop: on split-screen frames the subtitle goes to the view of the player who
+      ;; hears it (coop-subtitle-views), drawn in that player's context
+      (let ((views (coop-subtitle-views)))
+        (if (zero? views)
+          (subtitle-post-draw)
+          (dotimes (v 2)
+            (if (logtest? views (ash 1 v)) (with-coop-player v (subtitle-post-draw))))))
       0))
 
 (defstate subtitle-debug (subtitle)
