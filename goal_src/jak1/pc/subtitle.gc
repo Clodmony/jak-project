@@ -432,7 +432,7 @@
    the frame is not split. A hint or npc line with a position (a talking npc) is heard by the nearer
    player only; one without a position (a voice for everybody) goes to both views."
   (if (not (and (coop-active?) (coop-split-frame?))) (return 0))
-  (let ((hint (if *hint-semaphore* (ppointer->process *hint-semaphore*))))
+  (let ((hint (the-as level-hint (if *hint-semaphore* (ppointer->process *hint-semaphore*)))))
     (if (not (and hint (-> hint trans))) (return 3))
     (let ((p1 (coop-player-target 0))
           (p2 (coop-player-target 1))
