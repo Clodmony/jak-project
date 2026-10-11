@@ -295,5 +295,9 @@ Tools:
 - `scripts/splitscreen/sync_upstream.sh`: merges `upstream/master`, builds, compiles all Jak 1 code,
   runs `test.sh` (includes the Jak 2/3/X compile and type checks) and the compatibility check.
   `--preview` only lists conflicting files.
+- `.github/workflows/upstream-check.yaml` ("Upstream Check", Mondays and on demand): the same merge,
+  build, all-code compile, `test.sh` and compatibility check on GitHub against the latest upstream
+  master, without pushing anything. A red run lists the conflicting files in its summary. GitHub
+  pauses scheduled workflows after 60 days without repository activity.
 
 Work items are GitHub issues on the fork, not files in this folder.
