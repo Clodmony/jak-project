@@ -217,7 +217,7 @@
   (none))
 
 ;; ?? used by generic merc
-(define *merc-global-array* (new 'global 'merc-global-array))
+(define *merc-global-array* (new 'global 'coop-merc-global-array)) ;; og:preserve-this coop: 14 globals for 4 level slots
 
 (defun vu-lights<-light-group! ((arg0 vu-lights) (arg1 light-group))
   "Convert a light-group to the VU format lights used by merc."
@@ -920,7 +920,7 @@
 (defun draw-control-uses-water-bucket ((dc draw-control))
   "Does this draw control use a water bucket?"
   (let ((sg (-> dc sink-group)))
-    (dotimes (i 3)
+    (dotimes (i LEVEL_INDEX_COUNT) ;; og:preserve-this coop: all slots and the default level (was 3)
       (let ((lev (-> *level* level i))) (when lev (when (= sg (-> lev water-tex-foreground-sink-group)) (return #t)))))
     #f))
 

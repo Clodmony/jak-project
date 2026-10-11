@@ -10,6 +10,7 @@
 
 #include <string>
 
+#include "common/goal_constants.h"
 #include "common/log/log.h"
 #include "common/symbols.h"
 #include "common/util/FileUtil.h"
@@ -18,6 +19,7 @@
 #include "game/external/discord_jak1.h"
 #include "game/graphics/display.h"
 #include "game/graphics/gfx.h"
+#include "game/graphics/opengl_renderer/buckets.h"
 #include "game/graphics/sceGraphicsInterface.h"
 #include "game/kernel/common/fileio.h"
 #include "game/kernel/common/kboot.h"
@@ -306,24 +308,32 @@ AutoSplitterBlock g_auto_splitter_block_jak1;
  * the GOAL kernel dispatch loop (KernelCheckAndDispatch).
  * TODO finish up things which are commented.
  */
+// Local co-op (issue #110): the two extra level heaps (2 x 11 MB) did not fit in the 61 MB global
+// heap next to the game's code and the first two level heaps. Jak 1's global heap takes the 17 MB
+// gap below the debug heap and 8 MB of the debug heap (48 MB before, the PS2 had 4), ending at 88 MB.
+constexpr u32 kJak1GlobalHeapEnd = 0x5800000;
+constexpr u32 kJak1DebugHeapStart = kJak1GlobalHeapEnd;
+static_assert(kJak1GlobalHeapEnd >= GLOBAL_HEAP_END);
+static_assert(kJak1DebugHeapStart >= DEBUG_HEAP_START);
+
 int InitMachine() {
   u32 debug_heap_end = (0xffffffff - DEBUG_HEAP_SPACE_FOR_STACK + 1) & 0x7ffffff;
 
   // initialize the global heap
-  u32 global_heap_size = GLOBAL_HEAP_END - HEAP_START;
+  u32 global_heap_size = kJak1GlobalHeapEnd - HEAP_START;
   float size_mb = ((float)global_heap_size) / (float)(1 << 20);
   lg::info("gkernel: global heap 0x{:08x} to 0x{:08x} (size {:.3f} MB)", HEAP_START,
-           GLOBAL_HEAP_END, size_mb);
+           kJak1GlobalHeapEnd, size_mb);
   kinitheap(kglobalheap, Ptr<u8>(HEAP_START), global_heap_size);
 
   // initialize the debug heap, if appropriate
   if (MasterDebug) {
-    u32 debug_heap_size = debug_heap_end - DEBUG_HEAP_START;
-    kinitheap(kdebugheap, Ptr<u8>(DEBUG_HEAP_START), debug_heap_size);
+    u32 debug_heap_size = debug_heap_end - kJak1DebugHeapStart;
+    kinitheap(kdebugheap, Ptr<u8>(kJak1DebugHeapStart), debug_heap_size);
     float debug_size_mb = ((float)debug_heap_size) / (float)(1 << 20);
-    float gap_size_mb = ((float)DEBUG_HEAP_START - GLOBAL_HEAP_END) / (float)(1 << 20);
+    float gap_size_mb = ((float)kJak1DebugHeapStart - kJak1GlobalHeapEnd) / (float)(1 << 20);
     lg::info("gkernel: debug heap 0x{:08x} to 0x{:08x} (size {:.3f} MB, gap {:.3f} MB)",
-             DEBUG_HEAP_START, debug_heap_end, debug_size_mb, gap_size_mb);
+             kJak1DebugHeapStart, debug_heap_end, debug_size_mb, gap_size_mb);
   } else {
     // if no debug, we make the kheapinfo structure NULL so GOAL knows not to use it.
     kdebugheap.offset = 0;
@@ -519,23 +529,30 @@ void update_discord_rpc(u32 discord_info) {
   }
 }
 
-void pc_set_levels(u32 l0, u32 l1) {
+// Local co-op (issue #110): one name per level slot, jak1::LEVEL_MAX of them, like Jak 2.
+void pc_set_levels(u32 lev_list) {
   if (!Gfx::GetCurrentRenderer()) {
     return;
   }
-  std::string l0s = Ptr<String>(l0).c()->data();
-  std::string l1s = Ptr<String>(l1).c()->data();
-
   std::vector<std::string> levels;
-  if (l0s != "none" && l0s != "#f") {
-    levels.push_back(l0s);
-  }
-
-  if (l1s != "none" && l1s != "#f") {
-    levels.push_back(l1s);
+  for (int i = 0; i < jak1::LEVEL_MAX; i++) {
+    u32 lev = *Ptr<u32>(lev_list + i * 4);
+    std::string ls = Ptr<String>(lev).c()->data();
+    if (ls != "none" && ls != "#f" && ls != "") {
+      levels.push_back(ls);
+    }
   }
 
   Gfx::GetCurrentRenderer()->set_levels(levels);
+}
+
+// Local co-op (issue #110): the order the renderer draws the buckets in, so the game can link its DMA
+// chain that way (dma-buffer-patch-buckets). dest is an array of count int32.
+void pc_get_bucket_draw_order(u32 dest, u32 count) {
+  s32* out = Ptr<s32>(dest).c();
+  for (u32 i = 0; i < count && i < jak1::kBucketDrawOrder.size(); i++) {
+    out[i] = (s32)jak1::kBucketDrawOrder[i];
+  }
 }
 
 void InitMachine_PCPort() {
@@ -554,6 +571,7 @@ void InitMachine_PCPort() {
   // Called from the game thread at each frame to tell the PC rendering code which levels to start
   // loading. The loader internally handles locking.
   make_function_symbol_from_c("__pc-set-levels", (void*)pc_set_levels);
+  make_function_symbol_from_c("__pc-get-bucket-draw-order", (void*)pc_get_bucket_draw_order);
 
   make_function_symbol_from_c("pc-discord-rpc-update", (void*)update_discord_rpc);
 

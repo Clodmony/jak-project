@@ -57,7 +57,7 @@
                'draw
                (new 'static 'rgba :r #x40 :b #x40 :a #x80)))
   (dotimes (gp-0 (-> *level* length))
-    (let ((s5-0 (-> *level* level gp-0)))
+    (let ((s5-0 (level-slot gp-0))) ;; og:preserve-this coop: slot loop
       (when (= (-> s5-0 status) 'active)
         (compute-memory-usage s5-0 #f)
         (format *stdcon*
@@ -111,8 +111,9 @@
 
 (defun update-subdivide-settings! ((settings subdivide-settings) (math-cam math-camera) (idx int))
   "Change the subdivide settings."
-  (set! (-> settings meters 0) (-> settings far idx))
-  (set! (-> settings meters 4) (-> settings close idx))
+  ;; og:preserve-this coop: idx is a level array index (0..4) or SUBDIVIDE_OVERRIDE_INDEX (issue #110)
+  (set! (-> settings meters 0) (subdivide-level-far settings idx))
+  (set! (-> settings meters 4) (subdivide-level-close settings idx))
   (let ((f0-3 (* 0.14285715 (- (-> settings meters 0) (-> settings meters 4)))))
     (set! (-> settings meters 3) (+ (-> settings meters 4) (* 0.5 f0-3)))
     (set! (-> settings meters 2) (+ (-> settings meters 3) f0-3))
@@ -127,7 +128,12 @@
   0
   (none))
 
-(define *subdivide-settings* (new 'global 'subdivide-settings (meters 30) (meters 70)))
+;; og:preserve-this coop: with room for the two extra level slots (issue #110)
+(define *subdivide-settings* (new 'global 'coop-subdivide-settings (meters 30) (meters 70)))
+
+(dotimes (i 2)
+  (set! (-> (the-as coop-subdivide-settings *subdivide-settings*) close-extra i) (meters 30))
+  (set! (-> (the-as coop-subdivide-settings *subdivide-settings*) far-extra i) (meters 70)))
 
 (defun set-tfrag-dists! ((arg0 tfrag-dists))
   (let ((f2-0 (-> *subdivide-settings* dist 0))

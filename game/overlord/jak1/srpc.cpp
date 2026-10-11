@@ -377,6 +377,10 @@ void* RPC_Loader(unsigned int /*fno*/, void* data, int size) {
           if (bank != nullptr) {
             snd::BankHandle id = bank->bank_handle;
             bank->bank_handle = 0;
+            // Local co-op (issue #110): forget the name too. LookupBank matched the unloaded slot by its
+            // stale name, so a later LOAD_BANK of the same bank found it "loaded" and skipped the load
+            // (silent level). With four level bank slots a bank is unloaded and wanted again more often.
+            bank->name.fill(0);
             snd_UnloadBank(id);
             snd_ResolveBankXREFS();
           }

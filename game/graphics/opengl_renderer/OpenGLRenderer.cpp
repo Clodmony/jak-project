@@ -676,116 +676,78 @@ void OpenGLRenderer::init_bucket_renderers_jak1() {
                                        BucketId::OCEAN_MID_AND_FAR);
 
   //-----------------------
-  // LEVEL 0 tfrag texture
+  // per-level buckets: local co-op holds four level slots (issue #110), each with the bucket set the
+  // original game had for level 0 and 1 (level_bucket in buckets.h). The slot is the renderer's
+  // level id (occlusion vis).
   //-----------------------
-  // 5 : TFRAG_TEX_LEVEL0
-  init_bucket_renderer<TextureUploadHandler>("l0-tfrag-tex", BucketCategory::TEX,
-                                             BucketId::TFRAG_TEX_LEVEL0, m_texture_animator);
-  // 6 : TFRAG_LEVEL0
-  init_bucket_renderer<TFragment>("l0-tfrag-tfrag", BucketCategory::TFRAG, BucketId::TFRAG_LEVEL0,
-                                  normal_tfrags, false, 0, anim_slot_array());
-  // 7 : TFRAG_NEAR_LEVEL0
-  // 8 : TIE_NEAR_LEVEL0
-  // 9 : TIE_LEVEL0
-  init_bucket_renderer<Tie3WithEnvmapJak1>("l0-tfrag-tie", BucketCategory::TIE,
-                                           BucketId::TIE_LEVEL0, 0);
-  // 10 : MERC_TFRAG_TEX_LEVEL0
-  init_bucket_renderer<Merc2BucketRenderer>("l0-tfrag-merc", BucketCategory::MERC,
-                                            BucketId::MERC_TFRAG_TEX_LEVEL0, m_merc2);
-  // 11 : GMERC_TFRAG_TEX_LEVEL0
-  init_bucket_renderer<Generic2BucketRenderer>("l0-tfrag-generic", BucketCategory::GENERIC,
-                                               BucketId::GENERIC_TFRAG_TEX_LEVEL0, m_generic2,
-                                               Generic2::Mode::NORMAL);
+  for (int slot = 0; slot < kLevelSlots; slot++) {
+    auto bucket = [slot](LevelBucketKind kind) { return level_bucket(kind, slot); };
+    // tfrag texture
+    init_bucket_renderer<TextureUploadHandler>(fmt::format("l{}-tfrag-tex", slot),
+                                               BucketCategory::TEX, bucket(LevelBucketKind::TFRAG_TEX),
+                                               m_texture_animator);
+    init_bucket_renderer<TFragment>(fmt::format("l{}-tfrag-tfrag", slot), BucketCategory::TFRAG,
+                                    bucket(LevelBucketKind::TFRAG), normal_tfrags, false, slot,
+                                    anim_slot_array());
+    // (tfrag near and tie near: unused)
+    init_bucket_renderer<Tie3WithEnvmapJak1>(fmt::format("l{}-tfrag-tie", slot), BucketCategory::TIE,
+                                             bucket(LevelBucketKind::TIE), slot);
+    init_bucket_renderer<Merc2BucketRenderer>(fmt::format("l{}-tfrag-merc", slot),
+                                              BucketCategory::MERC,
+                                              bucket(LevelBucketKind::MERC_TFRAG_TEX), m_merc2);
+    init_bucket_renderer<Generic2BucketRenderer>(
+        fmt::format("l{}-tfrag-generic", slot), BucketCategory::GENERIC,
+        bucket(LevelBucketKind::GENERIC_TFRAG_TEX), m_generic2, Generic2::Mode::NORMAL);
 
-  //-----------------------
-  // LEVEL 1 tfrag texture
-  //-----------------------
-  // 12 : TFRAG_TEX_LEVEL1
-  init_bucket_renderer<TextureUploadHandler>("l1-tfrag-tex", BucketCategory::TEX,
-                                             BucketId::TFRAG_TEX_LEVEL1, m_texture_animator);
-  // 13 : TFRAG_LEVEL1
-  init_bucket_renderer<TFragment>("l1-tfrag-tfrag", BucketCategory::TFRAG, BucketId::TFRAG_LEVEL1,
-                                  normal_tfrags, false, 1, anim_slot_array());
-  // 14 : TFRAG_NEAR_LEVEL1
-  // 15 : TIE_NEAR_LEVEL1
-  // 16 : TIE_LEVEL1
-  init_bucket_renderer<Tie3WithEnvmapJak1>("l1-tfrag-tie", BucketCategory::TIE,
-                                           BucketId::TIE_LEVEL1, 1);
-  // 17 : MERC_TFRAG_TEX_LEVEL1
-  init_bucket_renderer<Merc2BucketRenderer>("l1-tfrag-merc", BucketCategory::MERC,
-                                            BucketId::MERC_TFRAG_TEX_LEVEL1, m_merc2);
-  // 18 : GMERC_TFRAG_TEX_LEVEL1
-  init_bucket_renderer<Generic2BucketRenderer>("l1-tfrag-generic", BucketCategory::GENERIC,
-                                               BucketId::GENERIC_TFRAG_TEX_LEVEL1, m_generic2,
-                                               Generic2::Mode::NORMAL);
+    // shrub texture
+    init_bucket_renderer<TextureUploadHandler>(fmt::format("l{}-shrub-tex", slot),
+                                               BucketCategory::TEX, bucket(LevelBucketKind::SHRUB_TEX),
+                                               m_texture_animator);
+    init_bucket_renderer<Shrub>(fmt::format("l{}-shrub", slot), BucketCategory::SHRUB,
+                                bucket(LevelBucketKind::SHRUB_NORMAL));
+    // (shrub near, billboard and trans: unused)
+    init_bucket_renderer<Generic2BucketRenderer>(
+        fmt::format("l{}-shrub-generic", slot), BucketCategory::GENERIC,
+        bucket(LevelBucketKind::SHRUB_GENERIC), m_generic2, Generic2::Mode::NORMAL);
 
-  //-----------------------
-  // LEVEL 0 shrub texture
-  //-----------------------
-  // 19 : SHRUB_TEX_LEVEL0
-  init_bucket_renderer<TextureUploadHandler>("l0-shrub-tex", BucketCategory::TEX,
-                                             BucketId::SHRUB_TEX_LEVEL0, m_texture_animator);
-  // 20 : SHRUB_NORMAL_LEVEL0
-  init_bucket_renderer<Shrub>("l0-shrub", BucketCategory::SHRUB, BucketId::SHRUB_NORMAL_LEVEL0);
-  // 21 : ???
-  // 22 : SHRUB_BILLBOARD_LEVEL0
-  // 23 : SHRUB_TRANS_LEVEL0
-  // 24 : SHRUB_GENERIC_LEVEL0
-  init_bucket_renderer<Generic2BucketRenderer>("l0-shrub-generic", BucketCategory::GENERIC,
-                                               BucketId::SHRUB_GENERIC_LEVEL0, m_generic2,
-                                               Generic2::Mode::NORMAL);
+    // alpha texture
+    init_bucket_renderer<TextureUploadHandler>(fmt::format("l{}-alpha-tex", slot),
+                                               BucketCategory::TEX, bucket(LevelBucketKind::ALPHA_TEX),
+                                               m_texture_animator);
+    init_bucket_renderer<SkyBlendHandler>(fmt::format("l{}-alpha-sky-blend-and-tfrag-trans", slot),
+                                          BucketCategory::OTHER,
+                                          bucket(LevelBucketKind::TFRAG_TRANS_AND_SKY_BLEND), slot,
+                                          sky_gpu_blender, sky_cpu_blender, anim_slot_array());
+    init_bucket_renderer<TFragment>(fmt::format("l{}-alpha-tfrag-dirt", slot), BucketCategory::TFRAG,
+                                    bucket(LevelBucketKind::TFRAG_DIRT), dirt_tfrags, false, slot,
+                                    anim_slot_array());
+    init_bucket_renderer<TFragment>(fmt::format("l{}-alpha-tfrag-ice", slot), BucketCategory::TFRAG,
+                                    bucket(LevelBucketKind::TFRAG_ICE), ice_tfrags, false, slot,
+                                    anim_slot_array());
+    // (the near variants: unused)
 
-  //-----------------------
-  // LEVEL 1 shrub texture
-  //-----------------------
-  // 25 : SHRUB_TEX_LEVEL1
-  init_bucket_renderer<TextureUploadHandler>("l1-shrub-tex", BucketCategory::TEX,
-                                             BucketId::SHRUB_TEX_LEVEL1, m_texture_animator);
-  // 26 : SHRUB_NORMAL_LEVEL1
-  init_bucket_renderer<Shrub>("l1-shrub", BucketCategory::SHRUB, BucketId::SHRUB_NORMAL_LEVEL1);
-  // 27 : ???
-  // 28 : SHRUB_BILLBOARD_LEVEL1
-  // 29 : SHRUB_TRANS_LEVEL1
-  // 30 : SHRUB_GENERIC_LEVEL1
-  init_bucket_renderer<Generic2BucketRenderer>("l1-shrub-generic", BucketCategory::GENERIC,
-                                               BucketId::SHRUB_GENERIC_LEVEL1, m_generic2,
-                                               Generic2::Mode::NORMAL);
+    // pris texture
+    init_bucket_renderer<TextureUploadHandler>(fmt::format("l{}-pris-tex", slot), BucketCategory::TEX,
+                                               bucket(LevelBucketKind::PRIS_TEX), m_texture_animator);
+    init_bucket_renderer<Merc2BucketRenderer>(fmt::format("l{}-pris-merc", slot), BucketCategory::MERC,
+                                              bucket(LevelBucketKind::MERC_PRIS), m_merc2);
+    init_bucket_renderer<Generic2BucketRenderer>(fmt::format("l{}-pris-generic", slot),
+                                                 BucketCategory::GENERIC,
+                                                 bucket(LevelBucketKind::GENERIC_PRIS), m_generic2,
+                                                 Generic2::Mode::NORMAL);
 
-  //-----------------------
-  // LEVEL 0 alpha texture
-  //-----------------------
-  init_bucket_renderer<TextureUploadHandler>("l0-alpha-tex", BucketCategory::TEX,
-                                             BucketId::ALPHA_TEX_LEVEL0, m_texture_animator);  // 31
-  init_bucket_renderer<SkyBlendHandler>("l0-alpha-sky-blend-and-tfrag-trans", BucketCategory::OTHER,
-                                        BucketId::TFRAG_TRANS0_AND_SKY_BLEND_LEVEL0, 0,
-                                        sky_gpu_blender, sky_cpu_blender, anim_slot_array());  // 32
-  // 33
-  init_bucket_renderer<TFragment>("l0-alpha-tfrag", BucketCategory::TFRAG,
-                                  BucketId::TFRAG_DIRT_LEVEL0, dirt_tfrags, false, 0,
-                                  anim_slot_array());  // 34
-  // 35
-  init_bucket_renderer<TFragment>("l0-alpha-tfrag-ice", BucketCategory::TFRAG,
-                                  BucketId::TFRAG_ICE_LEVEL0, ice_tfrags, false, 0,
-                                  anim_slot_array());
-  // 37
-
-  //-----------------------
-  // LEVEL 1 alpha texture
-  //-----------------------
-  init_bucket_renderer<TextureUploadHandler>("l1-alpha-tex", BucketCategory::TEX,
-                                             BucketId::ALPHA_TEX_LEVEL1, m_texture_animator);  // 38
-  init_bucket_renderer<SkyBlendHandler>("l1-alpha-sky-blend-and-tfrag-trans", BucketCategory::OTHER,
-                                        BucketId::TFRAG_TRANS1_AND_SKY_BLEND_LEVEL1, 1,
-                                        sky_gpu_blender, sky_cpu_blender, anim_slot_array());  // 39
-  // 40
-  init_bucket_renderer<TFragment>("l1-alpha-tfrag-dirt", BucketCategory::TFRAG,
-                                  BucketId::TFRAG_DIRT_LEVEL1, dirt_tfrags, false, 1,
-                                  anim_slot_array());  // 41
-  // 42
-  init_bucket_renderer<TFragment>("l1-alpha-tfrag-ice", BucketCategory::TFRAG,
-                                  BucketId::TFRAG_ICE_LEVEL1, ice_tfrags, false, 1,
-                                  anim_slot_array());
-  // 44
+    // water texture
+    init_bucket_renderer<TextureUploadHandler>(fmt::format("l{}-water-tex", slot),
+                                               BucketCategory::TEX, bucket(LevelBucketKind::WATER_TEX),
+                                               m_texture_animator);
+    init_bucket_renderer<Merc2BucketRenderer>(fmt::format("l{}-water-merc", slot),
+                                              BucketCategory::MERC, bucket(LevelBucketKind::MERC_WATER),
+                                              m_merc2);
+    init_bucket_renderer<Generic2BucketRenderer>(fmt::format("l{}-water-generic", slot),
+                                                 BucketCategory::GENERIC,
+                                                 bucket(LevelBucketKind::GENERIC_WATER), m_generic2,
+                                                 Generic2::Mode::NORMAL);
+  }
 
   init_bucket_renderer<Merc2BucketRenderer>("common-alpha-merc", BucketCategory::MERC,
                                             BucketId::MERC_AFTER_ALPHA, m_merc2);
@@ -795,27 +757,7 @@ void OpenGLRenderer::init_bucket_renderers_jak1() {
                                                Generic2::Mode::NORMAL);                     // 46
   init_bucket_renderer<ShadowRenderer>("shadow", BucketCategory::OTHER, BucketId::SHADOW);  // 47
 
-  //-----------------------
-  // LEVEL 0 pris texture
-  //-----------------------
-  init_bucket_renderer<TextureUploadHandler>("l0-pris-tex", BucketCategory::TEX,
-                                             BucketId::PRIS_TEX_LEVEL0, m_texture_animator);  // 48
-  init_bucket_renderer<Merc2BucketRenderer>("l0-pris-merc", BucketCategory::MERC,
-                                            BucketId::MERC_PRIS_LEVEL0, m_merc2);  // 49
-  init_bucket_renderer<Generic2BucketRenderer>("l0-pris-generic", BucketCategory::GENERIC,
-                                               BucketId::GENERIC_PRIS_LEVEL0, m_generic2,
-                                               Generic2::Mode::NORMAL);  // 50
-
-  //-----------------------
-  // LEVEL 1 pris texture
-  //-----------------------
-  init_bucket_renderer<TextureUploadHandler>("l1-pris-tex", BucketCategory::TEX,
-                                             BucketId::PRIS_TEX_LEVEL1, m_texture_animator);  // 51
-  init_bucket_renderer<Merc2BucketRenderer>("l1-pris-merc", BucketCategory::MERC,
-                                            BucketId::MERC_PRIS_LEVEL1, m_merc2);  // 52
-  init_bucket_renderer<Generic2BucketRenderer>("l1-pris-generic", BucketCategory::GENERIC,
-                                               BucketId::GENERIC_PRIS_LEVEL1, m_generic2,
-                                               Generic2::Mode::NORMAL);  // 53
+  // (the per-level pris buckets are set up in the loop above)
 
   // other renderers may output to the eye renderer
   m_render_state.eye_renderer = init_bucket_renderer<EyeRenderer>(
@@ -828,27 +770,7 @@ void OpenGLRenderer::init_bucket_renderers_jak1() {
                                                BucketId::GENERIC_PRIS, m_generic2,
                                                Generic2::Mode::NORMAL);  // 56
 
-  //-----------------------
-  // LEVEL 0 water texture
-  //-----------------------
-  init_bucket_renderer<TextureUploadHandler>("l0-water-tex", BucketCategory::TEX,
-                                             BucketId::WATER_TEX_LEVEL0, m_texture_animator);  // 57
-  init_bucket_renderer<Merc2BucketRenderer>("l0-water-merc", BucketCategory::MERC,
-                                            BucketId::MERC_WATER_LEVEL0, m_merc2);  // 58
-  init_bucket_renderer<Generic2BucketRenderer>("l0-water-generic", BucketCategory::GENERIC,
-                                               BucketId::GENERIC_WATER_LEVEL0, m_generic2,
-                                               Generic2::Mode::NORMAL);  // 59
-
-  //-----------------------
-  // LEVEL 1 water texture
-  //-----------------------
-  init_bucket_renderer<TextureUploadHandler>("l1-water-tex", BucketCategory::TEX,
-                                             BucketId::WATER_TEX_LEVEL1, m_texture_animator);  // 60
-  init_bucket_renderer<Merc2BucketRenderer>("l1-water-merc", BucketCategory::MERC,
-                                            BucketId::MERC_WATER_LEVEL1, m_merc2);  // 61
-  init_bucket_renderer<Generic2BucketRenderer>("l1-water-generic", BucketCategory::GENERIC,
-                                               BucketId::GENERIC_WATER_LEVEL1, m_generic2,
-                                               Generic2::Mode::NORMAL);  // 62
+  // (the per-level water buckets are set up in the loop above)
 
   init_bucket_renderer<OceanNear>("ocean-near", BucketCategory::OCEAN, BucketId::OCEAN_NEAR);  // 63
 
@@ -1326,10 +1248,16 @@ void OpenGLRenderer::dispatch_buckets_jak1(DmaFollower& dma,
 
   // now we should point to the first bucket!
   ASSERT(dma.current_tag_offset() == m_render_state.next_bucket);
-  m_render_state.next_bucket += 16;
 
-  // loop over the buckets!
-  for (size_t bucket_id = 0; bucket_id < m_bucket_renderers.size(); bucket_id++) {
+  // loop over the buckets, in draw order: the game links the chain in kBucketDrawOrder (local co-op,
+  // issue #110: the buckets of the extra level slots were appended to the ids). Bucket order[pos]'s
+  // chain ends at the header of order[pos + 1]; the last one past the headers.
+  const auto& order = jak1::kBucketDrawOrder;
+  ASSERT(order.size() == m_bucket_renderers.size());
+  for (size_t pos = 0; pos < order.size(); pos++) {
+    const int bucket_id = (int)order[pos];
+    const int next_id = pos + 1 < order.size() ? (int)order[pos + 1] : (int)order.size();
+    m_render_state.next_bucket = m_render_state.buckets_base + 16 * next_id;
     auto& renderer = m_bucket_renderers[bucket_id];
     auto bucket_prof = prof.make_scoped_child(renderer->name_and_id());
     g_current_renderer = renderer->name_and_id();
@@ -1343,19 +1271,20 @@ void OpenGLRenderer::dispatch_buckets_jak1(DmaFollower& dma,
     // lg::info("Render: {} end", g_current_renderer);
     //  should have ended at the start of the next chain
     ASSERT(dma.current_tag_offset() == m_render_state.next_bucket);
-    m_render_state.next_bucket += 16;
     if (primary_view) {
       // calls back into the game (debug profile bars), once per frame
       vif_interrupt_callback(bucket_id);
     }
     m_category_times[(int)m_bucket_categories[bucket_id]] += bucket_prof.get_elapsed_time();
 
-    // hack to draw the collision mesh in the middle the drawing
-    if (bucket_id == 31 - 1 && Gfx::g_global_settings.collision_enable) {
+    // hack to draw the collision mesh in the middle the drawing (after the last shrub bucket)
+    if (next_id == (int)jak1::BucketId::ALPHA_TEX_LEVEL0 && Gfx::g_global_settings.collision_enable) {
       auto p = prof.make_scoped_child("collision-draw");
       m_collide_renderer.render(&m_render_state, p);
     }
   }
+  // the chain continues right after the bucket headers
+  m_render_state.next_bucket = m_render_state.buckets_base + 16 * (int)order.size();
 
   // TODO ending data.
 }

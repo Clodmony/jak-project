@@ -90,14 +90,14 @@
   (when (not *artist-fix-visible*)
     ;; first, determine which leaf of the bsp we are in (per level).
     (dotimes (s5-0 (-> *level* length))
-      (let ((v1-4 (-> *level* level s5-0)))
+      (let ((v1-4 (level-slot s5-0))) ;; og:preserve-this coop: slot loop
         (when (= (-> v1-4 status) 'active)
           (if (and (nonzero? (-> v1-4 bsp nodes)) (or *update-leaf-when-outside-bsp* (-> v1-4 inside-boxes?)))
             ;; will store in the bsp's current-leaf-idx.
             (bsp-camera-asm (-> v1-4 bsp) (-> arg0 trans))))))
     ;; do vis updates.
     (dotimes (gp-1 (-> *level* length))
-      (let ((s5-1 (-> *level* level gp-1)))
+      (let ((s5-1 (level-slot gp-1))) ;; og:preserve-this coop: slot loop
         (when (= (-> s5-1 status) 'active)
           (let ((a2-0 (/ (+ (-> s5-1 bsp visible-list-length) 15) 16)))
             ;; start by setting all-visible to something truthy (either original, or #t)
@@ -238,8 +238,8 @@
     (set! *timer-value* 0)
     0)
   ;; og:preserve-this coop: level-distance drives level/mood decisions, they follow player 1's view
-  (dotimes (gp-1 (if (zero? *coop-view*) 2 0))
-    (let ((s5-1 (-> *level* level gp-1)))
+  (dotimes (gp-1 (if (zero? *coop-view*) (-> *level* length) 0))
+    (let ((s5-1 (level-slot gp-1)))
       (when (!= (-> s5-1 status) 'inactive)
         (let ((a0-14 (new-stack-vector0)))
           (vector-! a0-14 (the-as vector (-> s5-1 info bsphere)) (-> *math-camera* trans))

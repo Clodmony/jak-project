@@ -292,7 +292,7 @@
   (debug-menu-remove-all-items *enable-instance-tie-menu*)
   (set! *display-instance-info* #f)
   (dotimes (gp-0 (-> *level* length))
-    (let ((v1-3 (-> *level* level gp-0)))
+    (let ((v1-3 (level-slot gp-0))) ;; og:preserve-this coop: slot loop
       (when (= (-> v1-3 status) 'active)
         (let ((s5-0 (-> v1-3 bsp drawable-trees)))
           (dotimes (s4-0 (-> s5-0 length))

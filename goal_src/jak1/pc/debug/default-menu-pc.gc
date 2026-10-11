@@ -36,11 +36,11 @@
          (info (the-as level-load-info (-> levname value)))
          (idx (the int (cdr arg0)))
          (the-level (level-get *level* (-> info name))))
-    (if (and the-level (!= the-level (-> *level* level idx))) (return 'invalid))
+    (if (and the-level (!= the-level (level-slot idx))) (return 'invalid))
     (if (= arg1 (debug-menu-msg press))
-      (load-state-want-levels (if (= idx 0) (-> info name) (-> *level* level 0 name))
-                              (if (= idx 1) (-> info name) (-> *level* level 1 name))))
-    (eq? (-> *level* level idx name) (-> info name))))
+      (load-state-want-levels (if (= idx 0) (-> info name) (-> (level-slot 0) name))
+                              (if (= idx 1) (-> info name) (-> (level-slot 1) name))))
+    (eq? (-> (level-slot idx) name) (-> info name))))
 
 (defun dm-display-level-toggle-pick-func ((arg0 symbol) (arg1 debug-menu-msg))
   (let ((the-level (level-get *level* arg0)))
@@ -146,7 +146,7 @@
   (debug-menu-remove-all-items *entity-pick-menu*)
   ;; go through active levels
   (dotimes (s5-0 (-> *level* length))
-    (let ((s4-0 (-> *level* level s5-0)))
+    (let ((s4-0 (level-slot s5-0))) ;; og:preserve-this coop: slot loop
       (when (= (-> s4-0 status) 'active)
         ;; actor entities
         (let ((s3-0 (-> s4-0 bsp actors)))
@@ -742,8 +742,8 @@
     (format 0 "doing stop~%")
     (stop 'play)
     ;; kill levels
-    (dotimes (i 2)
-      (unload! (-> *level* data i)))
+    (dotimes (i (-> *level* length))
+      (unload! (level-slot i)))
     ;; enable visiblity. the custom level won't use it, but we want it on so other levels can be loaded.
     (set! (-> *level* vis?) #t)
     ;; disable border and play mode to prevent loading levels

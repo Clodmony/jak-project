@@ -140,11 +140,15 @@
   (when (zero? (-> this vis-info (-> this vis-self-index) ramdisk))
     ;; nope, we have no vis data buffer, we need to set it up.
     ;; first, we should see if the other level has loaded vis. if so, kill it.
-    (let ((vis (-> this other vis-info (-> this other vis-self-index))))
-      (when (and vis (nonzero? (-> vis ramdisk)))
-        (set! (-> vis flags) (logand #xffffffffbfffffff (-> vis flags))) ;; clear waiting-for-load
-        (set! (-> vis ramdisk) 0)
-        0))
+    ;; og:preserve-this coop: any other slot's level, there can be four (issue #110)
+    (dotimes (i (-> *level* length))
+      (let ((other (level-slot i)))
+        (when (!= other this)
+          (let ((vis (-> other vis-info (-> other vis-self-index))))
+            (when (and vis (nonzero? (-> vis ramdisk)))
+              (set! (-> vis flags) (logand #xffffffffbfffffff (-> vis flags))) ;; clear waiting-for-load
+              (set! (-> vis ramdisk) 0)
+              0)))))
     ;; set up a ramdisk rpc (fill command, actually load the file from DVD to IOP buffer)
     (let ((visname (make-file-name (file-kind vis) (the-as string (-> this nickname)) 0 #f))
           (cmd (the-as ramdisk-rpc-fill (add-element *ramdisk-rpc*)))
@@ -162,7 +166,7 @@
 (defun load-vis-info ((vis-name symbol) (old-vis-name symbol))
   "Load a new VIS file and dump the old one. The corresponding level must be active!"
   (dotimes (i (-> *level* length))
-    (let ((lev (-> *level* level i)))
+    (let ((lev (level-slot i))) ;; og:preserve-this coop: slot loop
       (when (= (-> lev status) 'active)
         (when (= vis-name (-> lev nickname))
           (format 0 "Swapping in ~A VIS [dumping ~A]~%" vis-name old-vis-name)
@@ -332,7 +336,10 @@
          (level-status-set! this 'loaded))))
     (return this))
   ;; otherwise, copy stuff that needs copying
-  (when (-> *texture-relocate-later* memcpy)
+  ;; og:preserve-this coop: only the level that is loading (issue #110). The original only set memcpy
+  ;; for level 0, whose load-continue runs first; now slot 2 loads the same way, and the loading
+  ;; level's next object must not go into another slot's heap.
+  (when (and (-> *texture-relocate-later* memcpy) (= (-> *level* loading-level) this))
     (relocate-later)
     (dgo-load-continue (the pointer (align64 (-> this heap current))))
     (return this))
@@ -577,8 +584,7 @@
     (when (and (= f0-0 0.0) (= f1-0 0.0))
       (set! f0-0 122880.0)
       (set! f1-0 286720.0))
-    (set! (-> *subdivide-settings* close (-> loaded-level index)) f0-0)
-    (set! (-> *subdivide-settings* far (-> loaded-level index)) f1-0)
+    (subdivide-level-set! *subdivide-settings* (-> loaded-level index) f0-0 f1-0) ;; og:preserve-this coop: any slot
     (set! (-> *subdivide-settings* close 3) f0-0)
     (set! (-> *subdivide-settings* far 3) f1-0))
   (load-dbg "init-vis~%")
@@ -849,51 +855,51 @@
     ;; allocate level heaps. turn on compact-level-heaps for use in 32MB systems
     (let ((level-heap-size (if compact-level-heaps LEVEL_HEAP_SIZE LEVEL_HEAP_SIZE_DEBUG)))
       (dotimes (lev LEVEL_COUNT)
-        (let ((level-heap (-> this level lev heap)))
+        (let ((level-heap (-> (level-slot lev :group this) heap))) ;; og:preserve-this coop: slot loop
           (set! (-> level-heap base) (malloc 'global level-heap-size))
           (set! (-> level-heap current) (-> level-heap base))
           (set! (-> level-heap top-base) (&+ (-> level-heap base) level-heap-size))
           (set! (-> level-heap top) (-> level-heap top-base))))))
   0)
 
+;; og:preserve-this coop: the slot loops below go through level-slot (array index 2 is level-default, #110)
 (defmethod level-get-with-status ((this level-group) (status symbol))
   (dotimes (i (-> this length))
-    (if (= (-> this level i status) status) (return (-> this level i))))
+    (if (= (-> (level-slot i :group this) status) status) (return (level-slot i :group this))))
   (the-as level #f))
 
 (defmethod level-get-most-disposable ((this level-group))
   "Get a level that's least likely to be in use right now. #f = all levels in use."
   ;; check inactive levels first
   (dotimes (v1-0 (-> this length))
-    (case (-> this level v1-0 status)
-      (('inactive) (return (-> this level v1-0)))))
+    (case (-> (level-slot v1-0 :group this) status) ;; og:preserve-this coop
+      (('inactive) (return (level-slot v1-0 :group this)))))
   ;; check for any loading levels
   (dotimes (v1-6 (-> this length))
-    (case (-> this level v1-6 status)
-      (('loading 'loading-bt) (return (-> this level v1-6)))))
+    (case (-> (level-slot v1-6 :group this) status) ;; og:preserve-this coop
+      (('loading 'loading-bt) (return (level-slot v1-6 :group this)))))
   ;; check for loaded, but not active, levels.
   (dotimes (v1-12 (-> this length))
-    (let ((a1-18 (-> this level v1-12 status))) (if (= a1-18 'loaded) (return (-> this level v1-12)))))
+    (let ((a1-18 (-> (level-slot v1-12 :group this) status))) (if (= a1-18 'loaded) (return (level-slot v1-12 :group this))))) ;; og:preserve-this coop
   ;; check active levels. pick one we're not in bounds of.
   (let ((v0-0 (the-as level #f)))
     (dotimes (v1-18 (-> this length))
-      (case (-> this level v1-18 status)
-        (('active)
-         (if (and (not (-> this level v1-18 inside-boxes?))
-                  (or (not v0-0) (< (-> this level v1-18 info priority) (-> v0-0 info priority))))
-           (set! v0-0 (-> this level v1-18))))))
+      (let ((lev (level-slot v1-18 :group this))) ;; og:preserve-this coop
+        (case (-> lev status)
+          (('active)
+           (if (and (not (-> lev inside-boxes?)) (or (not v0-0) (< (-> lev info priority) (-> v0-0 info priority))))
+             (set! v0-0 lev))))))
     v0-0))
 
 (defmethod level-get ((this level-group) (name symbol))
   "Return the level data using its name, if it is available. Returns #f if none are found."
   (dotimes (lev (-> this length))
-    (if (and (!= (-> this level lev status) 'inactive)
-             (or (= (-> this level lev name) name) (= (-> this level lev load-name) name)))
-      (return (-> this level lev))))
+    (let ((l (level-slot lev :group this))) ;; og:preserve-this coop
+      (if (and (!= (-> l status) 'inactive) (or (= (-> l name) name) (= (-> l load-name) name))) (return l))))
   (the level #f))
 
 (defmethod art-group-get-by-name ((this level-group) (arg0 string))
-  (countdown (i 3)
+  (countdown (i LEVEL_INDEX_COUNT) ;; og:preserve-this coop: all slots and the default level (was 3)
     (let ((lev (-> this level i)))
       (countdown (ii (-> lev art-group art-group-array length))
         (if (name= (-> lev art-group art-group-array ii name) arg0) (return (-> lev art-group art-group-array ii))))))
@@ -902,7 +908,7 @@
 (defmethod activate-levels! ((this level-group))
   "Try to activate all levels."
   (dotimes (i (-> this length))
-    (level-status-set! (-> this level i) 'active))
+    (level-status-set! (level-slot i :group this) 'active)) ;; og:preserve-this coop
   0)
 
 (defmethod level-get-target-inside ((this level-group))
@@ -915,21 +921,21 @@
   (let ((target-trans (target-pos 0)))
     (let ((current-level (-> *game-info* current-continue level)))
       (dotimes (i (-> this length))
-        (let ((ilev (-> this level i))) (when (= (-> ilev status) 'active) (if (= (-> ilev name) current-level) (return ilev))))))
+        (let ((ilev (level-slot i :group this))) (when (= (-> ilev status) 'active) (if (= (-> ilev name) current-level) (return ilev)))))) ;; og:preserve-this coop
     (let ((level-ret (the-as level #f)))
       (let ((min-distance-to-level 0.0)) ;; uh-huh
         (dotimes (i (-> this length))
-          (let ((ilev (-> this level i)))
+          (let ((ilev (level-slot i :group this))) ;; og:preserve-this coop
             (when (= (-> ilev status) 'active)
               (let ((distance-to-level (vector-vector-distance (-> ilev bsp bsphere) target-trans)))
                 (if (and (-> ilev inside-boxes?) (or (not level-ret) (< distance-to-level min-distance-to-level))) (set! level-ret ilev)))))))
       (if level-ret (return level-ret))))
   (dotimes (i (-> this length))
-    (let ((ilev (-> this level i))) (when (= (-> ilev status) 'active) (if (-> ilev meta-inside?) (return ilev)))))
+    (let ((ilev (level-slot i :group this))) (when (= (-> ilev status) 'active) (if (-> ilev meta-inside?) (return ilev))))) ;; og:preserve-this coop
   (let ((level-ret (the-as level #f)))
     (let ((min-distance-to-level 0.0)) ;; why?
       (dotimes (i (-> this length))
-        (let ((ilev (-> this level i)))
+        (let ((ilev (level-slot i :group this))) ;; og:preserve-this coop
           (when (= (-> ilev status) 'active)
             (if (or (not level-ret) (< (-> ilev level-distance) min-distance-to-level)) (set! level-ret ilev))))))
     level-ret))
@@ -942,7 +948,7 @@
   "Get the memory usage data for a level-group"
   ;; get memory usage of each level
   (dotimes (i (-> this length))
-    (mem-usage (-> this level i) arg0 arg1))
+    (mem-usage (level-slot i :group this) arg0 arg1)) ;; og:preserve-this coop
   this)
 
 (defun bg ((level-name symbol))
@@ -970,13 +976,11 @@
       (load-continue gp-1))
     (vis-load gp-1)
     (set! (-> *load-state* vis-nick) (if (-> *level* vis?) (-> gp-1 nickname) #f))
+    ;; og:preserve-this coop: all want entries off, then the level in the first one (issue #110)
+    (dotimes (i COOP_LEVEL_SLOTS)
+      (load-want-clear! (load-want *load-state* i)))
     (set! (-> *load-state* want 0 name) (-> gp-1 name))
     (set! (-> *load-state* want 0 display?) 'display)
-    (set! (-> *load-state* want 0 force-vis?) #f)
-    (set! (-> *load-state* want 0 force-inside?) #f)
-    (set! (-> *load-state* want 1 name) #f)
-    (set! (-> *load-state* want 1 display?) #f)
-    (set! (-> *load-state* want 1 force-inside?) #f)
     (if (-> gp-1 info continues) (set-continue! *game-info* (the-as continue-point (car (-> gp-1 info continues))))))
   (activate-levels! *level*)
   (set! *print-login* #f)
@@ -1026,77 +1030,94 @@
     (initialize! *game-info* 'game (the-as game-save #f) (the-as string #f)))
   0)
 
+;; og:preserve-this coop: level sound bank slots (issue #110). The original held two level banks
+;; (*sound-bank-1* and *sound-bank-2*); with four level slots there are four. Only (-> *level* length)
+;; of them are in use, so without co-op the two original ones behave as before.
+(defun level-sound-bank ((slot int))
+  "The bank loaded in level sound bank slot slot, or #f."
+  (case slot
+    ((0) *sound-bank-1*)
+    ((1) *sound-bank-2*)
+    ((2) *sound-bank-3*)
+    (else *sound-bank-4*)))
+
+(defun level-sound-bank-set! ((slot int) (bank symbol))
+  (case slot
+    ((0) (set! *sound-bank-1* bank))
+    ((1) (set! *sound-bank-2* bank))
+    ((2) (set! *sound-bank-3* bank))
+    (else (set! *sound-bank-4* bank)))
+  (none))
+
 (defun update-sound-banks ()
+  "Keep the banks the active levels need loaded. One load or unload per call, like the original: ;; og:preserve-this coop
+   a wanted bank that isn't loaded goes into a free slot, else a slot holding a bank nobody needs is
+   emptied first."
   (if (nonzero? (rpc-busy? RPC-SOUND-LOADER)) (return 0))
-  (let ((gp-0 #f)
-        (s5-0 #f))
-    (dotimes (s4-0 (-> *level* length))
-      (let ((v1-5 (-> *level* level s4-0)))
+  (let ((slots (-> *level* length)) ;; og:preserve-this coop
+        (wanted (new 'stack-no-clear 'array 'symbol COOP_LEVEL_SLOTS))
+        (wanted-count 0))
+    ;; the banks the active levels need, in slot order
+    (dotimes (s4-0 slots)
+      (let ((v1-5 (level-slot s4-0)))
         (when (= (-> v1-5 status) 'active)
           (let* ((s3-0 (-> v1-5 info sound-banks))
                  (t0-0 (the-as symbol (car s3-0))))
             (while (not (null? s3-0))
-              (cond
-                ((or (= gp-0 t0-0) (= s5-0 t0-0) (-> *setting-control* current movie)))
-                ((not gp-0) (set! gp-0 t0-0))
-                ((not s5-0) (set! s5-0 t0-0))
-                (else (format 0 "ERROR: Soundbanks ~A, ~A and ~A all required~%" gp-0 s5-0 t0-0)))
+              (let ((known #f)) ;; og:preserve-this coop
+                (dotimes (w wanted-count)
+                  (if (= (-> wanted w) t0-0) (set! known #t)))
+                (cond
+                  ((or known (-> *setting-control* current movie)))
+                  ((< wanted-count slots) (set! (-> wanted wanted-count) t0-0) (+! wanted-count 1))
+                  (else (format 0 "ERROR: Soundbank ~A required but all ~D level bank slots are needed~%" t0-0 slots))))
               (set! s3-0 (cdr s3-0))
               (set! t0-0 (the-as symbol (car s3-0))))))))
-    (when (and gp-0 (!= gp-0 *sound-bank-1*) (!= gp-0 *sound-bank-2*))
-      (when (not *sound-bank-1*)
-        (format 0 "Load soundbank ~A~%" gp-0)
-        (sound-bank-load (string->sound-name (symbol->string gp-0)))
-        (set! *sound-bank-1* gp-0)
-        (return 0))
-      (when (not *sound-bank-2*)
-        (format 0 "Load soundbank ~A~%" gp-0)
-        (sound-bank-load (string->sound-name (symbol->string gp-0)))
-        (set! *sound-bank-2* gp-0)
-        (return 0))
-      (when (!= *sound-bank-1* s5-0)
-        (format 0 "Unload soundbank ~A~%" *sound-bank-1*)
-        (sound-bank-unload (string->sound-name (symbol->string *sound-bank-1*)))
-        (set! *sound-bank-1* #f)
-        (return 0))
-      (when (!= *sound-bank-2* s5-0)
-        (format 0 "Unload soundbank ~A~%" *sound-bank-2*)
-        (sound-bank-unload (string->sound-name (symbol->string *sound-bank-2*)))
-        (set! *sound-bank-2* #f)
-        (return 0)))
-    (when (and s5-0 (!= s5-0 *sound-bank-1*) (!= s5-0 *sound-bank-2*))
-      (when (not *sound-bank-1*)
-        (format 0 "Load soundbank ~A~%" s5-0)
-        (sound-bank-load (string->sound-name (symbol->string s5-0)))
-        (set! *sound-bank-1* s5-0)
-        (return 0))
-      (when (not *sound-bank-2*)
-        (format 0 "Load soundbank ~A~%" s5-0)
-        (sound-bank-load (string->sound-name (symbol->string s5-0)))
-        (set! *sound-bank-2* s5-0)
-        (return 0))
-      (when (!= *sound-bank-1* gp-0)
-        (format 0 "Unload soundbank ~A~%" *sound-bank-1*)
-        (sound-bank-unload (string->sound-name (symbol->string *sound-bank-1*)))
-        (set! *sound-bank-1* #f)
-        (return 0))
-      (when (!= *sound-bank-2* gp-0)
-        (format 0 "Unload soundbank ~A~%" *sound-bank-2*)
-        (sound-bank-unload (string->sound-name (symbol->string *sound-bank-2*)))
-        (set! *sound-bank-2* #f)
-        (return 0))))
+    (dotimes (w wanted-count) ;; og:preserve-this coop
+      (let ((bank (-> wanted w))
+            (loaded #f))
+        (dotimes (i slots)
+          (if (= (level-sound-bank i) bank) (set! loaded #t)))
+        (when (not loaded)
+          ;; a free slot
+          (dotimes (i slots)
+            (when (not (level-sound-bank i))
+              (format 0 "Load soundbank ~A~%" bank)
+              (sound-bank-load (string->sound-name (symbol->string bank)))
+              (level-sound-bank-set! i bank)
+              (return 0)))
+          ;; none free: empty a slot whose bank nobody needs
+          (dotimes (i slots)
+            (let ((held (level-sound-bank i))
+                  (needed #f))
+              (dotimes (k wanted-count)
+                (if (= (-> wanted k) held) (set! needed #t)))
+              (when (and held (not needed))
+                (format 0 "Unload soundbank ~A~%" held)
+                (sound-bank-unload (string->sound-name (symbol->string held)))
+                (level-sound-bank-set! i #f)
+                (return 0))))))))
   0)
+
+(defun level-load-in-progress? () ;; og:preserve-this coop
+  "Is a level slot between load-begin and the end of its login? (co-op, issue #110)"
+  (dotimes (i (-> *level* length))
+    (case (-> (level-slot i) status)
+      (('loading 'loading-bt 'loading-done 'login) (return #t))))
+  #f)
 
 (defmethod update! ((this load-state))
   "Updates load requests."
   (update-sound-banks)
+  ;; og:preserve-this coop: the two want entries and two slots of the original became (-> *level* length)
+  ;; of each (issue #110); the decisions are the original's.
   (let ((v1-0 #f))
-    (dotimes (s5-0 2)
-      (let ((s4-0 (-> *level* level s5-0)))
+    (dotimes (s5-0 (-> *level* length))
+      (let ((s4-0 (level-slot s5-0)))
         (when (!= (-> s4-0 status) 'inactive)
           (let ((a0-6 #f))
-            (dotimes (a1-2 2)
-              (if (= (-> s4-0 name) (-> this want a1-2 name)) (set! a0-6 #t)))
+            (dotimes (a1-2 (load-want-count)) ;; og:preserve-this coop
+              (if (= (-> s4-0 name) (-> (load-want this a1-2) name)) (set! a0-6 #t)))
             (when (not a0-6)
               (format 0 "Discarding level ~A~%" (-> s4-0 name))
               (coop-level-leaving s4-0) ;; og:preserve-this coop
@@ -1106,75 +1127,77 @@
                 (when *debug-segment*
                   (define-extern *entity* entity)
                   (set! *entity* (the entity #f)))))))))
-    (let ((s5-1 #f))
-      (if (and (= (-> *level* level0 status) 'inactive) (= (-> *level* level1 status) 'inactive)) (set! s5-1 #t))
+    (let ((s5-1 #t)) ;; og:preserve-this coop
+      ;; are all slots empty?
+      (dotimes (i (-> *level* length))
+        (if (!= (-> (level-slot i) status) 'inactive) (set! s5-1 #f)))
       (if v1-0 (return 0))
-      (let ((a0-20 #f)
-            (v1-5 #f))
-        (when (-> this want 0 name)
-          (set! a0-20 #t)
-          (dotimes (a1-12 3)
-            (let ((a2-9 (-> *level* level a1-12)))
-              (if (and (!= (-> a2-9 status) 'inactive) (= (-> a2-9 name) (-> this want 0 name))) (set! a0-20 #f)))))
-        (when (-> this want 1 name)
-          (set! v1-5 #t)
-          (dotimes (a1-17 3)
-            (let ((a2-17 (-> *level* level a1-17)))
-              (if (and (!= (-> a2-17 status) 'inactive) (= (-> a2-17 name) (-> this want 1 name))) (set! v1-5 #f)))))
-        (let ((s4-1 -1))
-          (cond
-            ((and a0-20 v1-5) (set! s4-1 0) (if (and (-> this want 1 display?) (not (-> this want 0 display?))) (set! s4-1 1)))
-            (a0-20 (set! s4-1 0))
-            (v1-5 (set! s4-1 1)))
-          (when (!= s4-1 -1)
-            (when (or s5-1 (not (check-busy *load-dgo-rpc*)))
-              (format 0 "Adding level ~A~%" (-> this want s4-1 name))
-              (let ((s3-0 (level-get-for-use *level* (the-as symbol (-> this want s4-1 name)) 'loaded)))
-                (when (and s5-1 (-> this want s4-1 display?))
-                  (format 0 "Waiting for level to load~%")
-                  (while (or (= (-> s3-0 status) 'loading) (= (-> s3-0 status) 'loading-bt) (= (-> s3-0 status) 'login))
-                    (load-continue s3-0))))))))))
-  (dotimes (s5-2 2)
-    (when (-> this want s5-2 name)
-      (dotimes (s4-2 3)
-        (let ((s3-1 (-> *level* level s4-2)))
-          (when (!= (-> s3-1 status) 'inactive)
-            (when (= (-> s3-1 name) (-> this want s5-2 name))
-              (when (!= (-> s3-1 display?) (-> this want s5-2 display?))
-                (cond
-                  ((not (-> s3-1 display?))
-                   (cond
-                     ((or (= (-> s3-1 status) 'loaded) (= (-> s3-1 status) 'active))
-                      (format 0 "Displaying level ~A [~A]~%" (-> this want s5-2 name) (-> this want s5-2 display?))
-                      (level-get-for-use *level* (-> s3-1 info name) 'active)
-                      (set! (-> s3-1 display?) (-> this want s5-2 display?)))
-                     (else
-                      (when (and (-> s3-1 info wait-for-load) (!= (-> this want s5-2 display?) 'display-no-wait))
-                        (send-event *target* 'loading))
-                      (if (= *cheat-mode* 'debug) (format *stdcon* "display on for ~A but level is loading~%" (-> this want s5-2 name))))))
-                  (else
-                   (cond
-                     ((not (-> this want s5-2 display?))
-                      (set! (-> s3-1 display?) #f)
-                      (format 0 "Turning level ~A off~%" (-> s3-1 name))
-                      (coop-level-leaving s3-1) ;; og:preserve-this coop
-                      (deactivate s3-1))
-                     (else
-                      (format 0 "Setting level ~A display command to ~A~%" (-> this want s5-2 name) (-> this want s5-2 display?))
-                      (set! (-> s3-1 display?) (-> this want s5-2 display?)))))))
-              (when (!= (-> s3-1 force-all-visible?) (-> this want s5-2 force-vis?))
-                (set! (-> s3-1 force-all-visible?) (-> this want s5-2 force-vis?))
-                (format 0 "Setting force-all-visible?[~A] to ~A~%" (-> this want s5-2 name) (-> this want s5-2 force-vis?)))
-              (when (!= (-> s3-1 force-inside?) (-> this want s5-2 force-inside?))
-                (set! (-> s3-1 force-inside?) (-> this want s5-2 force-inside?))
-                (format 0 "Setting force-inside?[~A] to ~A~%" (-> this want s5-2 name) (-> this want s5-2 force-inside?)))))))))
+      ;; the first want that isn't loaded; a displayed one beats an earlier one that isn't displayed
+      (let ((s4-1 -1))
+        (dotimes (w (load-want-count))
+          (let ((want (load-want this w)))
+            (when (-> want name)
+              (let ((missing #t))
+                (dotimes (a1-12 LEVEL_INDEX_COUNT)
+                  (let ((a2-9 (-> *level* level a1-12)))
+                    (if (and (!= (-> a2-9 status) 'inactive) (= (-> a2-9 name) (-> want name))) (set! missing #f))))
+                (when (and missing (or (= s4-1 -1) (and (-> want display?) (not (-> (load-want this s4-1) display?)))))
+                  (set! s4-1 w))))))
+        (when (!= s4-1 -1)
+          ;; og:preserve-this coop: the DGO loader, the login state and the loading heap are global, one
+          ;; level at a time. The original never had two missing wants at once (two wants, two slots);
+          ;; with four (issue #110) a second load would start between two objects of the first (the RPC is
+          ;; idle while an object links) and clobber it, so co-op waits until nothing is loading.
+          (when (and (not (and (coop-active?) (level-load-in-progress?)))
+                     (or s5-1 (not (check-busy *load-dgo-rpc*))))
+            (format 0 "Adding level ~A~%" (-> (load-want this s4-1) name))
+            (let ((s3-0 (level-get-for-use *level* (the-as symbol (-> (load-want this s4-1) name)) 'loaded)))
+              (when (and s5-1 (-> (load-want this s4-1) display?))
+                (format 0 "Waiting for level to load~%")
+                (while (or (= (-> s3-0 status) 'loading) (= (-> s3-0 status) 'loading-bt) (= (-> s3-0 status) 'login))
+                  (load-continue s3-0)))))))))
+  (dotimes (s5-2 (load-want-count))
+    (let ((want (load-want this s5-2)))
+      (when (-> want name)
+        (dotimes (s4-2 LEVEL_INDEX_COUNT)
+          (let ((s3-1 (-> *level* level s4-2)))
+            (when (!= (-> s3-1 status) 'inactive)
+              (when (= (-> s3-1 name) (-> want name))
+                (when (!= (-> s3-1 display?) (-> want display?))
+                  (cond
+                    ((not (-> s3-1 display?))
+                     (cond
+                       ((or (= (-> s3-1 status) 'loaded) (= (-> s3-1 status) 'active))
+                        (format 0 "Displaying level ~A [~A]~%" (-> want name) (-> want display?))
+                        (level-get-for-use *level* (-> s3-1 info name) 'active)
+                        (set! (-> s3-1 display?) (-> want display?)))
+                       (else
+                        (when (and (-> s3-1 info wait-for-load) (!= (-> want display?) 'display-no-wait))
+                          (send-event *target* 'loading))
+                        (if (= *cheat-mode* 'debug) (format *stdcon* "display on for ~A but level is loading~%" (-> want name))))))
+                    (else
+                     (cond
+                       ((not (-> want display?))
+                        (set! (-> s3-1 display?) #f)
+                        (format 0 "Turning level ~A off~%" (-> s3-1 name))
+                        (coop-level-leaving s3-1) ;; og:preserve-this coop
+                        (deactivate s3-1))
+                       (else
+                        (format 0 "Setting level ~A display command to ~A~%" (-> want name) (-> want display?))
+                        (set! (-> s3-1 display?) (-> want display?)))))))
+                (when (!= (-> s3-1 force-all-visible?) (-> want force-vis?))
+                  (set! (-> s3-1 force-all-visible?) (-> want force-vis?))
+                  (format 0 "Setting force-all-visible?[~A] to ~A~%" (-> want name) (-> want force-vis?)))
+                (when (!= (-> s3-1 force-inside?) (-> want force-inside?))
+                  (set! (-> s3-1 force-inside?) (-> want force-inside?))
+                  (format 0 "Setting force-inside?[~A] to ~A~%" (-> want name) (-> want force-inside?))))))))))
   ;; load vis info.
   ;; The load-state's vis-nick is the level we want vis data for.
   ;; Note that we won't load vis until we are inside the level's boxes.
   ;; this will be the level that is currently being used.
   (let ((s5-3 #f))
     (dotimes (v1-121 (-> *level* length))
-      (let ((a0-55 (-> *level* level v1-121)))
+      (let ((a0-55 (level-slot v1-121))) ;; og:preserve-this coop
         (when (= (-> a0-55 status) 'active) ;; level is active
           (if (nonzero? (-> a0-55 vis-info (-> a0-55 vis-self-index) ramdisk)) ;; and vis is set up.
             (set! s5-3 (-> a0-55 nickname))))))
@@ -1184,7 +1207,7 @@
       (when (-> this vis-nick)
         ;; find matching level and load vis
         (dotimes (s4-3 (-> *level* length))
-          (let ((v1-133 (-> *level* level s4-3)))
+          (let ((v1-133 (level-slot s4-3))) ;; og:preserve-this coop
             (when (= (-> v1-133 status) 'active)
               (if (and (= (-> v1-133 nickname) (-> this vis-nick))
                        (-> v1-133 inside-boxes?) ;; note: only start if we are inside boxes.
@@ -1204,11 +1227,14 @@
   (update *art-control* #t)
   (clear-rec *art-control*)
   ;; run level loading!
-  (dotimes (s5-0 2)
-    (load-continue (-> this level s5-0)))
+  ;; og:preserve-this coop: the slot loops in here go through level-slot, and "the other level" is
+  ;; any other slot's level (there can be four, issue #110); (-> lev other) is the one whose vis info
+  ;; this level has, else the first other active one.
+  (dotimes (s5-0 (-> this length))
+    (load-continue (level-slot s5-0 :group this)))
   ;; compute inside for each level
   (dotimes (s5-1 (-> this length))
-    (let ((s4-0 (-> this level s5-1)))
+    (let ((s4-0 (level-slot s5-1 :group this))) ;; og:preserve-this coop
       (when (= (-> s4-0 status) 'active)
         (set! (-> s4-0 inside-boxes?) (point-in-boxes? s4-0 (-> *math-camera* trans)))
         (set! (-> s4-0 inside-sphere?) (>= (-> s4-0 bsp bsphere w) (-> s4-0 level-distance)))
@@ -1218,10 +1244,13 @@
   (update! *load-state*)
   ;; checkpoint assignment
   (dotimes (s5-2 (-> this length))
-    (let ((s4-1 (-> this level s5-2)))
+    (let ((s4-1 (level-slot s5-2 :group this))) ;; og:preserve-this coop
       (when (= (-> s4-1 status) 'active)
         ;; if you're outside here, and inside somewhere else, kick out of meta inside.
-        (if (and (-> s4-1 inside-boxes?) (not (-> s4-1 other inside-boxes?))) (set! (-> s4-1 other meta-inside?) #f))
+        (when (-> s4-1 inside-boxes?) ;; og:preserve-this coop
+          (dotimes (j (-> this length))
+            (let ((o (level-slot j :group this)))
+              (if (and (!= o s4-1) (not (-> o inside-boxes?))) (set! (-> o meta-inside?) #f)))))
         (when (and (null? (-> this load-commands))
                    (= (-> s4-1 nickname) (-> *load-state* vis-nick))
                    (!= (-> s4-1 name) (-> *game-info* current-continue level))
@@ -1239,22 +1268,28 @@
             (set-continue! *game-info* s3-0))))))
   ;; determine vis info idx for each level
   (dotimes (v1-67 (-> this length))
-    (let ((a0-26 (-> this level v1-67)))
+    (let ((a0-26 (level-slot v1-67 :group this))) ;; og:preserve-this coop
       (when (= (-> a0-26 status) 'active)
         ;; self is always 0
         (set! (-> a0-26 vis-self-index) 0)
         ;; neighbor level defaults to 7 (null placeholder)...
         (set! (-> a0-26 vis-adj-index) 7)
         ;; but if there's a second level that's active, search for a vis info for that level...
-        (when (= (-> a0-26 other status) 'active)
-          (dotimes (a1-10 8)
-            (if (and (-> a0-26 vis-info a1-10) (= (-> a0-26 vis-info a1-10 from-level) (-> a0-26 other load-name)))
-              ;; and store it in the adj index.
-              (set! (-> a0-26 vis-adj-index) a1-10)))))))
+        (let ((adj (the-as level #f))) ;; og:preserve-this coop
+          (dotimes (j (-> this length))
+            (let ((o (level-slot j :group this)))
+              (when (and (!= o a0-26) (= (-> o status) 'active))
+                (if (not adj) (set! adj o))
+                (dotimes (a1-10 8)
+                  (when (and (-> a0-26 vis-info a1-10) (= (-> a0-26 vis-info a1-10 from-level) (-> o load-name)))
+                    ;; and store it in the adj index.
+                    (set! (-> a0-26 vis-adj-index) a1-10)
+                    (set! adj o))))))
+          (if adj (set! (-> a0-26 other) adj))))))
   ;; display level vis info
   (when *display-level-border*
     (dotimes (s5-3 (-> this length))
-      (let ((s4-3 (-> this level s5-3)))
+      (let ((s4-3 (level-slot s5-3 :group this))) ;; og:preserve-this coop
         (when (= (-> s4-3 status) 'active)
           (let ((s3-1 (-> s4-3 bsp current-bsp-back-flags)))
             (dotimes (s2-1 6)
@@ -1273,62 +1308,73 @@
   ;; (you can be "in" multiple levels at the same time, when crossing levels, it is expected
   ;;  that you are in both.)
   (dotimes (s5-4 (-> this length))
-    (let ((s4-4 (-> this level s5-4)))
+    (let ((s4-4 (level-slot s5-4 :group this))) ;; og:preserve-this coop
       (when (= (-> s4-4 status) 'active)
         (when (and (= (-> s4-4 nickname) (-> *load-state* vis-nick)) ;; vis for A
                    (not (-> s4-4 inside-boxes?)) ;; but not in A
                    )
-          (if (and (= *cheat-mode* 'debug) (-> s4-4 other inside-boxes?))
-            (format *stdcon* "~3LForcing outside of ~A [bad split boxes]~%~0L" (-> s4-4 other name)))
-          (set! (-> s4-4 other inside-boxes?) #f)))))
+          (dotimes (j (-> this length)) ;; og:preserve-this coop
+            (let ((o (level-slot j :group this)))
+              (when (!= o s4-4)
+                (if (and (= *cheat-mode* 'debug) (-> o inside-boxes?))
+                  (format *stdcon* "~3LForcing outside of ~A [bad split boxes]~%~0L" (-> o name)))
+                (set! (-> o inside-boxes?) #f))))))))
   ;; if we are outside of the boxes, we consider ourselves "outside of bsp"
   ;; if we are outside of both levels boxes, then we don't really know what to do
   ;; for vis, and we can display the classic "outside of bsp" error.
-  (cond
-    ((not (or (-> this level0 inside-boxes?) (-> this level1 inside-boxes?)))
-     (when (or (-> this level0 vis-info 0) (-> this level1 vis-info 0))
-       (if (= *cheat-mode* 'debug) (format *stdcon* "~3Loutside of bsp~%~0L"))))
-    (else
-     ;; we are in at least one bsp.
-     ;; now we need to link vis info to bsps.
-     (dotimes (v1-125 (-> this length))
-       (let ((a0-44 (-> this level v1-125)))
-         (when (= (-> a0-44 status) 'active)
-           ;; loop over vis infos
-           (dotimes (a1-17 8)
-             (let ((a2-18 (-> a0-44 vis-info a1-17)))
-               (when a2-18
-                 ;; clear bit 31
-                 (set! (-> a2-18 flags) (logand (the-as uint #xffffffff7fffffff) (-> a2-18 flags)))
-                 ;; link info to bsp
-                 (cond
-                   ((= a1-17 (-> a0-44 vis-self-index)) (set! (-> a2-18 from-bsp) (-> a0-44 bsp)))
-                   ((= a1-17 (-> a0-44 vis-adj-index)) (set! (-> a2-18 from-bsp) (-> a0-44 other bsp)))
-                   (else (set! (-> a2-18 from-bsp) #f))))))
-           ;; now, handle setting bit 31 (maybe single vis mode?)
-           (cond
-             ;; special display self mode.
-             ((= (-> a0-44 display?) 'display-self)
-              (let ((a0-46 (-> a0-44 vis-info (-> a0-44 vis-self-index))))
-                (if a0-46 (set! (-> a0-46 flags) (the-as uint (logior (shl #x8000 16) (-> a0-46 flags)))))))
-             ;; in this level, but not the other, only use vis for this.
-             ((and (-> a0-44 inside-boxes?) (not (-> a0-44 other inside-boxes?)))
-              (let ((a0-48 (-> a0-44 vis-info (-> a0-44 vis-self-index))))
-                (if a0-48 (set! (-> a0-48 flags) (the-as uint (logior (shl #x8000 16) (-> a0-48 flags)))))))
-             ;; only in other level, only use vis for other.
-             ((-> a0-44 other inside-boxes?)
-              (let ((a0-50 (-> a0-44 vis-info (-> a0-44 vis-adj-index))))
-                (if a0-50 (set! (-> a0-50 flags) (the-as uint (logior (shl #x8000 16) (-> a0-50 flags)))))))))))))
+  (let ((inside-any #f) ;; og:preserve-this coop
+        (vis-any #f))
+    (dotimes (i (-> this length))
+      (let ((lev (level-slot i :group this)))
+        (if (-> lev inside-boxes?) (set! inside-any #t))
+        (if (-> lev vis-info 0) (set! vis-any #t))))
+    (cond
+      ((not inside-any)
+       (when vis-any
+         (if (= *cheat-mode* 'debug) (format *stdcon* "~3Loutside of bsp~%~0L"))))
+      (else
+       ;; we are in at least one bsp.
+       ;; now we need to link vis info to bsps.
+       (dotimes (v1-125 (-> this length))
+         (let ((a0-44 (level-slot v1-125 :group this)))
+           (when (= (-> a0-44 status) 'active)
+             ;; loop over vis infos
+             (dotimes (a1-17 8)
+               (let ((a2-18 (-> a0-44 vis-info a1-17)))
+                 (when a2-18
+                   ;; clear bit 31
+                   (set! (-> a2-18 flags) (logand (the-as uint #xffffffff7fffffff) (-> a2-18 flags)))
+                   ;; link info to bsp
+                   (cond
+                     ((= a1-17 (-> a0-44 vis-self-index)) (set! (-> a2-18 from-bsp) (-> a0-44 bsp)))
+                     ((= a1-17 (-> a0-44 vis-adj-index)) (set! (-> a2-18 from-bsp) (-> a0-44 other bsp)))
+                     (else (set! (-> a2-18 from-bsp) #f))))))
+             ;; is the camera inside another slot's level?
+             (let ((other-inside #f))
+               (dotimes (j (-> this length))
+                 (let ((o (level-slot j :group this)))
+                   (if (and (!= o a0-44) (-> o inside-boxes?)) (set! other-inside #t))))
+               ;; now, handle setting bit 31 (maybe single vis mode?)
+               (cond
+                 ;; special display self mode.
+                 ((= (-> a0-44 display?) 'display-self)
+                  (let ((a0-46 (-> a0-44 vis-info (-> a0-44 vis-self-index))))
+                    (if a0-46 (set! (-> a0-46 flags) (the-as uint (logior (shl #x8000 16) (-> a0-46 flags)))))))
+                 ;; in this level, but not the other, only use vis for this.
+                 ((and (-> a0-44 inside-boxes?) (not other-inside))
+                  (let ((a0-48 (-> a0-44 vis-info (-> a0-44 vis-self-index))))
+                    (if a0-48 (set! (-> a0-48 flags) (the-as uint (logior (shl #x8000 16) (-> a0-48 flags)))))))
+                 ;; only in other level, only use vis for other.
+                 (other-inside
+                  (let ((a0-50 (-> a0-44 vis-info (-> a0-44 vis-adj-index))))
+                    (if a0-50 (set! (-> a0-50 flags) (the-as uint (logior (shl #x8000 16) (-> a0-50 flags)))))))))))))))
   (when (or *display-level-border* *display-texture-download* *display-split-box-info*)
     (when *display-level-border*
-      (format *stdcon*
-              "  want: ~A ~A/~A   ~A ~A/~A~%"
-              (-> *load-state* want 0 name)
-              (-> *load-state* want 0 display?)
-              (-> *load-state* want 0 force-vis?)
-              (-> *load-state* want 1 name)
-              (-> *load-state* want 1 display?)
-              (-> *load-state* want 1 force-vis?))
+      (format *stdcon* "  want:") ;; og:preserve-this coop
+      (dotimes (i (load-want-count))
+        (let ((w (load-want *load-state* i)))
+          (format *stdcon* " ~A ~A/~A  " (-> w name) (-> w display?) (-> w force-vis?))))
+      (format *stdcon* "~%")
       (format *stdcon*
               "  nick ~A cur ~S  cont ~A~%~%"
               (-> *load-state* vis-nick)
@@ -1353,7 +1399,7 @@
       ;   )
       )
     (dotimes (s5-5 (-> this length))
-      (let ((s4-5 (-> this level s5-5)))
+      (let ((s4-5 (level-slot s5-5 :group this))) ;; og:preserve-this coop
         (when (= (-> s4-5 status) 'active)
           (format *stdcon*
                   "~A: ~S ~A~%"
@@ -1376,8 +1422,13 @@
                     (-> s4-5 upload-size 4)))
           (if *display-split-box-info* (debug-print-splitbox s4-5 (-> *math-camera* trans) *stdcon*))))))
   ;; tell PC port about our levels
-  (__pc-set-levels (if (symbol-member? (-> this level0 status) '(active alive loaded)) (symbol->string (bsp-name (-> this level0))) "none")
-                   (if (symbol-member? (-> this level1 status) '(active alive loaded)) (symbol->string (bsp-name (-> this level1))) "none"))
+  ;; og:preserve-this coop: one name per level slot (issue #110), like Jak 2
+  (let ((lev-names (new 'stack-no-clear 'array 'string COOP_LEVEL_SLOTS)))
+    (dotimes (i COOP_LEVEL_SLOTS)
+      (let ((lev (level-slot i :group this)))
+        (set! (-> lev-names i)
+              (if (and (< i (-> this length)) (symbol-member? (-> lev status) '(active alive loaded))) (symbol->string (bsp-name lev)) "none"))))
+    (__pc-set-levels lev-names))
   0)
 
 (defun-debug show-level ((level-name symbol))
@@ -1399,27 +1450,31 @@
   (let ((lev-group *level*))
     (set! (-> lev-group vis?) #f)
     (set! (-> lev-group loading-level) (-> lev-group level-default))
-    (set! (-> lev-group level0 art-group) (new 'global 'load-dir-art-group 50 (-> lev-group level0)))
-    (set! (-> lev-group level0 foreground-draw-engine 0) (new 'global 'engine 'draw FOREGROUND_DRAW_MAX_COUNT_0))
-    (set! (-> lev-group level0 foreground-draw-engine 1) (new 'global 'engine 'draw FOREGROUND_DRAW_MAX_COUNT_0))
-    (set! (-> lev-group level0 foreground-draw-engine 2) (new 'global 'engine 'draw FOREGROUND_DRAW_MAX_COUNT_2))
-    (set! (-> lev-group level1 art-group) (new 'global 'load-dir-art-group 50 (-> lev-group level1)))
-    (set! (-> lev-group level1 foreground-draw-engine 0) (new 'global 'engine 'draw FOREGROUND_DRAW_MAX_COUNT_0))
-    (set! (-> lev-group level1 foreground-draw-engine 1) (new 'global 'engine 'draw FOREGROUND_DRAW_MAX_COUNT_0))
-    (set! (-> lev-group level1 foreground-draw-engine 2) (new 'global 'engine 'draw FOREGROUND_DRAW_MAX_COUNT_2))
+    ;; og:preserve-this coop: art groups, draw engines and vis bits for all four slots (issue #110); the
+    ;; extra slots' heaps come with coop-alloc-extra-levels!. (-> lev other) starts as the other original
+    ;; slot's level, level-update picks the vis neighbour later.
+    (dotimes (i COOP_LEVEL_SLOTS)
+      (let ((lev (level-slot i)))
+        (set! (-> lev art-group) (new 'global 'load-dir-art-group 50 lev))
+        (set! (-> lev foreground-draw-engine 0) (new 'global 'engine 'draw FOREGROUND_DRAW_MAX_COUNT_0))
+        (set! (-> lev foreground-draw-engine 1) (new 'global 'engine 'draw FOREGROUND_DRAW_MAX_COUNT_0))
+        (set! (-> lev foreground-draw-engine 2) (new 'global 'engine 'draw FOREGROUND_DRAW_MAX_COUNT_2))
+        (set! (-> lev other) (if (zero? i) (-> lev-group level1) (-> lev-group level0)))
+        (set! (-> lev vis-bits) (malloc 'global 2048))
+        (vis-clear lev)))
     (set! (-> lev-group level-default art-group) (new 'global 'load-dir-art-group 50 (-> lev-group level1)))
     (set! (-> lev-group level-default foreground-draw-engine 0) (new 'global 'engine 'draw DEFAULT_DRAW_MAX_COUNT_0))
     (set! (-> lev-group level-default foreground-draw-engine 1) (new 'global 'engine 'draw DEFAULT_DRAW_MAX_COUNT_2))
-    (set! (-> lev-group level0 other) (-> lev-group level1))
-    (set! (-> lev-group level1 other) (-> lev-group level0))
     (set! (-> lev-group level-default other) #f)
-    (dotimes (i 2)
-      (let ((lev (-> lev-group level i))) (set! (-> lev vis-bits) (malloc 'global 2048)) (vis-clear lev)))
-    (dotimes (i 3)
+    (dotimes (i LEVEL_INDEX_COUNT) ;; og:preserve-this coop
       (let ((lev (-> lev-group level i)))
         (set! (-> lev linking) #f)
         (dotimes (ii 3)
-          (set! (-> lev foreground-sink-group ii level) lev))))))
+          (set! (-> lev foreground-sink-group ii level) lev)))) ;; og:preserve-this coop
+    ;; the extra slots must lie where (-> *level* level 3) and (-> *level* level 4) point
+    (when (or (!= (-> lev-group level 3) (-> (the-as coop-level-group lev-group) level3))
+              (!= (-> lev-group level 4) (-> (the-as coop-level-group lev-group) level4)))
+      (format 0 "ERROR: coop-level-group: the extra level slots are not at array indices 3 and 4~%"))))
 
 (defmacro test-play ()
   `(begin

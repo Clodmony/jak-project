@@ -446,7 +446,9 @@
 
 (define-extern __pc-get-mips2c (function string function))
 
-(define-extern __pc-set-levels (function string string none))
+(define-extern __pc-set-levels (function (pointer string) none)) ;; og:preserve-this coop: one name per level slot (#110), like Jak 2
+
+(define-extern __pc-get-bucket-draw-order (function (pointer int32) int none)) ;; og:preserve-this coop: the renderer's bucket draw order (#110)
 
 (define-extern __pc-force-reload-all-levels (function none))
 

@@ -13,8 +13,10 @@ else master) and checks:
      marker, so upstream's decompiler tooling keeps them.
   3. Lists the shared C++ runtime files that changed. They are compiled for every game, so co-op code
      there must only run when Jak 1 turns co-op on: review them, this script can't tell.
+  4. Level slots (#110): a loop over (-> *level* length) must reach the levels through level-slot,
+     never (-> *level* level i): the array index of a slot skips level-default (0 1 3 4).
 
-Exit code 1 if rule 1 or 2 is broken.
+Exit code 1 if rule 1, 2 or 4 is broken.
 
   python3 scripts/splitscreen/check_upstream_compat.py [--base <commit>]
 """
@@ -87,6 +89,43 @@ def unmarked_hunks(base, path):
     return bad
 
 
+LEVEL_LOOP_RE = re.compile(r"\((?:dotimes|countdown) \(([a-z][a-z0-9-]*) \(-> (?:\*level\*|this|levels|lev-group) length\)\)")
+LEVEL_INDEX_RE = re.compile(r"\(-> (?:\*level\*|levels|lev-group) (?:level|data) ([a-z][a-z0-9-]*)[ )]|\(-> this level ([a-z][a-z0-9-]*)[ )]")
+
+
+def level_slot_misuse(path):
+    """(-> *level* level i) with i a loop variable over (-> *level* length): the slot's array index is
+    (level-slot-index i), not i (array index 2 is level-default). A loop variable counts while the
+    lines are indented deeper than the loop's (the pretty-printed code's form)."""
+    bad = []
+    loop_vars = {}  # var -> indentation of its loop line
+    for n, line in enumerate(open(os.path.join(ROOT, path)).read().split("\n"), 1):
+        if not line.strip() or line.lstrip().startswith(";"):
+            continue
+        indent = len(line) - len(line.lstrip())
+        loop_vars = {v: i for v, i in loop_vars.items() if indent > i}
+        for m in LEVEL_INDEX_RE.finditer(line):
+            var = m.group(1) or m.group(2)
+            if var in loop_vars:
+                bad.append((n, var))
+        for m in LEVEL_LOOP_RE.finditer(line):
+            loop_vars[m.group(1)] = indent
+    return bad
+
+
+def level_slot_misuse_in_tree():
+    """Rule 4 over all of goal_src/jak1 (not only changed files: an old loop breaks with four slots too)."""
+    bad = []
+    for root, _dirs, files in os.walk(os.path.join(ROOT, "goal_src", "jak1")):
+        for f in files:
+            if not f.endswith(".gc"):
+                continue
+            path = os.path.relpath(os.path.join(root, f), ROOT)
+            for line, var in level_slot_misuse(path):
+                bad.append((path, line, var))
+    return bad
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--base", help="commit to compare with (default: merge base with upstream/master)")
@@ -109,6 +148,10 @@ def main():
             for line, text in unmarked_hunks(base, path):
                 print(f"ERROR {path}:{line}: edit without '{MARKER}': {text[:80]}")
                 errors += 1
+
+    for path, line, var in level_slot_misuse_in_tree():
+        print(f"ERROR {path}:{line}: (-> *level* level {var}) in a loop over the level slots, use (level-slot {var})")
+        errors += 1
 
     runtime = [p for p, s in changes.items() if p.startswith(("game/", "common/", "goalc/", "decompiler/"))
                and not p.startswith(("game/assets/jak1/", "decompiler/config/jak1/"))]

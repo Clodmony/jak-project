@@ -754,7 +754,7 @@
 (defun-debug display-file-info ()
   (when (and *display-file-info* (!= *master-mode* 'menu))
     (dotimes (gp-0 (-> *level* length))
-      (let ((v1-7 (-> *level* level gp-0)))
+      (let ((v1-7 (level-slot gp-0))) ;; og:preserve-this coop: slot loop
         (when (= (-> v1-7 status) 'active)
           (let ((s5-0 (-> v1-7 bsp)))
             (format *stdcon* "file name: ~S~%" (-> s5-0 info file-name))

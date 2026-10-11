@@ -411,9 +411,25 @@
   0
   (none))
 
+;; og:preserve-this coop: the level flag of the particles kill-all-particles-in-level kills (issue #110)
+(define *sparticle-kill-level-mask* (sp-cpuinfo-flag level0))
+
+(defun sparticle-kill-it-level ((arg0 sparticle-system) (arg1 sparticle-cpuinfo))
+  "kill all particles belonging to the level whose flag is *sparticle-kill-level-mask*"
+  (if (logtest? (-> arg1 flags) *sparticle-kill-level-mask*) (sparticle-kill-it arg0 arg1))
+  0
+  (none))
+
 (defun kill-all-particles-in-level ((arg0 level))
   "kill all particles belonging to the given level."
-  (forall-particles (if (zero? (-> arg0 index)) sparticle-kill-it-level0 sparticle-kill-it-level1) #t #t)
+  ;; og:preserve-this coop: any of the four slots (array indices 0 1 3 4)
+  (set! *sparticle-kill-level-mask*
+        (case (-> arg0 index)
+          ((0) (sp-cpuinfo-flag level0))
+          ((1) (sp-cpuinfo-flag level1))
+          ((3) (sp-cpuinfo-flag level2))
+          (else (sp-cpuinfo-flag level3))))
+  (forall-particles sparticle-kill-it-level #t #t)
   0)
 
 (defun all-particles-50-to-60 ()
