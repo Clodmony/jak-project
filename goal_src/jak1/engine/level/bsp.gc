@@ -147,7 +147,7 @@
     (set! (-> (scratchpad-object terrain-bsp :offset TERRAIN_BSP_SCRATCHPAD) mood) (-> lev mood))
     ;; update the subdivision settings
     (if *artist-use-menu-subdiv*
-      (update-subdivide-settings! *subdivide-settings* *math-camera* 3)
+      (update-subdivide-settings! *subdivide-settings* *math-camera* SUBDIVIDE_OVERRIDE_INDEX) ;; og:preserve-this coop: was 3, now a level index too
       (update-subdivide-settings! *subdivide-settings* *math-camera* (-> lev index)))
     ;; at this point we are no longer adding textures, so we can mark the end of the
     ;; textures with interrupts to get rendering VIF interrupts for profiling.

@@ -898,19 +898,29 @@
   (none))
 
 (defun make-sky-textures ((arg0 time-of-day-context) (arg1 int))
+  ;; og:preserve-this coop: the original, for slot 0 or 1 with the weight from current-interp; the time
+  ;; of day update calls make-sky-textures-for-level for every slot (issue #110)
+  (let ((f30-0 (-> arg0 current-interp)))
+    (if (zero? arg1) (set! f30-0 (- 1.0 f30-0)))
+    (make-sky-textures-for-level arg0 arg1 f30-0))
+  0
+  (none))
+
+(defun make-sky-textures-for-level ((arg0 time-of-day-context) (arg1 int) (weight float))
+  ;; og:preserve-this coop: arg1 is a level array index (any of the four slots) and weight its share of
+  ;; the sky (issue #110); the original took slot 0 or 1 and derived the weight from current-interp.
   (when (and (= (-> *level* level arg1 status) 'active) (-> *level* level arg1 info sky))
-    (let ((f30-0 (-> arg0 current-interp)))
-      (if (zero? arg1) (set! f30-0 (- 1.0 f30-0)))
+    (let ((f30-0 weight))
       (if (= (-> arg0 active-count) 1) (set! f30-0 1.0))
       (when (!= f30-0 0.0)
-        (let ((gp-0 (if (zero? arg1) 32 39))
+        (let ((gp-0 (level-bucket tfrag-trans- arg1)) ;; was 32 / 39 ;; og:preserve-this coop
               (s1-0 (-> *level* level arg1 bsp adgifs)))
           (when (nonzero? s1-0)
             (let* ((s2-0 (-> *display* frames (-> *display* on-screen) frame global-buf))
                    (s3-0 (-> s2-0 base)))
               (set-display-gs-state s2-0 *sky-base-page* 64 96 0 0)
               (dotimes (s0-0 8)
-                (let ((f0-3 (* (-> arg0 moods arg1 sky-times s0-0) f30-0)))
+                (let ((f0-3 (* (-> (tod-mood arg0 arg1) sky-times s0-0) f30-0))) ;; og:preserve-this coop
                   (if (!= f0-3 0.0) (copy-sky-texture s2-0 (-> s1-0 data s0-0) f0-3))))
               (copy-cloud-texture s2-0 (-> s1-0 data 8) f30-0)
               (let* ((v1-31 s2-0)

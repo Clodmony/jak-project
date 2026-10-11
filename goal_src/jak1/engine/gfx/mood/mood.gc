@@ -173,9 +173,8 @@
            (set! (-> s4-0 0 dir0 color quad) (-> v1-12 lgt-color quad))
            (set! (-> s4-0 0 dir0 levels x) 1.0)
            (set! (-> s4-0 0 dir0 levels y) f0-14)))
-       (set! (-> *time-of-day-context* light-masks-0 arg2) (the-as uint (ash 1 s3-0)))
-       (set! (-> *time-of-day-context* light-masks-1 arg2) (the-as uint 0))
-       (set! (-> *time-of-day-context* light-interp arg2) 0.0))
+       ;; og:preserve-this coop: arg2 is a level array index, any of the four slots (issue #110)
+       (tod-light-set! *time-of-day-context* arg2 (the-as uint (ash 1 s3-0)) (the-as uint 0) 0.0))
       (else
        (let ((s0-0 (-> arg0 mood-lights-table data s3-0))
              (s1-0 (-> arg0 mood-lights-table data s2-0)))
@@ -196,9 +195,7 @@
            (set! (-> s4-0 0 dir1 color quad) (-> s1-0 lgt-color quad))
            (set! (-> s4-0 0 dir1 levels x) f30-0)
            (set! (-> s4-0 0 dir1 levels y) f1-26)))
-       (set! (-> *time-of-day-context* light-masks-0 arg2) (the-as uint (ash 1 s3-0)))
-       (set! (-> *time-of-day-context* light-masks-1 arg2) (the-as uint (ash 1 s2-0)))
-       (set! (-> *time-of-day-context* light-interp arg2) f30-0)))
+       (tod-light-set! *time-of-day-context* arg2 (the-as uint (ash 1 s3-0)) (the-as uint (ash 1 s2-0)) f30-0))) ;; og:preserve-this coop
     (if (and (= (-> arg0 current-prt-color x) 0.0) (= (-> arg0 current-prt-color y) 0.0) (= (-> arg0 current-prt-color z) 0.0))
       (update-mood-prt-color arg0))
     f30-0))
@@ -280,9 +277,7 @@
       (set! (-> v1-0 0 dir2 levels x) 0.0)
       (set! (-> v1-0 0 ambi color quad) (-> a1-11 amb-color quad)))
     (set! (-> v1-0 0 ambi levels x) 1.0))
-  (set! (-> *time-of-day-context* light-masks-0 arg4) (the-as uint (ash 1 arg3)))
-  (set! (-> *time-of-day-context* light-masks-1 arg4) (the-as uint 0))
-  (set! (-> *time-of-day-context* light-interp arg4) 0.0)
+  (tod-light-set! *time-of-day-context* arg4 (the-as uint (ash 1 arg3)) (the-as uint 0) 0.0) ;; og:preserve-this coop: any slot
   (if (and (= (-> arg0 current-prt-color x) 0.0) (= (-> arg0 current-prt-color y) 0.0) (= (-> arg0 current-prt-color z) 0.0))
     (update-mood-prt-color arg0)))
 

@@ -107,8 +107,7 @@
                 (set! (-> (the-as dma-packet v1-38) vif1) (new 'static 'vif-tag))
                 (set! (-> s1-0 base) (&+ (the-as pointer v1-38) 16)))
               (dma-bucket-insert-tag (-> *display* frames (-> *display* on-screen) frame bucket-group)
-                                     (the-as bucket-id
-                                             (if (zero? (-> (scratchpad-object terrain-context) bsp lev-index)) (bucket-id tfrag-0) (bucket-id tfrag-1)))
+                                     (level-bucket tfrag- (-> (scratchpad-object terrain-context) bsp lev-index)) ;; og:preserve-this coop: any slot
                                      s2-0
                                      (the-as (pointer dma-tag) a3-3))))
           ;; (format *stdcon* " #x~X~%" (-> *display* frames (-> *display* on-screen) frame global-buf base))
@@ -216,8 +215,7 @@
               (set! (-> (the-as dma-packet v1-34) vif1) (new 'static 'vif-tag))
               (set! (-> s2-0 base) (&+ (the-as pointer v1-34) 16)))
             (dma-bucket-insert-tag (-> *display* frames (-> *display* on-screen) frame bucket-group)
-                                   (the-as bucket-id
-                                           (if (zero? (-> (scratchpad-object terrain-context) bsp lev-index)) (bucket-id tfrag-trans-0) (bucket-id tfrag-trans-1)))
+                                   (level-bucket tfrag-trans- (-> (scratchpad-object terrain-context) bsp lev-index)) ;; og:preserve-this coop: any slot
                                    s3-0
                                    (the-as (pointer dma-tag) a3-3))))
         #|
@@ -371,7 +369,7 @@
               (set! (-> (the-as dma-packet v1-34) vif1) (new 'static 'vif-tag))
               (set! (-> s2-0 base) (&+ (the-as pointer v1-34) 16)))
             (dma-bucket-insert-tag (-> *display* frames (-> *display* on-screen) frame bucket-group)
-                                   (if (zero? (-> (scratchpad-object terrain-context) bsp lev-index)) (bucket-id tfrag-dirt-0) (bucket-id tfrag-dirt-1))
+                                   (level-bucket tfrag-dirt- (-> (scratchpad-object terrain-context) bsp lev-index)) ;; og:preserve-this coop: any slot
                                    s3-0
                                    (the-as (pointer dma-tag) a3-3))))
         #|
@@ -509,7 +507,7 @@
               (set! (-> (the-as dma-packet v1-34) vif1) (new 'static 'vif-tag))
               (set! (-> s2-0 base) (&+ (the-as pointer v1-34) 16)))
             (dma-bucket-insert-tag (-> *display* frames (-> *display* on-screen) frame bucket-group)
-                                   (the-as bucket-id (if (zero? (-> (scratchpad-object terrain-context) bsp lev-index)) 36 43))
+                                   (level-bucket tfrag-ice- (-> (scratchpad-object terrain-context) bsp lev-index)) ;; og:preserve-this coop: any slot (was 36 / 43)
                                    s3-0
                                    (the-as (pointer dma-tag) a3-3))))
         #|

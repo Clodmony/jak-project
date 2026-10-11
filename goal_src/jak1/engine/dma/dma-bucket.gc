@@ -48,18 +48,32 @@
     (set! (-> dma-buf base) (the-as pointer current-bucket))
     (the (inline-array dma-bucket) initial-bucket)))
 
+;; og:preserve-this coop: the order the buckets are drawn in (issue #110). The buckets of the two extra
+;; level slots were appended to the bucket ids but must draw next to their level 1 twins, so the chain
+;; follows this table instead of the ids. The renderer owns the order (__pc-get-bucket-draw-order); until
+;; it has been fetched the chain follows the ids.
+(define *bucket-draw-order* (new 'global 'boxed-array int32 BUCKET_COUNT))
+
+(dotimes (i BUCKET_COUNT)
+  (set! (-> *bucket-draw-order* i) i))
+
+(__pc-get-bucket-draw-order (-> *bucket-draw-order* data) BUCKET_COUNT)
+
 (defun dma-buffer-patch-buckets ((bucket (inline-array dma-bucket)) (count int))
   "After adding all data to buckets, call this to stitch together the chains for
   count consecutive buckets"
+  ;; og:preserve-this coop: in draw order (*bucket-draw-order*), the last one leads past the buckets
   (when (nonzero? bucket)
     (dotimes (i count)
-      ;; set last tag's address to the next bucket.
-      (set! (-> bucket 0 last 0 addr) (the-as int (the-as pointer (-> bucket 1))))
-      ;; clear last pointer.
-      (set! (-> bucket 0 last) (the-as (pointer dma-tag) 0))
-      ;; next bucket
-      (set! bucket (the-as (inline-array dma-bucket) (-> bucket 1)))))
-  bucket)
+      (let ((b (-> bucket (-> *bucket-draw-order* i)))
+            (next (if (< (+ i 1) count)
+                    (the-as pointer (-> bucket (-> *bucket-draw-order* (+ i 1))))
+                    (the-as pointer (-> bucket count)))))
+        ;; set last tag's address to the next bucket.
+        (set! (-> b last 0 addr) (the-as int next))
+        ;; clear last pointer.
+        (set! (-> b last) (the-as (pointer dma-tag) 0)))))
+  (the-as (inline-array dma-bucket) (-> bucket count)))
 
 (defun dma-bucket-insert-tag ((base (inline-array dma-bucket)) (idx bucket-id) (tag-start pointer) (tag-end (pointer dma-tag)))
   "Add a DMA chain to the bucket"

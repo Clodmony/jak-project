@@ -686,7 +686,7 @@ u64 execute(void* ctxt) {
   // nop                                            // sll r0, r0, 0
   bc = ((s64)c->sgpr64(v1)) < 0;                    // bltz v1, L129
   // nop                                            // sll r0, r0, 0
-  if (bc) {goto block_60;}                          // branch non-likely
+  if (bc) {goto block_57_slot2;}                    // branch non-likely (co-op: try the extra slots)
 
   c->lw(v1, 2736, a0);                              // lw v1, 2736(a0)
   // nop                                            // sll r0, r0, 0
@@ -694,10 +694,39 @@ u64 execute(void* ctxt) {
   // nop                                            // sll r0, r0, 0
   bc = ((s64)c->sgpr64(v1)) >= 0;                   // bgez v1, L129
   // nop                                            // sll r0, r0, 0
-  if (bc) {goto block_60;}                          // branch non-likely
+  if (bc) {goto block_57_slot2;}                    // branch non-likely (co-op: try the extra slots)
 
   c->ori(s5, s5, 2048);                             // ori s5, s5, 2048
   // nop                                            // sll r0, r0, 0
+  goto block_60;
+
+  // Local co-op (issue #110): the two extra level slots, at (-> *level* level 3) and (-> *level* level 4)
+  // (coop-level-group), flagged sp-cpuinfo-flag level2 (bit 21) and level3 (bit 22). Same test as above
+  // against the slot's heap base and current.
+  block_57_slot2:
+  c->lw(v1, 7948, a0);                              // (-> *level* level 3 heap base)
+  c->dsubu(v1, s4, v1);
+  bc = ((s64)c->sgpr64(v1)) < 0;
+  if (bc) {goto block_57_slot3;}
+  c->lw(v1, 7952, a0);                              // (-> *level* level 3 heap current)
+  c->dsubu(v1, s4, v1);
+  bc = ((s64)c->sgpr64(v1)) >= 0;
+  if (bc) {goto block_57_slot3;}
+  c->lui(v1, 0x20);                                 // bit 21
+  c->or_(s5, s5, v1);
+  goto block_60;
+
+  block_57_slot3:
+  c->lw(v1, 10556, a0);                             // (-> *level* level 4 heap base)
+  c->dsubu(v1, s4, v1);
+  bc = ((s64)c->sgpr64(v1)) < 0;
+  if (bc) {goto block_60;}
+  c->lw(v1, 10560, a0);                             // (-> *level* level 4 heap current)
+  c->dsubu(v1, s4, v1);
+  bc = ((s64)c->sgpr64(v1)) >= 0;
+  if (bc) {goto block_60;}
+  c->lui(v1, 0x40);                                 // bit 22
+  c->or_(s5, s5, v1);
 
   block_60:
   c->andi(v1, s5, 4352);                            // andi v1, s5, 4352

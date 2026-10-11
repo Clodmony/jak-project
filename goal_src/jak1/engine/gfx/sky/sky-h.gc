@@ -139,4 +139,7 @@
 
 (define-extern make-sky-textures (function time-of-day-context int none))
 
+;; og:preserve-this coop: make-sky-textures for any level slot, with the level's share of the sky (#110)
+(define-extern make-sky-textures-for-level (function time-of-day-context int float none))
+
 (define-extern sky-base-polygons (inline-array sky-vertex))

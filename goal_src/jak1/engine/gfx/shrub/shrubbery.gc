@@ -398,8 +398,7 @@
                     (set! (-> (the-as dma-packet v1-57) vif1) (new 'static 'vif-tag))
                     (set! (-> s2-1 base) (&+ (the-as pointer v1-57) 16)))
                   (dma-bucket-insert-tag (-> *display* frames (-> *display* on-screen) frame bucket-group)
-                                         (the-as bucket-id
-                                                 (if (zero? (-> (scratchpad-object terrain-context) bsp lev-index)) (bucket-id shrub0) (bucket-id shrub1)))
+                                         (level-bucket shrub (-> (scratchpad-object terrain-context) bsp lev-index)) ;; og:preserve-this coop: any slot
                                          s3-1
                                          (the-as (pointer dma-tag) a3-22)))))
             (read! (-> *perf-stats* data (perf-stat-bucket inst-shrub)))

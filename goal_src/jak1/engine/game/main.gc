@@ -388,7 +388,7 @@
         (set! *weather-off* #f)
         (let ((v1-13 (-> *game-info* current-continue level)))
           (dotimes (a0-8 (-> *level* length))
-            (let ((a1-6 (-> *level* level a0-8)))
+            (let ((a1-6 (level-slot a0-8))) ;; og:preserve-this coop: slot loop
               (when (= (-> a1-6 status) 'active)
                 (if (and (= (-> a1-6 name) v1-13) (-> *level* play?)) (set! (-> *setting-control* default music) (-> a1-6 info music-bank)))))))
         (set! (-> *setting-control* default sound-flava) (the-as uint 49))
@@ -399,7 +399,7 @@
           (let ((s5-1 (sphere<-vector+r! (new 'stack 'sphere) (ear-trans) 0.0)))
             (let ((v1-28 (scratchpad-object terrain-context))) (set! (-> v1-28 work ambient ambient-list num-items) 0))
             (dotimes (s4-1 (-> *level* length))
-              (let ((v1-32 (-> *level* level s4-1)))
+              (let ((v1-32 (level-slot s4-1))) ;; og:preserve-this coop: slot loop
                 (when (= (-> v1-32 status) 'active)
                   (collect-ambients (-> v1-32 bsp) s5-1 0 (-> (scratchpad-object terrain-context) work ambient ambient-list)))))
             (countdown (s4-2 (-> (scratchpad-object terrain-context) work ambient ambient-list num-items))
@@ -605,6 +605,6 @@
   (stop 'debug)
   ;; deactivate the levels
   (dotimes (i (-> *level* length))
-    (let ((lev (-> *level* level i))) (if (= (-> lev status) 'active) (deactivate lev))))
+    (let ((lev (level-slot i))) (if (= (-> lev status) 'active) (deactivate lev)))) ;; og:preserve-this coop: slot loop
   (set! *run* #f)
   0)

@@ -291,7 +291,7 @@
   "Update the game-save to have the info from the current game state"
   ;; some stuff lives in the levels and needs to be copied into game-info.
   (dotimes (s3-0 (-> *level* length))
-    (let ((a1-1 (-> *level* level s3-0))) (if (= (-> a1-1 status) 'active) (copy-perms-from-level! this a1-1))))
+    (let ((a1-1 (level-slot s3-0))) (if (= (-> a1-1 status) 'active) (copy-perms-from-level! this a1-1)))) ;; og:preserve-this coop: slot loop
   ;; set common data
   (set! (-> arg0 length) 0)
   (set! (-> arg0 version) 1)
@@ -715,7 +715,7 @@
                     (&+ (the-as pointer data) (logand -16 (+ (* (the-as int (-> data elt-size)) (-> data elt-count)) 31)))))))
   ;; update entity stuff in levels that are active
   (dotimes (s4-1 (-> *level* length))
-    (let ((a1-68 (-> *level* level s4-1))) (if (= (-> a1-68 status) 'active) (copy-perms-to-level! this a1-68))))
+    (let ((a1-68 (level-slot s4-1))) (if (= (-> a1-68 status) 'active) (copy-perms-to-level! this a1-68)))) ;; og:preserve-this coop: slot loop
   ;; update tasks
   (let ((s5-1 2) ;; jungle eggtop
         (s4-2 115) ;; max - 1

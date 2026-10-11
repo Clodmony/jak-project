@@ -71,6 +71,30 @@
 (defmethod new load-state ((allocation symbol) (type-to-make type))
   (reset! (object-new allocation type-to-make (the-as int (-> type-to-make size)))))
 
+;; og:preserve-this coop: the load-state with wants for the two extra level slots (issue #110).
+;; load-state keeps its layout (the decompiler's all-types.gc must match it); *load-state* and
+;; *backup-load-state* are allocated as this type and the code reaches a want through load-want.
+(deftype coop-load-state (load-state)
+  ((want-extra level-buffer-state 2 :inline)))
+
+(defmacro load-want (ls idx)
+  "Want entry idx (0 .. (-> *level* length)) of the load-state ls: 0 and 1 are the original ones."
+  (if (integer? idx)
+    (if (< idx 2) `(-> ,ls want ,idx) `(-> (the-as coop-load-state ,ls) want-extra ,(- idx 2)))
+    `(let ((i ,idx)) (if (< i 2) (-> ,ls want i) (-> (the-as coop-load-state ,ls) want-extra (- i 2))))))
+
+(defmacro load-want-count ()
+  "How many want entries are in use: one per level slot."
+  `(-> *level* length))
+
+(defmacro load-want-clear! (w)
+  "Empty a want entry."
+  `(let ((want ,w))
+     (set! (-> want name) #f)
+     (set! (-> want display?) #f)
+     (set! (-> want force-vis?) #f)
+     (set! (-> want force-inside?) #f)))
+
 (define-extern *load-state* load-state)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;

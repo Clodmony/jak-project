@@ -480,7 +480,7 @@
 (defun sp-relaunch-setup-fields ((arg0 object) (arg1 sparticle-launcher) (arg2 sparticle-cpuinfo) (arg3 sprite-vec-data-3d))
   "Reset fields of an existing particle"
   (let ((a1-1 (-> arg1 init-specs 0))
-        (s4-0 (logand (-> arg2 flags) (sp-cpuinfo-flag level0 level1))))
+        (s4-0 (logand (-> arg2 flags) (sp-cpuinfo-flag level0 level1 level2 level3)))) ;; og:preserve-this coop: 4 slots
     (set! (-> arg2 next-launcher) (the-as basic 0))
     (cond
       ((and (logtest? (-> arg2 flags) (sp-cpuinfo-flag bit12)) (not (logtest? (-> arg2 flags) (sp-cpuinfo-flag aux-list))))

@@ -116,11 +116,13 @@
 
 (defun add-pc-port-background-data ((dma-buf dma-buffer))
   ;; loop over levels
-  (dotimes (lev-idx 2)
-    (let ((lev (-> *level* level lev-idx))
+  ;; og:preserve-this coop: one vis packet per level slot, four with co-op (issue #110): the renderer
+  ;; reads jak1::LEVEL_MAX of them, in slot order. A slot not in use sends the empty packet.
+  (dotimes (lev-idx COOP_LEVEL_SLOTS)
+    (let ((lev (level-slot lev-idx))
           (dma-start (-> dma-buf base)))
       (cond
-        ((= (-> lev status) 'active)
+        ((and (< lev-idx (-> *level* length)) (= (-> lev status) 'active))
          ;; the level is active.
          (let ((packet (the-as dma-packet (-> dma-buf base))))
            (set! (-> packet dma) (new 'static 'dma-tag :id (dma-tag-id cnt) :qwc 128))

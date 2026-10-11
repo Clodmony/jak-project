@@ -32,7 +32,11 @@
   (launch-along-z 17)
   (left-multiply-quat 18)
   (right-multiply-quat 19)
-  (set-conerot 20))
+  (set-conerot 20)
+  ;; og:preserve-this coop: the particle's level for the extra level slots (array indices 3 and 4, #110).
+  ;; Set by sp-launch-particles-var (mips2c) from the launcher's heap, like level0/level1.
+  (level2 21)
+  (level3 22))
 
 (deftype sparticle-cpuinfo (structure)
   ((sprite        sprite-vec-data-2d)
