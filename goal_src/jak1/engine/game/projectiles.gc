@@ -713,8 +713,15 @@
   (projectile-method-25 self)
   (none))
 
+;; og:preserve-this coop: the pad of the player who fired a projectile (pad 0 if it isn't a player's)
+(defun projectile-owner-cpad ((proj process))
+  (let ((owner (ppointer->process (-> proj parent))))
+    (if (and owner (= (-> owner type) target))
+      (-> (the-as target owner) control cpad)
+      (-> *cpad-list* cpads 0))))
+
 (defmethod projectile-method-27 ((this projectile-yellow))
-  (cpad-set-buzz! (-> *cpad-list* cpads 0) 1 204 (seconds 0.1))
+  (cpad-set-buzz! (projectile-owner-cpad this) 1 204 (seconds 0.1)) ;; og:preserve-this coop: the shooter's pad (was pad 0)
   (set! (-> this attack-mode) 'eco-yellow)
   (set! (-> this mode) 1)
   (set! (-> this max-speed) (vector-length (-> this root transv)))
@@ -840,7 +847,7 @@
   (none))
 
 (defmethod projectile-method-27 ((this projectile-blue))
-  (cpad-set-buzz! (-> *cpad-list* cpads 0) 1 204 (seconds 0.1))
+  (cpad-set-buzz! (projectile-owner-cpad this) 1 204 (seconds 0.1)) ;; og:preserve-this coop: the shooter's pad (was pad 0)
   (sound-play "blue-eco-on")
   (set! (-> this mode) 2)
   (set! (-> this max-speed) (-> *TARGET-bank* yellow-projectile-speed))
