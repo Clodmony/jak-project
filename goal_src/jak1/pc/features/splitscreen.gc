@@ -776,13 +776,22 @@
   (set! (-> *coop-racer* died-racing (coop-process-player tgt)) (if (coop-player-on-flut? tgt) 'flutflut 'racer))
   (none))
 
+(defun coop-racer-forget-death ((tgt target))
+  "tgt is a new target (init-target): the checkpoint reload after both players died, a loaded save,
+   co-op stopped during the respawn wait. A vehicle death noted for the old one no longer applies:
+   its respawn never ran, and the vehicle's level (and with it its states) may be gone by the next
+   death, which would then enter a state from a reused level heap."
+  (set! (-> *coop-racer* died-racing (coop-process-player tgt)) #f)
+  (none))
+
 (defun coop-racer-remount ((tgt target) (kind symbol))
   "After a spawn or a vehicle death, called from tgt's own code: tgt gets a vehicle of kind (racer or
    flutflut, after a death on one), or with kind #f the vehicle the other player rides from the
    section's pad, if any.
    Getting on moves the rider onto the pad it uses, so use the pad at the respawn point; with no pad
-   nearby a zoomer rider gets on where they stand. A flut flut always needs a pad (its model is found
-   through the pad's level), away from it the rider gets on where they stand (coop-flut-mount-at-pad?).
+   nearby a zoomer rider gets on where they stand, with no zoomer loaded at all they stay on foot. A
+   flut flut always needs a pad (its model is found through the pad's level), away from it the rider
+   gets on where they stand (coop-flut-mount-at-pad?).
    (The spawn/respawn states don't take 'change-mode events, so this switches state directly.)"
   (let* ((other (coop-other-player-target tgt))
          (section-pad (handle->process (-> *coop-racer* pad)))
@@ -799,6 +808,9 @@
                       section-pad
                       (coop-racer-pad-near (-> tgt control trans) (meters 100000) 'flutflut))))
         (cond
+          ;; no zoomer in the loaded levels: the zoomer states went with their level
+          ((and (not flut?) (not pad) (not (coop-racer-pad-near (-> tgt control trans) (meters 100000) 'racer)))
+           (format 0 "[coop] player ~D stays on foot: no zoomer in the loaded levels~%" (+ (coop-process-player tgt) 1)))
           ((not flut?)
            (coop-racer-note-mount tgt)
            (go-process tgt target-racing-start (if pad (process->handle pad) (the-as handle #f))))

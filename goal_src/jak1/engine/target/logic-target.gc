@@ -1171,6 +1171,8 @@
   (if (not arg0) (set! arg0 (get-or-create-continue! *game-info*)))
   ;; og:preserve-this coop: the continue point is session state, player 2 doesn't set it.
   (if (zero? (coop-process-player self)) (set-continue! *game-info* arg0))
+  ;; og:preserve-this coop: a new target has no vehicle death to be put back on a vehicle for
+  (coop-racer-forget-death self)
   (stack-size-set! (-> self main-thread) 1024)
   (logior! (-> self mask) (process-mask target))
   (set! (-> self state-hook) (the-as (function none :behavior target) nothing))
