@@ -192,6 +192,11 @@ the same behaviour as the existing PC "force actors" option, without changing th
   respawns at the other player's last safe ground with full health). If both are down, the original
   single checkpoint reload runs once. If co-op is stopped while a player waits to respawn, that
   player finishes the original death (checkpoint reload).
+- A death on a zoomer or flut flut is noted (`coop-racer-note-death`) so the respawn puts the player
+  back on one. The note belongs to that target: `init-target` drops it (`coop-racer-forget-death`), so
+  a reload after both died doesn't leave it for a later death in another level. A zoomer remount with
+  no zoomer in the loaded levels keeps the player on foot: the zoomer states live in the zoomer
+  levels' heaps and are garbage once such a level is replaced.
 - Players collide and can hit each other (`coop-contact-update`, once per tick). While both are in
   play and free (not held, on a zoomer, in a minigame, spawning, warping, hidden for a cinematic or
   frozen), the `target` kind is in the collide-with of each player's root and body spheres: the
