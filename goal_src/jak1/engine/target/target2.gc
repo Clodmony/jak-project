@@ -252,7 +252,7 @@
       (spawn-particles! self)))
 
 (defun part-first-person-hud-left-func ((arg0 sparticle-system) (arg1 sparticle-cpuinfo) (arg2 matrix))
-  (let ((s5-0 (handle->process (-> *target* fp-hud))))
+  (let ((s5-0 (let ((tgt (coop-particle-target arg1))) (if tgt (handle->process (-> tgt fp-hud)))))) ;; og:preserve-this coop: the hud's own player
     (when s5-0
       (let ((f30-0 (* 0.00024414062 (the float (-> (the-as first-person-hud s5-0) in-out-position)))))
         (if (or (-> *setting-control* current movie) (movie?)) (set! f30-0 1.0))
@@ -265,7 +265,7 @@
   (none))
 
 (defun part-first-person-hud-right-func ((arg0 sparticle-system) (arg1 sparticle-cpuinfo) (arg2 matrix))
-  (let ((s5-0 (handle->process (-> *target* fp-hud))))
+  (let ((s5-0 (let ((tgt (coop-particle-target arg1))) (if tgt (handle->process (-> tgt fp-hud)))))) ;; og:preserve-this coop: the hud's own player
     (when s5-0
       (let ((f30-0 (* 0.00024414062 (the float (-> (the-as first-person-hud s5-0) in-out-position)))))
         (if (or (-> *setting-control* current movie) (movie?)) (set! f30-0 1.0))
@@ -278,7 +278,7 @@
   (none))
 
 (defun part-first-person-hud-selector-func ((arg0 sparticle-system) (arg1 sparticle-cpuinfo) (arg2 matrix))
-  (let ((v1-2 (handle->process (-> *target* fp-hud))))
+  (let ((v1-2 (let ((tgt (coop-particle-target arg1))) (if tgt (handle->process (-> tgt fp-hud)))))) ;; og:preserve-this coop: the hud's own player
     (when v1-2
       (let ((f30-0 (* 0.00024414062 (the float (-> (the-as first-person-hud v1-2) in-out-position)))))
         (if (or (-> *setting-control* current movie) (movie?)) (set! f30-0 1.0))
