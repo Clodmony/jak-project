@@ -133,9 +133,9 @@
     (none)))
 
 (defun part-tracker-track-target-joint ((arg0 int) (arg1 sparticle-cpuinfo) (arg2 sparticle-launchinfo))
-  ;; og:preserve-this added this check
-  (if (not *target*) (return #f))
-  (let* ((v1-0 *target*)
+  ;; og:preserve-this added this check. coop: the player who smacked the wall, not *target* (#26)
+  (if (not (coop-particle-target arg1)) (return #f))
+  (let* ((v1-0 (coop-particle-target arg1))
          (v1-2 (vector<-cspace! (new 'stack-no-clear 'vector) (-> v1-0 node-list data (the int (-> arg1 user-float))))))
     (set! (-> arg2 launchrot x) (-> v1-2 x))
     (set! (-> arg2 launchrot y) (-> v1-2 y))

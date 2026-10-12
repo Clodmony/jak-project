@@ -357,6 +357,8 @@
 (define-extern coop-start (function symbol))
 (define-extern coop-stop (function none))
 (define-extern coop-player-target (function int target))
+(define-extern coop-particle-target (function sparticle-cpuinfo target))
+(define-extern coop-particle-hud-parts (function sparticle-cpuinfo hud-parts))
 (define-extern coop-racer-mount-other (function process target none))
 (define-extern coop-racer-dismount-other (function process none))
 (define-extern coop-racer-finish-ready? (function process-drawable symbol))
