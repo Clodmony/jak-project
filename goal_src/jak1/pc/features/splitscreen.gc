@@ -1859,9 +1859,16 @@
 ;; A player's load boundary crossing (load a b) sets their pair; the wants of the game are the union
 ;; of both pairs, at most four names, so nobody's level goes away for the other player's loads.
 (deftype coop-wants (structure)
-  ((name symbol 4))) ;; player 1's pair, player 2's pair
+  ((name    symbol 4) ;; player 1's pair, player 2's pair
+   (crossed symbol 2))) ;; the player's own crossing set their pair (no teleport or respawn since)
 
 (define *coop-wants* (new 'global 'coop-wants))
+
+;; the pairs as they were when the load state was backed up (a cutscene's commands, a checkpoint's
+;; load commands), put back with it
+(define *coop-wants-backup* (new 'global 'coop-wants))
+
+(define *coop-wants-backed-up?* #f)
 
 ;; the player whose boundary crossing issues the next want-levels (set by coop-boundary-command-ok?),
 ;; or -1: a script's load (boats, warp gates, cutscenes take both players along) sets both pairs
@@ -1876,7 +1883,8 @@
     (dotimes (p 2)
       (when (or (< me 0) (= p me))
         (set! (-> *coop-wants* name (* 2 p)) a)
-        (set! (-> *coop-wants* name (+ (* 2 p) 1)) b)))
+        (set! (-> *coop-wants* name (+ (* 2 p) 1)) b)
+        (set! (-> *coop-wants* crossed p) (>= me 0))))
     (let ((names (new 'stack-no-clear 'array 'symbol 4))
           (count 0)
           (first (if (< me 0) 0 me)))
@@ -1898,8 +1906,25 @@
    at a checkpoint (its two levels)."
   (dotimes (p 2)
     (set! (-> *coop-wants* name (* 2 p)) (-> (load-want *load-state* 0) name))
-    (set! (-> *coop-wants* name (+ (* 2 p) 1)) (-> (load-want *load-state* 1) name)))
+    (set! (-> *coop-wants* name (+ (* 2 p) 1)) (-> (load-want *load-state* 1) name))
+    (set! (-> *coop-wants* crossed p) #f))
   (set! *coop-want-player* -1)
+  (set! *coop-wants-backed-up?* #f)
+  (none))
+
+(defun coop-wants-backup ()
+  "backup-load-state-and-set-cmds hook: the pairs go with the wants. A script's want-levels sets both
+   pairs; once its load state is restored, the pairs must be the ones that made those wants again."
+  (when (coop-active?)
+    (mem-copy! (the-as pointer *coop-wants-backup*) (the-as pointer *coop-wants*) (size-of coop-wants))
+    (set! *coop-wants-backed-up?* #t))
+  (none))
+
+(defun coop-wants-restore ()
+  "restore-load-state(-and-cleanup) hook: the pairs as they were at the backup."
+  (when (and (coop-active?) *coop-wants-backed-up?*)
+    (mem-copy! (the-as pointer *coop-wants*) (the-as pointer *coop-wants-backup*) (size-of coop-wants))
+    (set! *coop-wants-backed-up?* #f))
   (none))
 
 (defun coop-pair-has? ((p int) (name symbol))
@@ -1910,7 +1935,10 @@
   "Once per gameplay frame: a player who got somewhere without crossing a boundary (respawned
    elsewhere, teleported) has a pair that doesn't hold the level they stand in. Their pair becomes
    the levels whose boxes hold them (two near a border: level boxes overlap there, Sandover's reach
-   onto the beach) and the wants are merged again, so those levels stay loaded for them."
+   onto the beach) and the wants are merged again, so those levels stay loaded for them.
+   A pair the player's own crossing set stays as long as it holds one of those levels: the boundary
+   named the levels needed there, the next one included, and an overlapping box isn't one of them
+   (replacing (a c) by (a b) dropped c, the level the player was heading for)."
   (dotimes (p 2)
     (let ((tgt (coop-player-target p)))
       (when (and tgt (coop-player-in-play? tgt))
@@ -1926,11 +1954,15 @@
           ;; player with no levels at all
           (when (and (not a) (not (-> *coop-wants* name (* 2 p))))
             (set! a (coop-level-containing *level* (-> tgt control trans) (the-as level #f))))
-          (when (and a (or (not (coop-pair-has? p (-> a name))) (and b (not (coop-pair-has? p (-> b name))))))
+          (when (and a
+                     (or (not (coop-pair-has? p (-> a name))) (and b (not (coop-pair-has? p (-> b name)))))
+                     (not (and (-> *coop-wants* crossed p)
+                               (or (coop-pair-has? p (-> a name)) (and b (coop-pair-has? p (-> b name)))))))
             (format 0 "[coop] player ~D stands in ~A~A without having crossed into it, wanting it for them~%"
                     (+ p 1) (-> a name) (if b " and another level" ""))
             (set! *coop-want-player* p)
-            (coop-want-levels *load-state* (-> a name) (if b (-> b name) #f)))))))
+            (coop-want-levels *load-state* (-> a name) (if b (-> b name) #f))
+            (set! (-> *coop-wants* crossed p) #f))))))
   (none))
 
 (defun coop-alloc-extra-levels! ()
@@ -1953,10 +1985,12 @@
 
 (defun coop-boundary-skip-jumps ((points object))
   "A teleport since the last frame isn't a crossing: the old points (as *load-boundary-target*) become
-   the new ones."
+   the new ones. A player who teleported (respawn, warp) no longer has a pair from their own crossing."
   (let ((pts (the-as (inline-array lbvtx) points)))
   (if (< COOP_BOUNDARY_JUMP (vector-vector-distance (-> pts 0 v) (-> pts 2 v))) (set! (-> pts 2 quad) (-> pts 0 quad)))
-    (if (< COOP_BOUNDARY_JUMP (vector-vector-distance (-> pts 1 v) (-> pts 3 v))) (set! (-> pts 3 quad) (-> pts 1 quad))))
+    (when (< COOP_BOUNDARY_JUMP (vector-vector-distance (-> pts 1 v) (-> pts 3 v)))
+      (set! (-> pts 3 quad) (-> pts 1 quad))
+      (set! (-> *coop-wants* crossed (if (= points *coop-p2-boundary*) 1 0)) #f)))
   (none))
 
 (defun coop-full-display? ((mode symbol))
@@ -2386,6 +2420,9 @@
     (set! (-> *coop* active?) #f)
     (set! (-> *coop* enabled?) #f)
     (set! (-> *coop* split?) #f)
+    ;; player 1's pair is the wants again: player 2's levels go (the extra slots stay allocated)
+    (if (-> *coop-wants* name 0) (want-levels *load-state* (-> *coop-wants* name 0) (-> *coop-wants* name 1)))
+    (coop-wants-reset)
     (set! *ear-trans-override* #f)
     (set! *coop-ear2-trans* #f)
     (pc-coop-set-input-enabled! #f)
