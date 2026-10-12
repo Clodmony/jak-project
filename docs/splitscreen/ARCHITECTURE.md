@@ -162,7 +162,10 @@ cross them (#69):
   (`coop-wants-update`, once per frame). A pair the player's own crossing set stays while it holds
   one of those levels (the boundary named the levels needed there; a teleport, seen by
   `coop-boundary-skip-jumps`, ends that). The pairs are backed up and restored with the load state
-  around a cutscene's or checkpoint's commands (`coop-wants-backup`/`-restore`); a checkpoint reload
+  around a cutscene's or checkpoint's commands (`coop-wants-backup`/`-restore`), and a player's
+  crossing while a backup is held (an ambient's spooled animation, the sage's lines at his hut) goes
+  into the backup too (`coop-crossing-to-backup`), so the restore doesn't switch off a level the
+  other player walked into; a checkpoint reload
   gives both players the checkpoint's two levels (`coop-wants-reset`); `coop-stop` leaves player 1's
   pair as the wants. Turning off the display of the other player's level is ignored. Vis
   and checkpoints follow player 1 only;
