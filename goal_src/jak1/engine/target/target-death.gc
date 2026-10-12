@@ -691,6 +691,7 @@
       (set! (-> self control unknown-uint20) (the-as uint #f))
       (set! (-> self control did-move-to-pole-or-max-jump-height)
             (the-as int (send-event (handle->process (-> self attack-info attacker)) 'target 'die arg0)))
+      (coop-death-pin-attacker self) ;; og:preserve-this coop: the killer (a shark) finishes the death with us
       (set! (-> self neck flex-blend) 0.0)
       (target-timed-invulnerable-off self)
       ;; og:preserve-this coop: the world keeps running for the other player
@@ -921,7 +922,9 @@
       (set! (-> self control transv quad) (the-as uint128 0))
       ;; og:preserve-this coop: one player's death doesn't reset the world, they respawn next to the
       ;; other player. Only when both are down does the shared checkpoint reload below happen.
-      (if (coop-other-player-alive? self) (go target-coop-respawn))
+      (when (coop-other-player-alive? self) ;; og:preserve-this coop
+        (coop-death-unpin-attacker self)
+        (go target-coop-respawn))
       (initialize! (-> self game) 'dead (the-as game-save #f) (the-as string #f))
       (set-time! (-> self state-time))
       (anim-loop))

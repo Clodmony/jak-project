@@ -359,6 +359,37 @@
     (if (= (handle->process (-> *coop-pins* proc i)) proc) (set! (-> *coop-pins* alone i) #t)))
   (none))
 
+;; per player: the world process a player's death pinned to them (coop-death-pin-attacker), or #f
+(define *coop-death-pins* (new 'global 'boxed-array handle 2))
+(set! (-> *coop-death-pins* 0) (the-as handle #f))
+(set! (-> *coop-death-pins* 1) (the-as handle #f))
+
+(defun coop-death-pin-attacker ((tgt target))
+  "target-death hook: the world process that killed tgt runs for tgt until the death ends. World
+   processes follow the nearest player in play, and a dying player isn't one: the shark that ate
+   player 1 ran for player 2 right after the bite, its 'end-mode (the end of being eaten) went to
+   player 2's target and player 1 waited in target-death for good. A process that is already pinned
+   (a boss, a minigame) keeps its own pin."
+  (let ((p (coop-process-player tgt))
+        (attacker (handle->process (-> tgt attack-info attacker))))
+    (set! (-> *coop-death-pins* p) (the-as handle #f))
+    (when (and (coop-active?)
+               attacker
+               (type-type? (-> attacker type) process-drawable) ;; a creature or object, not a script
+               (< (coop-owner-player attacker) 0)
+               (< (coop-pinned-player attacker) 0))
+      (coop-pin-alone attacker (process->handle tgt))
+      (set! (-> *coop-death-pins* p) (process->handle attacker))))
+  (none))
+
+(defun coop-death-unpin-attacker ((tgt target))
+  "The death of tgt is over (they respawn): its attacker follows the nearest player again."
+  (let* ((p (coop-process-player tgt))
+         (attacker (handle->process (-> *coop-death-pins* p))))
+    (if attacker (coop-unpin attacker))
+    (set! (-> *coop-death-pins* p) (the-as handle #f)))
+  (none))
+
 (defun coop-minigame-host? ((proc process))
   "Is proc a minigame host pinned to its player (coop-pin-minigame)?"
   (when (and proc (> (-> *coop-pins* count) 0))
