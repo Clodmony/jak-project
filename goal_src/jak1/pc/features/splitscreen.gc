@@ -2076,6 +2076,12 @@
     (('display 'display-self 'display-no-wait) #t)
     (else #f)))
 
+(defun coop-near-region-shared? ((lev level))
+  "Does lev share its near texture region with an active level in the other slot of its pair?
+   (array indices 0 and 3 share region 0, 1 and 4 region 1, issue #110)"
+  (let ((partner (case (-> lev index) ((0) 3) ((1) 4) ((3) 0) ((4) 1) (else -1))))
+    (and (>= partner 0) (= (-> *level* level partner status) 'active))))
+
 (defun coop-player-in-level? ((tgt target) (name symbol))
   "Is tgt inside the boxes of the active level called name?"
   (dotimes (i (-> *level* length))
