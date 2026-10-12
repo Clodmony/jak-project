@@ -215,6 +215,10 @@ the same behaviour as the existing PC "force actors" option, without changing th
   player is in play adds no movie or process-mask setting and its look-through applies only to
   that player's view (`coop-solo-cam-player`). A respawn also restores the player's root joint
   (the eat scene drives it from the plant's joint) and daxter's matrix mode.
+- Any other killer is pinned to the dying player the same way until they respawn
+  (`coop-death-pin-attacker`, from `target-death`): world processes follow the nearest player in
+  play, a dying player isn't one, and a shark's `'end-mode` (which ends its death) would otherwise
+  reach the other player and leave the eaten one in `target-death`.
 - World code that checks or steers "the player" once per frame can run per player:
   `coop-for-each-player-context` switches to each player in play and back (Gol and Maia's camera
   control, the eye beam and the red shot rings).
