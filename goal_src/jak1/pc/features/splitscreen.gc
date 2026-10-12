@@ -26,7 +26,12 @@
    (camera-dead-pool        dead-pool)
    (camera-master-dead-pool dead-pool)
    (dead-pool-16k           dead-pool)
-   (dead-pool-8k            dead-pool))) ;; the zoomer model (one process per player)
+   (dead-pool-8k            dead-pool) ;; the zoomer model (one process per player)
+   ;; movement tuning the target code changes while it runs, and the shadow settings a 'shadow event
+   ;; turns off: shared, one player's dash or wading depth changed the other's (#28)
+   (run-attack-mods         surface)
+   (wade-surface            surface)
+   (target-shadow-control   shadow-control)))
 
 (define *coop-context-p1* (new 'global 'coop-player-context))
 
@@ -47,6 +52,12 @@
 (define *coop-p2-save-camera-inv-rot* (new 'global 'matrix))
 
 (define *coop-p2-look-at-data* (new 'global 'try-to-look-at-info))
+
+(define *coop-p2-run-attack-mods* (the-as surface (copy *run-attack-mods* 'global)))
+
+(define *coop-p2-wade-surface* (the-as surface (copy *wade-surface* 'global)))
+
+(define *coop-p2-target-shadow-control* (the-as shadow-control (copy *target-shadow-control* 'global)))
 
 ;; player 2's processes live in their own process-tree nodes. They are linked into *active-pool*
 ;; right after the matching player 1 pool, so the order stays targets -> cameras -> display.
@@ -96,7 +107,12 @@
     (set! (-> ctx camera-dead-pool) *coop-p2-camera-dead-pool*)
     (set! (-> ctx camera-master-dead-pool) *coop-p2-camera-master-dead-pool*)
     (set! (-> ctx dead-pool-16k) *coop-p2-16k-dead-pool*)
-    (set! (-> ctx dead-pool-8k) *coop-p2-8k-dead-pool*))
+    (set! (-> ctx dead-pool-8k) *coop-p2-8k-dead-pool*)
+    (set! (-> ctx run-attack-mods) *coop-p2-run-attack-mods*)
+    (set! (-> ctx wade-surface) *coop-p2-wade-surface*)
+    ;; a scene that hid the shadow of a player 2 who was then taken out doesn't leave it hidden
+    (logclear! (-> *coop-p2-target-shadow-control* settings flags) (shadow-flags disable-draw))
+    (set! (-> ctx target-shadow-control) *coop-p2-target-shadow-control*))
   (none))
 
 (defmacro coop-process-handle (proc)
@@ -122,6 +138,9 @@
   (set! (-> ctx camera-master-dead-pool) *camera-master-dead-pool*)
   (set! (-> ctx dead-pool-16k) *16k-dead-pool*)
   (set! (-> ctx dead-pool-8k) *8k-dead-pool*)
+  (set! (-> ctx run-attack-mods) *run-attack-mods*)
+  (set! (-> ctx wade-surface) *wade-surface*)
+  (set! (-> ctx target-shadow-control) *target-shadow-control*)
   (none))
 
 (defun coop-load-context ((ctx coop-player-context))
@@ -143,6 +162,9 @@
   (set! *camera-master-dead-pool* (-> ctx camera-master-dead-pool))
   (set! *16k-dead-pool* (-> ctx dead-pool-16k))
   (set! *8k-dead-pool* (-> ctx dead-pool-8k))
+  (set! *run-attack-mods* (-> ctx run-attack-mods))
+  (set! *wade-surface* (-> ctx wade-surface))
+  (set! *target-shadow-control* (-> ctx target-shadow-control))
   (none))
 
 (defun coop-switch-context ((idx int))
