@@ -1205,7 +1205,9 @@
          ;; og:preserve-this coop: the extra slots (array indices 3 and 4, issue #110) share the near
          ;; regions of slots 0 and 1: on PC a level's near textures are mapped again by its own texture
          ;; bucket every frame (upload-vram-pages sends the page, the renderer maps all of segment 2), so
-         ;; two levels can take turns in one region.
+         ;; two levels can take turns in one region. add-tex-to-dma! only sends the near upload under
+         ;; 20 m, but on PC that is every frame: the per-frame reset of closest-object is commented out
+         ;; (drawable.gc) and activation sets it to 0.0, so the distance stays 0 (checked in game, #127).
          (cond
            ((or (zero? level-idx) (= level-idx 3)) (texture-page-near-allocate-0 pool page heap mode)) ;; og:preserve-this coop
            ((or (= level-idx 1) (= level-idx 4)) (texture-page-near-allocate-1 pool page heap mode)))))))
@@ -1335,8 +1337,6 @@
 ;; for movie hack.
 (defun-extern movie? symbol)
 
-(define-extern coop-near-region-shared? (function level symbol)) ;; og:preserve-this coop (splitscreen.gc, #127)
-
 (defmethod add-tex-to-dma! ((this texture-pool) (level level) (tex-page-kind int))
   "For the given tpage-kind, upload as needed for the level"
   (when (= tex-page-kind (tpage-kind tfrag)) ;; TFRAG (0)
@@ -1353,10 +1353,7 @@
         ;; reset upload size counter.
         (set! (-> level upload-size 0) 0)
         ;; near upload.
-        ;; og:preserve-this coop: also when the level shares its near region with an active level in the
-        ;; other slot of the pair (0/3, 1/4, issue #110): whatever is drawn after this bucket must find
-        ;; this level's textures in the region, not the other level's.
-        (if (or (< distance (meters 20)) (coop-near-region-shared? level))
+        (if (< distance (meters 20))
           (set! (-> level upload-size 0)
                 (+ (-> level upload-size 0) (upload-vram-pages this (-> this segment-near) tfrag-page 2 tfrag-bucket))))
         (cond
