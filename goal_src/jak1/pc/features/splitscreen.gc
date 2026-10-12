@@ -1927,6 +1927,40 @@
     (set! *coop-wants-backed-up?* #f))
   (none))
 
+(defun coop-backup-want-index ((name symbol))
+  "The want entry of the backed-up load state that holds the level called name, or -1."
+  (dotimes (i (load-want-count))
+    (if (= (-> (load-want *backup-load-state* i) name) name) (return i)))
+  -1)
+
+(defun coop-crossing-to-backup ((crossing object))
+  "check-boundary hook, after a player's crossing ran its command: while a load state is backed up
+   (an ambient's spooled animation runs, the sage's lines at his hut), the crossing goes into the
+   backup too. Restoring it otherwise undid what the other player walked into: a level they had
+   displayed was switched off under them. Crossings only run while border? is on, which cutscenes
+   with their own camera turn off, so these are always the players' own crossings."
+  (when (and (coop-active?) *coop-wants-backed-up?*)
+    (let ((cmd (the-as load-boundary-crossing-command crossing)))
+      (case (-> cmd cmd)
+        (((load-boundary-cmd load))
+         ;; the crossing player's pair in the backed-up pairs, and the backup's wants from those
+         (let ((live (new 'stack-no-clear 'coop-wants)))
+           (mem-copy! (the-as pointer live) (the-as pointer *coop-wants*) (size-of coop-wants))
+           (mem-copy! (the-as pointer *coop-wants*) (the-as pointer *coop-wants-backup*) (size-of coop-wants))
+           (set! *coop-want-player* *coop-boundary-player*)
+           (coop-want-levels *backup-load-state* (the-as symbol (-> cmd lev0)) (the-as symbol (-> cmd lev1)))
+           (mem-copy! (the-as pointer *coop-wants-backup*) (the-as pointer *coop-wants*) (size-of coop-wants))
+           (mem-copy! (the-as pointer *coop-wants*) (the-as pointer live) (size-of coop-wants))))
+        (((load-boundary-cmd display))
+         (let ((i (coop-backup-want-index (the-as symbol (-> cmd lev0)))))
+           (if (>= i 0) (set! (-> (load-want *backup-load-state* i) display?) (the-as symbol (-> cmd lev1))))))
+        (((load-boundary-cmd force-vis))
+         (let ((i (coop-backup-want-index (the-as symbol (-> cmd lev0)))))
+           (if (>= i 0) (set! (-> (load-want *backup-load-state* i) force-vis?) (the-as symbol (-> cmd lev1))))))
+        (((load-boundary-cmd vis))
+         (set! (-> *backup-load-state* vis-nick) (the-as symbol (-> cmd lev0)))))))
+  (none))
+
 (defun coop-pair-has? ((p int) (name symbol))
   "Is the level called name in player p's pair?"
   (or (= name (-> *coop-wants* name (* 2 p))) (= name (-> *coop-wants* name (+ (* 2 p) 1)))))
