@@ -78,7 +78,7 @@
   ((want-extra level-buffer-state 2 :inline)))
 
 (defmacro load-want (ls idx)
-  "Want entry idx (0 .. (-> *level* length)) of the load-state ls: 0 and 1 are the original ones."
+  "Want entry idx (0 .. (-> *level* length) - 1) of the load-state ls: 0 and 1 are the original ones."
   (if (integer? idx)
     (if (< idx 2) `(-> ,ls want ,idx) `(-> (the-as coop-load-state ,ls) want-extra ,(- idx 2)))
     `(let ((i ,idx)) (if (< i 2) (-> ,ls want i) (-> (the-as coop-load-state ,ls) want-extra (- i 2))))))

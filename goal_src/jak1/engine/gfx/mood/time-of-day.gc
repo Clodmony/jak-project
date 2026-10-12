@@ -223,9 +223,7 @@
              (set! (-> s4-0 s3-0) (-> s2-0 level-distance))
              (tod-mood-set! arg0 idx (-> s2-0 mood)) ;; og:preserve-this coop
              ;; run its mood callback
-             ((-> s2-0 mood-func) (-> s2-0 mood) (-> arg0 time) idx) ;; og:preserve-this coop
-             ;; sky count
-             (if (and (= (-> s2-0 status) 'active) (-> s2-0 info sky)) (+! s5-0 1)))
+             ((-> s2-0 mood-func) (-> s2-0 mood) (-> arg0 time) idx)) ;; og:preserve-this coop
             (else
              ;; level is no good. Use the default mood in its place.
              (set! (-> s4-0 s3-0) 4095996000.0)
@@ -250,6 +248,9 @@
       (set! (-> (the-as coop-time-of-day-context arg0) blend-slot-b) idx-b)
       (let ((lev-a (level-slot idx-a))
             (lev-b (level-slot idx-b)))
+      ;; og:preserve-this coop: sky count, of the blended pair only (the other slots draw no sky)
+      (if (and (= (-> lev-a status) 'active) (-> lev-a info sky)) (+! s5-0 1))
+      (if (and (= (-> lev-b status) 'active) (-> lev-b info sky)) (+! s5-0 1))
       ;; now pick desired interpolation weights
       (let* ((f0-6 (-> s4-0 idx-a)) ;; og:preserve-this coop
              (f1-0 (-> s4-0 idx-b))
@@ -377,13 +378,9 @@
            (let ((f0-20 (-> lev-a info sun-fade)))
              (set! (-> arg0 sun-fade) (+ f0-20 (* f30-0 (- (-> lev-b info sun-fade) f0-20)))))))
         ;; setup sky stuff: a's share of the sky is 1 - interp, b's interp, the other slots draw none
-        (dotimes (s4-5 (-> *level* length))
-          (make-sky-textures-for-level arg0
-                             (level-slot-index s4-5)
-                             (cond
-                               ((= s4-5 idx-a) (- 1.0 f30-0))
-                               ((= s4-5 idx-b) f30-0)
-                               (else 0.0))))
+        ;; (make-sky-textures-for-level gives a lone sky all of it, so only a and b may ask)
+        (make-sky-textures-for-level arg0 (level-slot-index idx-a) (- 1.0 f30-0))
+        (make-sky-textures-for-level arg0 (level-slot-index idx-b) f30-0)
         (set! (-> sky-base-polygons 0 col quad) (-> s5-1 erase-color quad))
         (set! (-> sky-base-polygons 1 col quad) (-> s5-1 erase-color quad))
         (set! (-> sky-base-polygons 2 col quad) (-> s5-1 erase-color quad))
