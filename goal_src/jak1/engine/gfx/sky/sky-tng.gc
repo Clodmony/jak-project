@@ -898,14 +898,17 @@
   (none))
 
 (defun make-sky-textures ((arg0 time-of-day-context) (arg1 int))
-  ;; og:preserve-this coop: the original, for slot 0 or 1 with the weight from current-interp; the time
-  ;; of day update calls make-sky-textures-for-level for every slot (issue #110)
+  ;; og:preserve-this coop: the original, for slot 0 or 1 with the weight from current-interp. The game no
+  ;; longer calls it: the time of day update calls make-sky-textures-for-level for the blended pair
+  ;; (issue #110). It stays for the REPL and mods that call it, as declared in sky-h.gc.
   (let ((f30-0 (-> arg0 current-interp)))
     (if (zero? arg1) (set! f30-0 (- 1.0 f30-0)))
     (make-sky-textures-for-level arg0 arg1 f30-0))
   0
   (none))
 
+;; og:preserve-this coop: with one sky in the blended pair (active-count 1) that sky gets all of it, so
+;; update-time-of-day calls this for the pair a and b only (issue #110)
 (defun make-sky-textures-for-level ((arg0 time-of-day-context) (arg1 int) (weight float))
   ;; og:preserve-this coop: arg1 is a level array index (any of the four slots) and weight its share of
   ;; the sky (issue #110); the original took slot 0 or 1 and derived the weight from current-interp.

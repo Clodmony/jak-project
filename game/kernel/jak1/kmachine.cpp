@@ -547,10 +547,14 @@ void pc_set_levels(u32 lev_list) {
 }
 
 // Local co-op (issue #110): the order the renderer draws the buckets in, so the game can link its DMA
-// chain that way (dma-buffer-patch-buckets). dest is an array of count int32.
+// chain that way (dma-buffer-patch-buckets). dest is an array of count int32. count is GOAL's
+// BUCKET_COUNT: it has to match the renderer's bucket list, or some buckets would never be drawn.
 void pc_get_bucket_draw_order(u32 dest, u32 count) {
+  ASSERT_MSG(count == jak1::kBucketDrawOrder.size(),
+             fmt::format("GOAL has {} buckets, the renderer's draw order {}", count,
+                         jak1::kBucketDrawOrder.size()));
   s32* out = Ptr<s32>(dest).c();
-  for (u32 i = 0; i < count && i < jak1::kBucketDrawOrder.size(); i++) {
+  for (u32 i = 0; i < count; i++) {
     out[i] = (s32)jak1::kBucketDrawOrder[i];
   }
 }

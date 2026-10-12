@@ -102,30 +102,43 @@
    (blend-slot-a        int32) ;; the slots the mood blended last frame (update-time-of-day)
    (blend-slot-b        int32)))
 
+;; The accessors below take the array index of a level slot (0 1 3 4). level-default (index 2) has no
+;; mood: the original arrays only hold indices 0 and 1, so index 2 stops the game (bad-level-index!).
+(defmacro tod-check-slot-index (idx where)
+  `(if (or (= ,idx LEVEL_DEFAULT_INDEX) (< ,idx 0) (>= ,idx LEVEL_INDEX_COUNT)) (bad-level-index! ,where (the-as int ,idx))))
+
+(defmacro tod-slot-field (tod idx field extra)
+  "(-> tod field idx) for array index 0 or 1, (-> tod extra (- idx 3)) for 3 or 4."
+  `(let ((i ,idx))
+    (tod-check-slot-index i ,(symbol->string field))
+    (if (< i LEVEL_DEFAULT_INDEX) (-> ,tod ,field i) (-> (the-as coop-time-of-day-context ,tod) ,extra (- i 3)))))
+
 (defmacro tod-mood (tod idx)
   "The mood of the level with array index idx."
-  `(let ((i ,idx)) (if (< i 3) (-> ,tod moods i) (-> (the-as coop-time-of-day-context ,tod) moods-extra (- i 3)))))
+  `(tod-slot-field ,tod ,idx moods moods-extra))
 
 (defmacro tod-light-mask-0 (tod idx)
-  `(let ((i ,idx)) (if (< i 3) (-> ,tod light-masks-0 i) (-> (the-as coop-time-of-day-context ,tod) light-masks-0-extra (- i 3)))))
+  `(tod-slot-field ,tod ,idx light-masks-0 light-masks-0-extra))
 
 (defmacro tod-light-mask-1 (tod idx)
-  `(let ((i ,idx)) (if (< i 3) (-> ,tod light-masks-1 i) (-> (the-as coop-time-of-day-context ,tod) light-masks-1-extra (- i 3)))))
+  `(tod-slot-field ,tod ,idx light-masks-1 light-masks-1-extra))
 
 (defmacro tod-light-interp (tod idx)
-  `(let ((i ,idx)) (if (< i 3) (-> ,tod light-interp i) (-> (the-as coop-time-of-day-context ,tod) light-interp-extra (- i 3)))))
+  `(tod-slot-field ,tod ,idx light-interp light-interp-extra))
 
 (defun tod-mood-set! ((tod time-of-day-context) (idx int) (mood mood-context))
   "Set the mood of the level with array index idx."
-  (if (< idx 3)
+  (tod-check-slot-index idx "tod-mood-set!")
+  (if (< idx LEVEL_DEFAULT_INDEX)
     (set! (-> tod moods idx) mood)
     (set! (-> (the-as coop-time-of-day-context tod) moods-extra (- idx 3)) mood))
   (none))
 
 (defun tod-light-set! ((tod time-of-day-context) (idx int) (mask0 uint) (mask1 uint) (interp float))
   "Set the light masks and interpolation of the level with array index idx."
+  (tod-check-slot-index idx "tod-light-set!")
   (cond
-    ((< idx 3)
+    ((< idx LEVEL_DEFAULT_INDEX)
      (set! (-> tod light-masks-0 idx) mask0)
      (set! (-> tod light-masks-1 idx) mask1)
      (set! (-> tod light-interp idx) interp))
