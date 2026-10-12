@@ -98,7 +98,9 @@
   ((moods-extra         mood-context 2)
    (light-masks-0-extra uint8 2)
    (light-masks-1-extra uint8 2)
-   (light-interp-extra  float 2)))
+   (light-interp-extra  float 2) ;; og:preserve-this coop
+   (blend-slot-a        int32) ;; the slots the mood blended last frame (update-time-of-day)
+   (blend-slot-b        int32)))
 
 (defmacro tod-mood (tod idx)
   "The mood of the level with array index idx."
