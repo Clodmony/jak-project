@@ -1027,8 +1027,10 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defun coop-on-level-leaving ((lev level))
-  "Level loading follows player 1. Called right before lev is discarded or hidden: if player 2 is
-   in it (and not in the other displayed level), bring player 2 to player 1 before its floor goes."
+  "Called right before lev is discarded or hidden. Loading keeps both players' levels (see level
+   streaming for both players below), so this is the fallback for a level that goes anyway (a
+   checkpoint's or cutscene's load commands, a warp): if player 2 is in it (and in no other displayed
+   level), bring player 2 to player 1 before its floor goes."
   (let ((p1 (coop-player-target 0))
         (p2 (coop-player-target 1)))
     (when p2
@@ -1915,7 +1917,7 @@
 ;; whose crossings check-boundary looks at (0 player 1, 1 player 2)
 (define *coop-boundary-player* 0)
 
-;; a move longer than this in one frame is a teleport (respawn, warp, being held back): no crossing
+;; a move longer than this in one frame is a teleport (respawn, warp, the leash): no crossing
 (defconstant COOP_BOUNDARY_JUMP (meters 10))
 
 ;;;; Four level slots (issue #110): each player's own pair of levels
@@ -2071,10 +2073,17 @@
   (when (< (-> *level* length) COOP_LEVEL_SLOTS)
     (let* ((heap0 (-> (level-slot 0) heap))
            (level-heap-size (&- (-> heap0 top-base) (the-as uint (-> heap0 base)))))
+      ;; slot 0's heap comes from alloc-levels!, which runs first
+      (when (<= level-heap-size 0)
+        (format 0 "ERROR: coop-alloc-extra-levels!: level slot 0 has no heap yet~%")
+        (crash!))
       (dotimes (s COOP_LEVEL_SLOTS)
         (let ((heap (-> (level-slot s) heap)))
           (when (zero? (-> heap base))
             (set! (-> heap base) (malloc 'global level-heap-size))
+            (when (zero? (-> heap base))
+              (format 0 "ERROR: coop-alloc-extra-levels!: no memory for level slot ~D's heap (~D KB)~%" s (/ level-heap-size 1024))
+              (crash!))
             (set! (-> heap current) (-> heap base))
             (set! (-> heap top-base) (&+ (-> heap base) level-heap-size))
             (set! (-> heap top) (-> heap top-base)))))
@@ -2399,8 +2408,8 @@
           (coop-spawn-player2 (coop-safe-position-near p1 (new 'stack-no-clear 'vector))))))
       (else
        (set! (-> *coop-timers* p2-missing) 0)
-       ;; distance leash, a safety net only: streaming follows both players and a player heading for
-       ;; a third level is held back (coop-boundary-command-ok?).
+       ;; distance leash, a safety net only: streaming keeps each player's own pair of levels (four
+       ;; slots, coop-want-levels), so the players may go to different levels.
        ;; no leash in a zoomer section: they race the level at their own pace, and a player who died
        ;; starts again from the checkpoint
        (when (and (-> *coop* leash?)

@@ -45,8 +45,12 @@
     (else (-> (the-as coop-subdivide-settings settings) far-extra (- idx 3)))))
 
 (defun subdivide-level-set! ((settings subdivide-settings) (idx int) (close float) (far float))
-  "Set the close and far distances of the level with array index idx."
+  "Set the close and far distances of the level with array index idx, or the debug menu's for
+   SUBDIVIDE_OVERRIDE_INDEX."
   (cond
+    ((< idx 0)
+     (set! (-> settings close 3) close)
+     (set! (-> settings far 3) far))
     ((< idx 3)
      (set! (-> settings close idx) close)
      (set! (-> settings far idx) far))

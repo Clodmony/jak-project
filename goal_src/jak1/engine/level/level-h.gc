@@ -35,7 +35,7 @@
     `(let ((i ,idx)) (if (< i LEVEL_DEFAULT_INDEX) i (- i 1)))))
 
 (defmacro level-slot (slot &key (group *level*))
-  "The level in slot slot (0 .. (-> *level* length)). Use this for loops over the slots: the array index
+  "The level in slot slot (0 .. (-> *level* length) - 1). Use this for loops over the slots: the array index
    skips level-default."
   `(-> ,group level (level-slot-index ,slot)))
 
