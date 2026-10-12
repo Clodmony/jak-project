@@ -362,6 +362,7 @@
 (define-extern coop-racer-finish-ready? (function process-drawable symbol))
 (define-extern coop-racer-may-get-off? (function process symbol))
 (define-extern coop-racer-note-death (function target none))
+(define-extern coop-racer-forget-death (function target none))
 (define-extern coop-flut-rider (function target))
 (define-extern coop-flut-mount-at-pad? (function process-drawable target symbol))
 (define-extern coop-flut-cell-ready? (function process-drawable symbol))
