@@ -237,6 +237,13 @@ the same behaviour as the existing PC "force actors" option, without changing th
   checks each player at the car (`coop-for-each-player-context`) and either can start it; the
   gondola is pinned to the player who pressed for the ride, and at the other end the other player
   is put next to them (`coop-put-other-player-near`).
+- Lost Precursor City's exit chamber: its origin also stays at the bottom. The button's press pins
+  the chamber to the player at the button and puts the other player next to them; while the chamber
+  holds its rider in place during the ride, the other one is held 1.5 m beside
+  (`coop-carry-other-player`). Its door at the top stays open while either player is near.
+- An NPC scene started by an event (`been-kicked`, e.g. the Citadel sages' scenes sent by their fuel
+  cell) waits for the previous scene's camera to end before grabbing the player: a held player
+  refuses a second grab, so grabbing first could leave both players held for good.
 - Rumble goes to the pad of the player it is about: target code, crates and orbs (`coop-player-cpad`); eco pickups, the zoomer and the flut flut use the player's own pad (`control cpad`), yellow and blue eco shots the shooter's (`projectile-owner-cpad`), the jungle bouncer the player who bounced.
 - Moving platforms reserve at least two rider slots.
 - Pause: right before `determine-pause-mode`, player 2's Start/Select are merged into pad 0, and a
