@@ -397,6 +397,8 @@
 
 ;; both players' pairs become the first two wants (co-op start, checkpoint reload)
 (define-extern coop-wants-reset (function none))
+(define-extern coop-wants-backup (function none))
+(define-extern coop-wants-restore (function none))
 
 ;; load-boundary.gc: the wants become the given names (the original want-levels for any count)
 (define-extern load-state-want-names (function load-state (pointer symbol) int int))
