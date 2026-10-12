@@ -1209,13 +1209,21 @@
     -1))
 
 (defun coop-particle-target ((info sparticle-cpuinfo))
-  "The target of the player whose hud launched a 2d particle (hud-classes' health petals): particles
-   are simulated once for both huds, in whatever context process-particles runs in. *target* without
-   co-op or when the owner is unknown."
+  "The target of the player whose process launched a particle (a hud's health petals, the sparks of a
+   wall smack): particle callbacks run once for both players, in whatever context process-particles
+   runs in (#26). *target* without co-op or when the owner is unknown."
   (if (coop-active?)
     (let ((owner (coop-sprite-owner info)))
       (if (>= owner 0) (coop-player-target owner) *target*))
     *target*))
+
+(defun coop-particle-hud-parts ((info sparticle-cpuinfo))
+  "The hud-parts of the player whose hud launched a particle: the callbacks of hud particles read the
+   scale of their hud from *hud-parts* (#26). *hud-parts* without co-op or when the owner is unknown."
+  (if (coop-active?)
+    (let ((owner (coop-sprite-owner info)))
+      (if (or (< owner 0) (= owner *coop-player*)) *hud-parts* (-> (coop-context owner) hud-parts)))
+    *hud-parts*))
 
 (defun coop-add-hud-sprite-data ((dma-buff dma-buffer) (data pointer) (start int) (count int))
   "*coop-hud-sprite-hook*: screen sprites (HUD particles: health, the periscope's binocular mask, the

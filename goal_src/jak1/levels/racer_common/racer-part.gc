@@ -9,7 +9,7 @@
 ;; DECOMP BEGINS
 
 (defun part-hud-racer-speed-func ((arg0 sparticle-system) (arg1 sparticle-cpuinfo) (arg2 matrix))
-  (let* ((f0-0 (-> *target* control ctrl-xz-vel))
+  (let* ((f0-0 (-> (coop-particle-target arg1) control ctrl-xz-vel)) ;; og:preserve-this coop: the hud's own player
          (f0-1 (cond
                  ((>= 122880.0 f0-0) (lerp-scale 42780.445 27488.71 f0-0 0.0 122880.0))
                  ((>= 131072.0 f0-0) (lerp-scale 27488.71 14927.645 f0-0 122880.0 131072.0))
@@ -19,7 +19,7 @@
                  ((>= 163840.0 f0-0) (lerp-scale -6371.5557 -10922.667 f0-0 155648.0 163840.0))
                  (else (lerp-scale -10922.667 -15473.777 f0-0 163840.0 172032.0)))))
     (cond
-      ((< (-> *hud-parts* bike-speed 0 offset) 10)
+      ((< (-> (coop-particle-hud-parts arg1) bike-speed 0 offset) 10) ;; og:preserve-this coop
        (if (< f0-1 (-> arg2 vector 1 z))
          (set! (-> arg2 vector 1 z) (deg-seek (-> arg2 vector 1 z) f0-1 (* 131072.0 (seconds-per-frame))))
          (set! (-> arg2 vector 1 z) (deg-seek (-> arg2 vector 1 z) f0-1 (* 32768.0 (seconds-per-frame))))))
@@ -89,7 +89,7 @@
    (:flags (bit2 bit9))))
 
 (defun part-hud-racer-heat-func ((arg0 sparticle-system) (arg1 sparticle-cpuinfo) (arg2 matrix))
-  (let ((f0-1 (/ (-> *target* racer heat) (-> *RACER-bank* heat-max))))
+  (let ((f0-1 (/ (-> (coop-particle-target arg1) racer heat) (-> *RACER-bank* heat-max)))) ;; og:preserve-this coop: the hud's own player
     (set! (-> arg2 vector 1 z) (* 182.04445 (+ -45.0 (* 215.0 f0-1))))
     (cond
       ((and (< 0.8 f0-1) (not (logtest? (the int (* DISPLAY_FPS_RATIO (-> *display* integral-frame-counter))) 8))) ;; og:preserve-this changed for high fps
@@ -117,20 +117,20 @@
   (none))
 
 (defun part-hud-zoomer-heat-slice-01-func ((arg0 sparticle-system) (arg1 sparticle-cpuinfo) (arg2 matrix))
-  (let ((f0-1 (/ (-> *target* racer heat) (-> *RACER-bank* heat-max))))
+  (let ((f0-1 (/ (-> (coop-particle-target arg1) racer heat) (-> *RACER-bank* heat-max)))) ;; og:preserve-this coop: the hud's own player
     (set! (-> arg2 vector 1 z) (* 182.04445 (+ -135.0 (* 215.0 f0-1))))
     (zoomer-heat-slice-color arg2 f0-1))
   (none))
 
 (defun part-hud-zoomer-heat-slice-02-func ((arg0 sparticle-system) (arg1 sparticle-cpuinfo) (arg2 matrix))
-  (let ((f0-1 (/ (-> *target* racer heat) (-> *RACER-bank* heat-max))))
+  (let ((f0-1 (/ (-> (coop-particle-target arg1) racer heat) (-> *RACER-bank* heat-max)))) ;; og:preserve-this coop: the hud's own player
     (set! (-> arg2 vector 1 z) (* 182.04445 (+ -225.0 (* 215.0 f0-1))))
     (if (< (-> arg2 vector 1 z) -24576.0) (set! (-> arg2 vector 1 z) -24576.0))
     (zoomer-heat-slice-color arg2 f0-1))
   (none))
 
 (defun part-hud-zoomer-heat-slice-03-func ((arg0 sparticle-system) (arg1 sparticle-cpuinfo) (arg2 matrix))
-  (let ((f0-1 (/ (-> *target* racer heat) (-> *RACER-bank* heat-max))))
+  (let ((f0-1 (/ (-> (coop-particle-target arg1) racer heat) (-> *RACER-bank* heat-max)))) ;; og:preserve-this coop: the hud's own player
     (set! (-> arg2 vector 1 z) (* 182.04445 (+ -315.0 (* 215.0 f0-1))))
     (if (< (-> arg2 vector 1 z) -24576.0) (set! (-> arg2 vector 1 z) -24576.0))
     (zoomer-heat-slice-color arg2 f0-1))
