@@ -370,6 +370,8 @@
 (define-extern coop-move-other-rider (function process-drawable vector none))
 (define-extern coop-pin-to-player (function process handle symbol))
 (define-extern coop-unpin (function process none))
+(define-extern coop-death-pin-attacker (function target none))
+(define-extern coop-death-unpin-attacker (function target none))
 (define-extern coop-look-through-here? (function symbol))
 (define-extern coop-look-through-player (function int))
 (define-extern coop-pin-minigame (function process handle none))
