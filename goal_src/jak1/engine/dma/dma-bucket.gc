@@ -60,9 +60,10 @@
 (__pc-get-bucket-draw-order (-> *bucket-draw-order* data) BUCKET_COUNT)
 
 (defun dma-buffer-patch-buckets ((bucket (inline-array dma-bucket)) (count int))
-  "After adding all data to buckets, call this to stitch together the chains for
-  count consecutive buckets"
-  ;; og:preserve-this coop: in draw order (*bucket-draw-order*), the last one leads past the buckets
+  "After adding all data to buckets, call this to stitch together the chains of the count buckets
+  in draw order (*bucket-draw-order*, the renderer's), the last one leading past the buckets. Returns
+  the end of the buckets."
+  ;; og:preserve-this coop: was bucket order, buckets 0 .. count - 1
   (when (nonzero? bucket)
     (dotimes (i count)
       (let ((b (-> bucket (-> *bucket-draw-order* i)))

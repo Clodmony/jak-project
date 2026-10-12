@@ -1474,7 +1474,8 @@
     ;; the extra slots must lie where (-> *level* level 3) and (-> *level* level 4) point
     (when (or (!= (-> lev-group level 3) (-> (the-as coop-level-group lev-group) level3))
               (!= (-> lev-group level 4) (-> (the-as coop-level-group lev-group) level4)))
-      (format 0 "ERROR: coop-level-group: the extra level slots are not at array indices 3 and 4~%"))))
+      (format 0 "ERROR: coop-level-group: the extra level slots are not at array indices 3 and 4~%")
+      (crash!))))
 
 (defmacro test-play ()
   `(begin

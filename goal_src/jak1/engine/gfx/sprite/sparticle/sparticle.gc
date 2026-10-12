@@ -428,7 +428,8 @@
           ((0) (sp-cpuinfo-flag level0))
           ((1) (sp-cpuinfo-flag level1))
           ((3) (sp-cpuinfo-flag level2))
-          (else (sp-cpuinfo-flag level3))))
+          ((4) (sp-cpuinfo-flag level3))
+          (else (bad-level-index! "kill-all-particles-in-level" (the-as int (-> arg0 index))) (sp-cpuinfo-flag level3))))
   (forall-particles sparticle-kill-it-level #t #t)
   0)
 
