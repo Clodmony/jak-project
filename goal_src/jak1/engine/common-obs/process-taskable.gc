@@ -603,8 +603,11 @@
                   (go-virtual play-anim))))))))
       (if (= (-> *level* loading-level) (-> *level* level-default)) (process-taskable-method-33 self))
       (draw-npc-shadow self)
+      ;; og:preserve-this coop: grab only once the other camera is gone. The green sage's scenes (sent by
+      ;; the fuel cell while its camera was still ending) grabbed first, then waited for the camera: a
+      ;; held player refuses the next grab, so the scenes never started and both players stayed held
       (when (and (-> self been-kicked)
-                 (and (not *progress-process*) (process-grab? *target*) (not (handle->process (-> *game-info* other-camera-handle)))))
+                 (and (not *progress-process*) (not (handle->process (-> *game-info* other-camera-handle))) (process-grab? *target*))) ;; og:preserve-this coop
         (set! (-> self been-kicked) #f)
         (send-event *target* 'trans 'save (-> self old-target-pos))
         (go-virtual play-anim))

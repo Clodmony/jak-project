@@ -442,7 +442,8 @@
       (let ((a1-6 (new 'stack-no-clear 'vector)))
         (set! (-> a1-6 quad) (-> s5-1 button-pos quad))
         (+! (-> a1-6 y) 2662.4)
-        (move-to-point! (-> *target* control) a1-6))
+        (move-to-point! (-> *target* control) a1-6)
+        (coop-carry-other-player *target* a1-6)) ;; og:preserve-this coop: the other player rides along
       (vector-reset! (-> *target* control transv)))
     (if (-> this door) (send-event (ppointer->process (-> this door)) 'move-to (-> s5-1 door-pos) (-> s5-1 door-quat)))
     (when arg0
@@ -455,6 +456,18 @@
                 (logior! (-> v1-50 status) (entity-perm-status user-set-from-cstage))
                 (set! (-> v1-50 user-int8 0) 1)))
             (send-event a0-12 'trans (-> s5-1 fcell-pos))))))))
+
+;; og:preserve-this coop
+(defun exit-chamber-pin-to-rider ((this exit-chamber))
+  "Pin the chamber to the player who pressed its button (the one nearest to it) for the ride, and put
+   the other player next to them, wherever they are: both ride along (as with the gondola)."
+  (let ((button (the-as process-drawable (ppointer->process (-> this button)))))
+    (when button
+      (let ((rider (coop-player-target (coop-nearest-player-at this (-> button root trans)))))
+        (when rider
+          (coop-pin-to-player this (process->handle rider))
+          (coop-put-other-player-near rider (-> rider control trans))))))
+  (none))
 
 (defstate exit-chamber-charger-puzzle (exit-chamber)
   :event
@@ -505,7 +518,13 @@
     (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
       (local-vars (v0-1 object))
       (case message
-        (('trigger) (go exit-chamber-rise) (return #t) v0-1)
+        (('trigger)
+         ;; og:preserve-this coop: the chamber's origin stays at the bottom, so the ride runs for the
+         ;; player at the button (pinned until it ends), not for whoever is nearer to the origin
+         (exit-chamber-pin-to-rider self)
+         (go exit-chamber-rise)
+         (return #t)
+         v0-1)
         (('notify)
          (when (and (= (-> proc type) fuel-cell) (= (-> block param 0) 'pickup))
            (let ((a0-5 (handle->process (-> self fcell-handle))))
@@ -612,6 +631,7 @@
         (seek! (-> self wave-scale) 1.0 0.0016666667)
         (exit-chamber-method-20 self (-> self wave-scale))
         (suspend))
+      (coop-unpin self) ;; og:preserve-this coop
       (go exit-chamber-idle-in-village #f))
   :post
     (behavior ()
@@ -622,7 +642,7 @@
   :event
     (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
       (case message
-        (('trigger) (go exit-chamber-lower))
+        (('trigger) (exit-chamber-pin-to-rider self) (go exit-chamber-lower)) ;; og:preserve-this coop
         (('notify)
          (when (and (= (-> proc type) fuel-cell) (= (-> block param 0) 'pickup))
            (let ((a0-5 (handle->process (-> self fcell-handle))))
@@ -643,6 +663,9 @@
       (rider-trans)
       (when *target*
         (let ((f30-0 (vector-vector-xz-distance (target-pos 0) (-> self last-pos))))
+          ;; og:preserve-this coop: the door stays open while either player is near, not only the one
+          ;; the chamber runs for
+          (coop-for-each-player-context (set! f30-0 (fmin f30-0 (vector-vector-xz-distance (target-pos 0) (-> self last-pos)))))
           (when (-> self door)
             (if (and *target* (>= 114688.0 f30-0))
               (send-event (ppointer->process (-> self door)) 'trigger)
@@ -739,6 +762,7 @@
       (until (time-elapsed? (-> self state-time) (seconds 3))
         (suspend))
       (set-continue! *game-info* "sunkenb-start")
+      (coop-unpin self) ;; og:preserve-this coop
       (go exit-chamber-idle-in-sunken))
   :post
     (behavior ()

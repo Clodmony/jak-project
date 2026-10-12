@@ -1860,6 +1860,23 @@
           (format 0 "[coop] player ~D is put next to player ~D~%" (+ 1 (coop-process-player other)) (+ 1 (coop-process-player tgt)))))))
   (none))
 
+(defun coop-carry-other-player ((tgt target) (pos vector))
+  "A script holds tgt at pos every frame (the Lost Precursor City exit chamber): the other player is
+   held 1.5 m beside it. The first frame puts them there with coop-put-other-player-near (their
+   camera jumps along)."
+  (when (coop-active?)
+    (let ((other (coop-other-player-target tgt)))
+      (when (and other (not (logtest? (-> other state-flags) (state-flags dying))))
+        (cond
+          ((< (meters 3) (vector-vector-distance (-> other control trans) pos)) (coop-put-other-player-near tgt pos))
+          (else
+           (let ((dest (new 'stack-no-clear 'vector)))
+             (set! (-> dest quad) (-> pos quad))
+             (+! (-> dest x) (meters 1.5))
+             (set! (-> other control transv quad) (the-as uint128 0))
+             (move-to-point! (-> other control) dest)))))))
+  (none))
+
 (defun coop-send-to-other-camera ((proc process) (msg symbol) (arg object))
   "Send msg to the camera of the player who doesn't own proc (with co-op)."
   (when (coop-active?)
