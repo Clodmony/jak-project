@@ -1385,7 +1385,8 @@
          (load-state-want-force-vis (the-as symbol (-> s4-0 lev0)) (the-as symbol (-> s4-0 lev1))))
         ((= (-> s4-0 cmd) (load-boundary-cmd checkpt))
          (format 0 "Setting continue to ~A~%" (-> s4-0 lev0))
-         (set-continue! *game-info* (-> s4-0 lev0))))))
+         (set-continue! *game-info* (-> s4-0 lev0))))
+      (coop-crossing-to-backup s4-0))) ;; og:preserve-this coop: a crossing survives restoring a backed-up load state
   (label cfg-28)
   (none))
 
