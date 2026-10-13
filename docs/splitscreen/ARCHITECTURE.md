@@ -110,12 +110,18 @@ C++ (`OpenGLRenderer::dispatch_buckets`, Jak 1 path only):
   between them (4+ px) is half blue next to player 1's view and half orange next to player 2's
   (`divider_rects`, `kPlayerColors`);
 - the normal present path (pcrtc, brightness, blackout) runs once.
-- occlusion vis is ignored on split frames (one vis buffer per level, written by one camera).
+- occlusion culling works per view: each view's buckets carry the vis of that view's camera.
 
 Per-view details: `was-drawn` is cleared only in view 0 (so it means "visible in any view"), light
 interpolation ramps once per frame, each player's HUD models draw only in their view,
-`level-distance`/vis/wind/look-through countdown are updated in view 0 only, and fog is copied from
-player 1's camera after `update-time-of-day`. Things that would otherwise run once per view: the
+`level-distance`/wind/look-through countdown are updated in view 0 only, and fog is copied from
+player 1's camera after `update-time-of-day`. Occlusion vis is kept per view: `update-visible` writes
+one camera's vis into the level (vis-bits, bsp leaf, the vis strings loaded, a pending vis string
+load), so player 2's pass trades in its own copy of that state per level slot (`coop-view-vis-enter`,
+`-exit`; its vis string loads go to its own buffer, `coop-view-vis-buffer` in `update-vis!`) and
+updates it for player 2's camera. Actor LOD: on a split frame each view draws the LOD for its own
+camera (`dma-add-process-drawable`), never finer than the LOD the joints were computed for, and the
+actor keeps the finest LOD of the views for its own logic. Things that would otherwise run once per view: the
 death-dissolve timer (`draw-bones`, skipped when view 0 already drew the object), the TIE wind
 springs in the C++ renderer (view 1 sends "paused"). Particle launchers aren't frustum culled while
 co-op runs (one camera can't decide for both views). The sprite distortion tables are copied into

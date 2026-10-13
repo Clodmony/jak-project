@@ -8,6 +8,10 @@
 
 ;; This file contains update-vis! which updates the vis-bits string from the loaded VIS file.
 
+;; og:preserve-this coop: player 2's view loads its vis strings into its own buffer (splitscreen.gc)
+(define-extern *coop-view* int)
+(define-extern coop-view-vis-buffer (function level (pointer uint8)))
+
 ;; DECOMP BEGINS
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -109,7 +113,7 @@
            (return #f))
          ;; we're done! Deal with the vis data.
          (logclear! (-> vis-info flags) (vis-info-flag waiting-for-iop-to-ee))
-         (set! vis-buffer (-> this vis-buffer))
+         (set! vis-buffer (if (zero? *coop-view*) (-> this vis-buffer) (coop-view-vis-buffer this))) ;; og:preserve-this coop
          (b! #t cfg-27 :delay (nop!)))
         (else
          ;; matched, and loaded! A previous run would have done setup.
@@ -159,7 +163,7 @@
         (ramdisk-load (the-as int vis-load-result) ;; file ID in ramdisk
                       desired-vis-str ;; the offset in the VIS file
                       (the-as uint 2048) ;; always do 2kB. it's a worst case if the string can't be compressed
-                      (-> this vis-buffer) ;; copy to the level buffer for vis data
+                      (if (zero? *coop-view*) (-> this vis-buffer) (coop-view-vis-buffer this)) ;; og:preserve-this coop: copy to the level buffer for vis data
                       )
         (set! result #f) ;; this takes time, so quit and report that we failed.
         (b! #t cfg-55 :delay (nop!))

@@ -406,8 +406,8 @@
   (set! (-> *instance-tie-work* guard-plane 1 quad) (-> *math-camera* guard-plane 1 quad))
   (set! (-> *instance-tie-work* guard-plane 2 quad) (-> *math-camera* guard-plane 2 quad))
   (set! (-> *instance-tie-work* guard-plane 3 quad) (-> *math-camera* guard-plane 3 quad))
-  ;; og:preserve-this coop: vis-bits are shared per level and wind is simulation, both follow view 0.
-  ;; (the renderer ignores occlusion vis on split-screen frames)
+  ;; og:preserve-this coop: wind is simulation, once per frame. Player 2's view updates its own vis
+  ;; (coop-view-vis-enter).
   (when (zero? *coop-view*)
     (update-visible *math-camera*)
     (if (not (paused?)) (update-wind *wind-work* *wind-scales*)))
