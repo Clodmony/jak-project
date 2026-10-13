@@ -1778,6 +1778,7 @@
   (local-coop-pad-back #x1716)
   (local-coop-pad-reconnect #x1717)
   (local-coop-press-start #x1718)
+  (local-coop-camera-speed #x1719)
 ;; GAME-TEXT-ID ENUM ENDS
   )
 
@@ -16068,6 +16069,7 @@
   (controller)
   (binding-assignment)
   (confirmation)
+  (coop-player)
   )
 
 (defenum game-option-menu

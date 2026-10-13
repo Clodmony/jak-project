@@ -1340,7 +1340,7 @@
       ((< arg0 28) (set! f0-0 (- (fmin arg1 (* 0.083333336 (- 28.0 (the float arg0)) arg1)))))
       ((< 160 arg0) (set! f0-0 (fmin arg1 (* 0.0125 (+ -160.0 (the float arg0)) arg1)))))
     ;; changed for pc port, only used for Third-Person Vertical camera
-    (#if PC_PORT (* (if (-> *pc-settings* third-camera-v-inverted?) 1.0 -1.0) f0-0) f0-0)))
+    (#if PC_PORT (* (if (coop-camera-inverted? third-camera-v-inverted?) 1.0 -1.0) (coop-camera-speed) f0-0) f0-0))) ;; og:preserve-this coop: per player
 
 ;; main third-person camera
 (defbehavior cam-string-joystick camera-slave ()

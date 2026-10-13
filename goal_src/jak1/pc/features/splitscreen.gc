@@ -2715,10 +2715,10 @@
 ;; co-op preferences file
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-;; The split layout and the co-op options are kept in their own file next to pc-settings.gc:
-;; pc-settings.gc must stay readable by other OpenGOAL builds sharing the folder, and those reject
-;; the whole file when it has a key they don't know. Whether co-op is on is not kept (every session
-;; starts single player).
+;; The split layout, the co-op options and the camera controls per player are kept in their own file
+;; next to pc-settings.gc: pc-settings.gc must stay readable by other OpenGOAL builds sharing the
+;; folder, and those reject the whole file when it has a key they don't know. Whether co-op is on is
+;; not kept (every session starts single player).
 
 (defconstant COOP_SETTINGS_VERSION 1)
 
@@ -2729,7 +2729,7 @@
   *coop-settings-path*)
 
 (defun coop-save-settings ()
-  "Write the split layout and co-op options to coop-settings.gc."
+  "Write the split layout, co-op options and camera controls per player to coop-settings.gc."
   (let ((path (coop-settings-path)))
     (pc-mkdir-file-path path)
     (let ((file (new 'stack 'file-stream path 'write)))
@@ -2739,6 +2739,13 @@
         (format file "  (every-ring? ~A)~%" (-> *coop* every-ring?))
         (format file "  (friendly-fire? ~A)~%" (-> *coop* friendly-fire?))
         (format file "  (tougher-bosses? ~A)~%" (-> *coop* tougher-bosses?))
+        ;; camera controls per player (player 1's inversions are in pc-settings.gc)
+        (format file "  (p1-camera-speed ~f)~%" (-> *coop-camera* 0 speed))
+        (format file "  (p2-first-camera-h-inverted? ~A)~%" (-> *coop-camera* 1 first-camera-h-inverted?))
+        (format file "  (p2-first-camera-v-inverted? ~A)~%" (-> *coop-camera* 1 first-camera-v-inverted?))
+        (format file "  (p2-third-camera-h-inverted? ~A)~%" (-> *coop-camera* 1 third-camera-h-inverted?))
+        (format file "  (p2-third-camera-v-inverted? ~A)~%" (-> *coop-camera* 1 third-camera-v-inverted?))
+        (format file "  (p2-camera-speed ~f)~%" (-> *coop-camera* 1 speed))
         (format file "  )~%")
         (file-stream-close file))))
   (none))
@@ -2746,6 +2753,27 @@
 (defun coop-read-flag ((file file-stream))
   "#t or #f, from the next word."
   (if (= (file-stream-read-symbol file) #t) #t #f))
+
+(defconstant COOP_CAMERA_SPEED_MIN 50.0)
+
+(defconstant COOP_CAMERA_SPEED_MAX 200.0)
+
+(defun coop-read-camera-speed ((file file-stream))
+  "A camera speed in percent, from the next word, kept within the menu slider's range."
+  (fmax COOP_CAMERA_SPEED_MIN (fmin COOP_CAMERA_SPEED_MAX (file-stream-read-float file))))
+
+(defun coop-reset-camera ((player int))
+  "Restore defaults on the camera options page: the original game's controls and speed for player."
+  (if (zero? player)
+    (reset-camera *pc-settings* #t)
+    (let ((cam (-> *coop-camera* 1)))
+      (set! (-> cam first-camera-h-inverted?) #f)
+      (set! (-> cam first-camera-v-inverted?) #t)
+      (set! (-> cam third-camera-h-inverted?) #t)
+      (set! (-> cam third-camera-v-inverted?) #t)))
+  (set! (-> *coop-camera* player speed) 100.0)
+  (coop-save-settings)
+  (none))
 
 (defun coop-load-settings ()
   "Read coop-settings.gc if there is one. Keys it doesn't know are skipped (a newer build's file)."
@@ -2767,6 +2795,12 @@
                  (("every-ring?") (set! (-> *coop* every-ring?) (coop-read-flag file)))
                  (("friendly-fire?") (set! (-> *coop* friendly-fire?) (coop-read-flag file)))
                  (("tougher-bosses?") (set! (-> *coop* tougher-bosses?) (coop-read-flag file)))
+                 (("p1-camera-speed") (set! (-> *coop-camera* 0 speed) (coop-read-camera-speed file)))
+                 (("p2-first-camera-h-inverted?") (set! (-> *coop-camera* 1 first-camera-h-inverted?) (coop-read-flag file)))
+                 (("p2-first-camera-v-inverted?") (set! (-> *coop-camera* 1 first-camera-v-inverted?) (coop-read-flag file)))
+                 (("p2-third-camera-h-inverted?") (set! (-> *coop-camera* 1 third-camera-h-inverted?) (coop-read-flag file)))
+                 (("p2-third-camera-v-inverted?") (set! (-> *coop-camera* 1 third-camera-v-inverted?) (coop-read-flag file)))
+                 (("p2-camera-speed") (set! (-> *coop-camera* 1 speed) (coop-read-camera-speed file)))
                  (else (file-stream-read-symbol file)))))))
         (file-stream-close file)
         (format 0 "[coop] co-op settings read: ~A~%" path))))
