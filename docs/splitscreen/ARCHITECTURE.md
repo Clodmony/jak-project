@@ -106,9 +106,12 @@ C++ (`OpenGLRenderer::dispatch_buckets`, Jak 1 path only):
 - `count_jak1_views` peeks the chain for a second `CALL` header.
 - each view renders at the origin of its own framebuffer (`m_view_fbos`), so the GS scissor
   emulation, depth cue, distort sprites and stencil shadows stay inside the view;
-- each view is copied into its rect of the game framebuffer (`SplitscreenLayout.h`); the divider
-  between them (4+ px) is half blue next to player 1's view and half orange next to player 2's
-  (`divider_rects`, `kPlayerColors`);
+- each view is copied into its rect of the game framebuffer (`SplitscreenLayout.h`); with MSAA it
+  is resolved straight into its rect of the resolve buffer instead, and pcrtc shows that buffer
+  without its own resolve (`m_split_resolved`): copying the multisampled views into the
+  multisampled game framebuffer and resolving it again cost a weak GPU more than a whole
+  single-player frame at MSAA 16 (#14). The divider between the views (4+ px) is half blue next to
+  player 1's view and half orange next to player 2's (`divider_rects`, `kPlayerColors`);
 - the normal present path (pcrtc, brightness, blackout) runs once.
 - occlusion culling works per view: each view's buckets carry the vis of that view's camera.
 

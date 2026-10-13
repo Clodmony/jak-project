@@ -159,10 +159,13 @@ class OpenGLRenderer {
   } m_fbo_state;
 
   // Jak 1 local co-op: each view renders at the origin of this framebuffer (both views have the
-  // same size), then gets copied into its rect of render_fbo. Freed a while after the last split
-  // frame, so single player doesn't keep the memory.
+  // same size), then gets copied into its rect of render_fbo, or with MSAA resolved straight into
+  // its rect of resolve_buffer. Freed a while after the last split frame, so single player doesn't
+  // keep the memory.
   Fbo m_view_fbo;
   int m_frames_since_split = 0;
+  // this frame's views are already resolved into resolve_buffer: pcrtc skips its resolve
+  bool m_split_resolved = false;
 
   GLuint screen_vao = 0;  // vertex array object for a screen-space draw
   GLuint screen_vbo = 0;  // vertex buffer object for a screen-space draw
