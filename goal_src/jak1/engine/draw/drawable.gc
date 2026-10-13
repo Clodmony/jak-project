@@ -571,7 +571,10 @@
               (.add.vf.w vf15 vf28 Q)
               (.svf (&-> v1-42 quad) vf15)
               (when (< 0.0 (+ (-> v1-42 z) (-> arg1 bounds w)))
-                (let ((lod-to-use 0))
+                (let ((lod-to-use 0)
+                      ;; og:preserve-this coop: the lod at the start of the frame, the lod an earlier view chose
+                      (coop-lod-start (-> arg1 cur-lod))
+                      (coop-lod-other -1))
                   (let ((cam-dist (-> v1-42 w)))
                     (when (nonzero? (-> arg1 lod-set max-lod))
                       (cond
@@ -613,12 +616,23 @@
                     (set! *coop-death-timer-done* (and (nonzero? *coop-view*) (logtest? (-> arg1 status) (draw-status was-drawn))))
                     (logior! (-> arg1 status) (draw-status was-drawn))
                     (if (logtest? (-> arg1 status) (draw-status skip-bones)) (return #f))
+                    ;; og:preserve-this coop: on a split frame each view draws the lod for its own camera (#34),
+                    ;; but nothing finer than the lod the joints were computed for (the next frame then, as
+                    ;; without co-op). desired-lod carries the frame's start lod from the first view.
+                    (when (coop-split-frame?)
+                      (when *coop-death-timer-done*
+                        (set! coop-lod-start (-> arg1 desired-lod))
+                        (set! coop-lod-other (-> arg1 cur-lod)))
+                      (lod-set! arg1 (max lod-to-use coop-lod-start)))
                     (draw-bones arg1 arg3 cam-dist))
-                  (when (and (< lod-to-use (-> arg1 cur-lod)) (logtest? (-> arg1 status) (draw-status has-joint-channels)))
+                  (when (and (< lod-to-use coop-lod-start) (logtest? (-> arg1 status) (draw-status has-joint-channels))) ;; og:preserve-this coop
                     ;; og:preserve-this added this check for PC port to prevent memory corruption
                     (if (< (-> *matrix-engine* length) MATRIX_ENGINE_AMOUNT)
                       (let ((v1-82 *matrix-engine*)) (set! (-> v1-82 (-> v1-82 length)) (process->handle sv-16)) (+! (-> v1-82 length) 1))))
-                  (lod-set! arg1 lod-to-use))))))))
+                  ;; og:preserve-this coop: after a split frame the actor keeps the finest lod of the views (its
+                  ;; logic follows the closest camera)
+                  (lod-set! arg1 (if (>= coop-lod-other 0) (min lod-to-use coop-lod-other) lod-to-use))
+                  (if (coop-split-frame?) (set! (-> arg1 desired-lod) coop-lod-start)))))))))
     0
     (none)))
 
