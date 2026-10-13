@@ -236,6 +236,18 @@
           (cond
             ((< (-> s4-0 i) (-> s4-0 idx-a)) (set! idx-b idx-a) (set! idx-a i))
             ((and (!= i idx-a) (< (-> s4-0 i) (-> s4-0 idx-b))) (set! idx-b i))))
+        ;; og:preserve-this coop: only an active level with a sky makes sky textures. When neither of the
+        ;; two nearest is one (player 1 near two loaded levels, the displayed one farther away, issue #142),
+        ;; the nearest that is takes b's place, else no sky is drawn in either view.
+        (when (and (-> arg0 sky)
+                   (not (and (= (-> (level-slot idx-a) status) 'active) (-> (level-slot idx-a) info sky)))
+                   (not (and (= (-> (level-slot idx-b) status) 'active) (-> (level-slot idx-b) info sky))))
+          (let ((best -1))
+            (dotimes (i (-> *level* length))
+              (let ((lev (level-slot i)))
+                (when (and (= (-> lev status) 'active) (-> lev info sky) (or (< best 0) (< (-> s4-0 i) (-> s4-0 best))))
+                  (set! best i))))
+            (if (>= best 0) (set! idx-b best))))
         ;; og:preserve-this coop: current-interp is the weight of b, so a level that stays in the pair keeps
         ;; its side. Picking the sides by distance swapped them when the two distances crossed and the mood
         ;; jumped.
