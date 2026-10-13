@@ -148,6 +148,16 @@ binds (fullscreen, screenshot, ImGui) keep working when keyboard/mouse has no pl
 used to join is ignored until released. Enabling co-op auto-assigns devices unless the player chose
 them (the join screen counts as choosing: `SlotAssigner::prepare_join`, `swap_slots`). GOAL API: `pc-coop-*` in `kernel-defs.gc`.
 
+Camera controls are per player (#41). The right stick macros in `pad.gc` (`analog-input-*-first`,
+`-third`) and `cam-dist-analog-input` read the inversion of the player whose context runs
+(`coop-camera-inverted?`: player 1's are the `*pc-settings*` fields, player 2's are in
+`*coop-camera*`) and scale the result by that player's camera speed (`coop-camera-speed`, 50-200 %,
+100 = the original game). The first line of Camera Options ("CAMERA OPTIONS: PLAYER 1/2", option type
+`coop-player`) picks whose controls the page edits; `coop-camera-menu-sync` points the toggles and the
+"Camera speed" slider at that player's settings every frame the page is shown, and "Restore defaults"
+resets only that player (`coop-reset-camera`). The global "Analog sensitivity" (C++ `axis_scale`,
+both sticks of every pad) stays shared.
+
 ## Streaming and world simulation
 
 Jak 1 held two levels; co-op holds four (#110), so each player can stand in their own level and
@@ -275,8 +285,9 @@ the same behaviour as the existing PC "force actors" option, without changing th
 - `coop-start` saves `*ACTOR-bank*` and `coop-stop` restores it, so single player doesn't keep the
   co-op actor distances.
 - Nothing is added to `pc-settings.gc` (other builds sharing the folder would reject unknown keys).
-  The split layout and the co-op options (every ring for both, friendly fire, tougher bosses) are
-  kept in `coop-settings.gc` in the same folder (`coop-save-settings` when one changes in the menu,
+  The split layout, the co-op options (every ring for both, friendly fire, tougher bosses) and the
+  camera controls per player (player 2's inversions, both players' camera speed) are kept in
+  `coop-settings.gc` in the same folder (`coop-save-settings` when one changes in the menu,
   `coop-load-settings` at boot). Its reader skips keys it doesn't know (a newer build's file) and a
   broken file only leaves the defaults. Whether co-op is on is never kept.
 

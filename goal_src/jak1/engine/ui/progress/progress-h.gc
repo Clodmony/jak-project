@@ -163,7 +163,8 @@
      (monitor)
      (controller)
      (binding-assignment)
-     (confirmation))) ;; end of PC_PORT = #t branch for enum initialization
+     (confirmation)
+     (coop-player))) ;; og:preserve-this coop: player 1 / player 2 choice. end of PC_PORT = #t branch for enum initialization
   ) ;; end of PC_PORT cond
 
 (defenum game-option-menu
