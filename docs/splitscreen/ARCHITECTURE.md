@@ -178,7 +178,12 @@ cross them (#69):
 - the DGO loader, the login state and the loading heap are global, so levels load one at a time:
   with four wants two can be missing at once, and `load-state update!` adds the next one only when no
   slot is loading or logging in (`level-load-in-progress?`; the original never had two missing wants);
-- the continue point, `level-distance`, vis, music, ambients and the sound listener stay with player 1.
+- the continue point, `level-distance`, vis, music, ambients and the sound listener stay with player 1;
+- sky, fog and lighting blend two levels, as in the original (`update-time-of-day`): the two slots
+  nearest player 1's camera, each level keeping its side of the blend while it stays in the pair
+  (`blend-slot-a/b`). Only a displayed level with a sky makes sky textures, so when neither of the
+  two nearest is one (two loaded neighbours nearer than the displayed level), the nearest displayed
+  level with a sky replaces the farther of the two (#142; before, no sky was drawn in either view).
 So two players can be anywhere in the loaded levels, each in their own. Safety nets:
 - residency guard: right before a level is discarded or hidden (`load-state update!`, `level.gc`),
   `coop-on-level-leaving` brings player 2 to player 1 if player 2 stands in it (scripts like the
