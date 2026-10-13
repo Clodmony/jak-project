@@ -111,6 +111,7 @@ connect, then `(coop-start)`. Turn on "Local Co-op" > "Show co-op info" for the 
 | 45 | Split, player 1 in the sage's hut, player 2 on the beach by the crates: watch player 2's view | Nothing near player 2 is missing or pops in (occlusion culling uses player 2's camera) |
 | 46 | Graphics option "Level of detail (foreground)" set to PS2, one player close to an actor, the other far from it | Each view shows the actor in the detail level for its own distance |
 | 47 | Options > Game Options > Input Options > Camera Options: pick Player 2 on the first line, invert player 2's 3rd-person horizontal camera, set Camera speed to 200; play split and move both right sticks; restart the game | Only player 2's camera turns the other way and faster; player 1's camera is as before; after the restart the settings are still there |
+| 48 | Split in a busy level (Lost Precursor City, Citadel) with MSAA on, on a weaker GPU, at settings where single player keeps 60 fps with room to spare | Co-op runs smoothly too: no stutter (Jak 1 doubles its time step on long frames) |
 
 ## Runtime results
 
@@ -157,6 +158,7 @@ menus, unplugging) went through the pads. No keyboard input was injected: the de
 | 45 | Pass (`split-occlusion` scenario, #34, 10 checks): player 1 in the sage's hut, player 2 by the farmer's crates. Each view sends the renderer the vis of its own camera's bsp leaf (player 1 leaf 1950, 4507 of 6104 village1 drawables visible; player 2 leaf 952, 3995 visible). Before: both views sent player 1's (leaf 1950), and the renderer turned occlusion off on split frames. Frozen scene: player 2's view with its own vis matches everything visible (`*artist-all-visible*`) pixel for pixel (0.00% of pixels differ), player 1's 0.12-0.13%. Control, player 1's vis forced into player 2's view: 1.7-2.7% differ (two runs), the crates next to player 2 are missing |
 | 46 | Pass (`split-lod` scenario, #34, 7 checks; `draw-bones` wrapped in the REPL to log the LOD each view draws): with the PS2 LOD distances, an orb 11.5 m from player 1's camera and 36.5 m from player 2's is drawn at lod 0 in player 1's view and lod 1 in player 2's; the orb keeps lod 0 afterwards; moved 12 m in front of player 2's camera, player 2's view draws lod 0. Before: each view drew the other view's choice (lod 1 at 11.5 m, lod 0 at 36.5 m) |
 | 47 | Pass (`camera-options` scenario, #41, 11 checks; turning measured on each camera's string, `view-flat` of its slave, over 20 frames of full right stick): before the fix, flipping player 1's 3rd-person horizontal setting reversed player 2's camera (+0.54 -> -0.48 deg/frame). After: player 1's setting leaves player 2's camera alone (+0.80 -> +0.80), player 2's own setting reverses it (-0.80) while player 1's stays (+0.80), player 2 at 200 % turns x2.01 and player 1 x1.00. Through the pad: Player 2 chosen, the toggle and the slider change only player 2's settings and `coop-settings.gc` gets them; Player 1 chosen again, the toggles edit player 1's; "Restore defaults" with Player 2 resets only player 2; a fresh game reads them back from the file |
+| 48 | Pass after fix (`frame-time` scenario, #14, 10 checks; integrated GPU, 2560x1440, MSAA 16): before the fix co-op ran at 41 fps in Lost Precursor City and 38 fps in the Citadel (every frame a 2x time step) while single player ran at 97 and 82 fps in the same run; with each view resolved straight into the resolved frame, 67 and 63 fps, no 2x step at 60 fps. Numbers for all scenes and a desktop GPU: Performance below |
 | Water | Pass after fix: player 2 swims, both players in one water volume, leaving clears only that player, deadly water kills player 2 and not player 1 |
 | NPCs | Pass after fix: player 2 talks to an NPC with their own pad, the prompt shows in player 2's view, player 1's button doesn't trigger it, both are released afterwards |
 | Zoomer (#16) | Fire Canyon: either player mounting at the pad gives both their own zoomer (own pad, camera, speed/heat HUD); a zoomer death sends only that player back to the checkpoint onto a new zoomer, also when both die a few seconds apart; both dead in the same moment reloads the checkpoint; the end pad's power cell appears only once both are within 30 m; taking it plays the cinematic and both get off. Driving back to the start pad gets both off. Lava Tube: both mount at the start pad; each player keeps the last checkpoint they drove past (player 2 died after lavatube-middle and came back there while player 1 came back at the start), and a respawn next to a pad gets onto that pad; energy door 4 stayed open while only one player was through, shut once both were, and opened again for a player who respawned before it; the end pad's cell waited for both, then both got off. Fire Canyon again: a player who drives back onto the start pad gets off alone, the other keeps racing (no leash); the one on foot dying comes back on foot at the checkpoint, the one on the zoomer dying comes back on a zoomer. Mountain Pass: the flying-lurker intro holds both players; when the lurkers reach the plunger both players are held for the cinematic, both die and the checkpoint reloads; the bridge builds for either player's blue eco (not run); the end pad's cell waited for both. Precursor Basin: both mount at the entrance pad; with the players on both sides of the active ring and the nearest player switching back and forth, the ring stayed active (before: a false pass); a real pass by either player moved the chain on; the whole ring chain run through ends in the cell cinematic with both players frozen and released afterwards; in the gorge race the race kept running while player 2 still stood at the start after player 1 left (it now also starts when the player who leaves isn't the nearer one: found by the regression scenarios), and it finished only once both had crossed the finish line. Robbers: caught by both players on zoomers; the cell flight holds both, then the player who got the cell plays the cinematic while the other is hidden and frozen in place; both drive on afterwards. The gorge race timer shows in both views. Option "every ring for both" (menu toggle checked): a ring stayed lit after one player flew through and moved on once the other did too, for 15 rings in a row. Mountain Pass won by driving (`mountainpass-win`, #66): both players near the end with the flying lurkers behind them, player 2 steered the zoomer into the plunger lurker (stick re-aimed every few frames, cross held): caught, the task closed, no plunger cinematic or death afterwards, both still on their zoomers. Lightning moles (`moles`, #66, chased by keeping the chasing player behind the mole facing the hole): player 2 chased one into the hole, the dive scene froze both players and released both; player 1 chased one while player 2 waited 20 m past the hole, so player 2 became the nearer player while the mole dived (before: player 1 stayed frozen after the scene); all four moles in closes the task. A player waiting closer to the hole (14 m) is the nearer one and scares the mole away, as the moles flee from the nearest player |
@@ -187,20 +189,56 @@ menus, unplugging) went through the pads. No keyboard input was injected: the de
 
 ## Performance
 
-Same machine: an AMD desktop GPU (Mesa, radeonsi), Linux. Internal
-resolution 2560x1440, MSAA 8, vsync off, frame limit raised to 1000 for the measurement, Sandover at
-the debug start point, camera untouched, 10 s per case, real frames drawn per wall-clock second:
+Measured with the `frame-time` scenario (#14). The test helper wraps `display-frame-start` and
+`display-sync` and records, for every frame, the frame period (frame start to frame start), the game
+thread's part of it (from the frame start until it waits for the renderer in `display-sync`) and the
+time ratio the game used. Each scene starts at its continue point, camera untouched, player 2 next to
+player 1; 5 s per case. *Uncapped*: the renderer's frame limiter at 2000 fps while the game logic
+stays at 60 fps (the game runs fast-forward; what counts is the cost of a frame). *60 fps*: the
+normal limiter. A frame longer than 21.7 ms (1.3x of 1/60 s) makes Jak 1 take a 2x time step
+(`display-frame-start`), which players feel as a stutter. Internal resolution 2560x1440, MSAA 16,
+vsync off, Linux, Mesa.
 
-| Case | fps | ms/frame |
-| --- | --- | --- |
-| Single player | 721 | 1.39 |
-| Co-op side by side | 674 | 1.48 |
-| Co-op top/bottom | 674 | 1.48 |
+A desktop GPU, uncapped (verify run of the fix, 2026-10-14):
 
-The second view costs about 0.09 ms per frame in this scene. Busier areas (jungle, many actors) were
-not measured (#14).
+| Scene | Single player | Co-op | Second view | Co-op p99 / longest frame |
+| --- | --- | --- | --- | --- |
+| Sandover | 726 fps | 554 fps | +0.43 ms | 2.11 / 3.74 ms |
+| Forbidden Jungle | 692 fps | 527 fps | +0.45 ms | 2.46 / 3.71 ms |
+| Misty Island | 733 fps | 547 fps | +0.46 ms | 2.38 / 3.33 ms |
+| Lost Precursor City | 686 fps | 405 fps | +1.01 ms | 3.08 / 4.77 ms |
+| Citadel | 751 fps | 607 fps | +0.31 ms | 1.91 / 3.11 ms |
 
-Expected cost: GOAL draw work for the second view (background, foreground, bones, merc, sprites)
-and GPU work for a second set of buckets. Simulation cost is unchanged. If a frame takes longer than
-1.3x the target frame time, Jak 1 switches to a 2x time step (`display-frame-start`), so frame time
-directly affects how the game feels.
+Here the frame period equals the game thread's time: the GPU waits for the game, and the second view
+costs GOAL draw work (0.3 to 1 ms). At 60 fps no co-op frame took a 2x time step in any scene.
+
+A small integrated GPU (shared system memory, selected with `DRI_PRIME`), same settings, co-op
+uncapped, the old and the new way of putting the views on screen alternated three times in one game
+session (median):
+
+| Scene | Single player | Co-op before the fix | Co-op after the fix |
+| --- | --- | --- | --- |
+| Sandover | 62 fps | 31 fps (32.0 ms) | 46 fps (21.6 ms) |
+| Forbidden Jungle | 62 fps | 26 fps (38.6 ms) | 37 fps (27.1 ms) |
+| Misty Island | 117 fps | 34 fps (29.1 ms) | 53 fps (18.9 ms) |
+| Lost Precursor City | 112 fps | 41 fps (24.6 ms) | 67 fps (14.9 ms) |
+| Citadel | 109 fps | 38 fps (26.2 ms) | 63 fps (15.9 ms) |
+
+Found here: with MSAA the second view cost this GPU more than a whole single-player frame. Each view
+was copied sample for sample into the multisampled game framebuffer, which was then resolved again;
+without MSAA (same GPU, 2560x1440) co-op ran about as fast as single player (Sandover 102 fps single,
+113 co-op). Each view is now resolved straight into the resolved frame (#14, `ARCHITECTURE.md`):
+about 10 ms less per co-op frame on this GPU, no change on the desktop GPU (559 / 556 fps in
+Sandover, within the run-to-run spread). The single-player column is from a separate run: this GPU's
+speed varied by more than a third between runs, so only the A/B within one session compares the fix.
+At these settings Sandover and the jungle still fall below 60 fps in co-op (single player runs just
+above it there). At 1920x1080 with MSAA 4 this GPU keeps 60 fps in co-op in every scene, no
+2x time step: uncapped 68 fps in the jungle (single player 71), 91 to 119 fps in the others.
+
+Level streaming (`frame-time-walk` scenario): player 1 walks from the sage's hut to the jungle tunnel
+in 4 m steps (the beach and the jungle load on the way, Sandover stays displayed), recorded at 60 fps,
+once in co-op with player 2 at the hut and once in single player: 2374 frames each, no 2x time step,
+longest frame 16.9 ms in both (desktop GPU). Single long frames do happen in both modes (a 40 ms
+frame in single-player Sandover; in another run a 27 ms one in co-op on Misty Island, spent in the
+game thread):
+the `frame-time` checks allow 1% of frames with a 2x step, a steady overload fails them.
