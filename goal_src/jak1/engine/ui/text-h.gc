@@ -816,6 +816,7 @@
   (local-coop-pad-back #x1716) ;; og:preserve-this coop
   (local-coop-pad-reconnect #x1717) ;; og:preserve-this coop
   (local-coop-press-start #x1718) ;; og:preserve-this coop
+  (local-coop-camera-speed #x1719) ;; og:preserve-this coop
   ;; GAME-TEXT-ID ENUM ENDS
   )
 

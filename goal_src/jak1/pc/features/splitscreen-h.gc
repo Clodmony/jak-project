@@ -39,6 +39,7 @@
    (every-ring?       symbol) ;; race rings: each ring counts only once both players flew through it
    (friendly-fire?    symbol) ;; the players' attacks hit each other
    (tougher-bosses?   symbol) ;; bosses need more hits while two players fight them
+   (camera-menu-p1?   symbol) ;; the camera options page edits player 1's controls (#f: player 2's)
    (leash-distance    meters) ;; max distance between players before the catch-up teleport
    (near-hysteresis   meters) ;; a world process only switches player when the other is this much closer
    (respawn-delay     time-frame) ;; dead player waits this long before respawning next to the survivor
@@ -60,6 +61,7 @@
        :every-ring? #f
        :friendly-fire? #t
        :tougher-bosses? #f
+       :camera-menu-p1? #t
        :leash-distance (meters 1000)
        ;; small: interactions have small radii (the fisherman's boat 1.5 m), a big margin left the closer
        ;; player unable to use an object the other player had touched
@@ -109,6 +111,46 @@
 (defmacro coop-camera-cpad ()
   "The pad that controls the camera of the current player context."
   `(-> *cpad-list* cpads (if (zero? *coop-player*) 0 (-> *coop* p2-pad))))
+
+;; Camera controls per player (#41). Player 1's inversions are the pc-settings ones (pc-settings.gc),
+;; so only player 2's inversion fields are used; the speeds of both players are kept here. Saved in
+;; coop-settings.gc.
+(deftype coop-camera-settings (structure)
+  ((first-camera-h-inverted? symbol)
+   (first-camera-v-inverted? symbol)
+   (third-camera-h-inverted? symbol)
+   (third-camera-v-inverted? symbol)
+   (speed                    float) ;; right stick camera turning, percent
+   ))
+
+(define *coop-camera*
+  (new 'static
+       'inline-array
+       coop-camera-settings
+       COOP_MAX_PLAYERS
+       (new 'static
+            'coop-camera-settings
+            :first-camera-h-inverted? #f
+            :first-camera-v-inverted? #f
+            :third-camera-h-inverted? #f
+            :third-camera-v-inverted? #f
+            :speed 100.0)
+       ;; the original game's controls, as reset-camera sets them
+       (new 'static
+            'coop-camera-settings
+            :first-camera-h-inverted? #f
+            :first-camera-v-inverted? #t
+            :third-camera-h-inverted? #t
+            :third-camera-v-inverted? #t
+            :speed 100.0)))
+
+(defmacro coop-camera-inverted? (field)
+  "A camera inversion setting (a pc-settings field name) of the player whose context the code runs in."
+  `(if (zero? *coop-player*) (-> *pc-settings* ,field) (-> *coop-camera* 1 ,field)))
+
+(defmacro coop-camera-speed ()
+  "Camera speed factor of the player whose context the code runs in (1.0 = the original game's)."
+  `(* 0.01 (-> *coop-camera* *coop-player* speed)))
 
 (defmacro with-coop-player (idx &rest body)
   "Run body in the context of player idx (a no-op without co-op). Used for session level operations
