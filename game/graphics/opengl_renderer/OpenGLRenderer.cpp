@@ -1325,10 +1325,6 @@ void OpenGLRenderer::dispatch_jak1_split_views(DmaFollower& dma,
   const int saved_draw_offset_y = m_render_state.draw_offset_y;
   const int saved_draw_region_w = m_render_state.draw_region_w;
   const int saved_draw_region_h = m_render_state.draw_region_h;
-  const bool saved_occlusion = m_render_state.use_occlusion_culling;
-  // The game keeps one occlusion vis buffer per level, written by the last view's camera.
-  // Rely on frustum culling only while split.
-  m_render_state.use_occlusion_culling = false;
 
   // all views have the same size and are copied out before the next one clears, so they share
   // one framebuffer
@@ -1351,7 +1347,8 @@ void OpenGLRenderer::dispatch_jak1_split_views(DmaFollower& dma,
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
     glDisable(GL_BLEND);
 
-    // per-view render state: camera data and vis come from this view's buckets
+    // per-view render state: camera data and occlusion vis come from this view's buckets (the game
+    // computes the vis for each view's camera)
     m_render_state.has_pc_data = false;
     for (auto& vis : m_render_state.occlusion_vis) {
       vis.valid = false;
@@ -1406,7 +1403,6 @@ void OpenGLRenderer::dispatch_jak1_split_views(DmaFollower& dma,
     }
   }
 
-  m_render_state.use_occlusion_culling = saved_occlusion;
   m_render_state.render_fb = m_fbo_state.render_fbo->fbo_id;
   m_render_state.render_fb_x = 0;
   m_render_state.render_fb_y = 0;

@@ -1269,6 +1269,98 @@
         (set! (-> h1 value) v))))
   (none))
 
+;; Occlusion vis of player 2's view (#34). update-visible keeps the vis of one camera in each level:
+;; its vis-bits, the bsp leaf, the vis strings loaded (a cache) and a pending vis string load. Player 2's
+;; view keeps its own copy of that state per level slot and trades it with the level's around its pass,
+;; so each view sends the renderer the vis of its own camera.
+(deftype coop-view-vis (structure)
+  ((vis-bits      uint128 128) ;; the level's vis-bits (2 KB)
+   (buffer        uint8 2048) ;; the level's vis-buffer: player 2's vis string loads go here
+   (vis-string    uint32 8) ;; current-vis-string of each vis-info
+   (vis-waiting   uint32 8) ;; waiting-for-iop-to-ee flag of each vis-info
+   (bsp           bsp-header) ;; the level this state belongs to
+   (name          symbol)
+   (leaf          uint16)
+   (all-visible?  symbol)
+   (inside-boxes? symbol)
+   (in?           symbol) ;; traded in for player 2's pass
+   ))
+
+(deftype coop-view-vis-slots (structure)
+  ((slot coop-view-vis COOP_LEVEL_SLOTS :inline)))
+
+(define *coop-view-vis* (new 'global 'coop-view-vis-slots))
+
+(dotimes (i COOP_LEVEL_SLOTS)
+  (set! (-> *coop-view-vis* slot i name) #f)
+  (set! (-> *coop-view-vis* slot i in?) #f))
+
+(defun coop-view-vis-buffer ((lev level))
+  "Where update-vis! loads vis strings for player 2's view (the level's own vis-buffer for player 1's)."
+  (dotimes (i (-> *level* length))
+    (if (= (level-slot i) lev) (return (-> *coop-view-vis* slot i buffer))))
+  (-> lev vis-buffer))
+
+(defun coop-view-vis-trade ((lev level) (vv coop-view-vis))
+  "Swap the vis state of lev with vv."
+  (dotimes (i 128)
+    (let ((q (-> (the (pointer uint128) (-> lev vis-bits)) i)))
+      (set! (-> (the (pointer uint128) (-> lev vis-bits)) i) (-> vv vis-bits i))
+      (set! (-> vv vis-bits i) q)))
+  (dotimes (i 8)
+    (let ((info (-> lev vis-info i)))
+      (when info
+        (let ((s (-> info current-vis-string))
+              (w (logand (-> info flags) #x40000000))) ;; waiting-for-iop-to-ee
+          (set! (-> info current-vis-string) (-> vv vis-string i))
+          (set! (-> info flags) (logior (logand (-> info flags) (lognot #x40000000)) (-> vv vis-waiting i)))
+          (set! (-> vv vis-string i) s)
+          (set! (-> vv vis-waiting i) w)))))
+  (let ((leaf (-> lev bsp current-leaf-idx))
+        (all (-> lev all-visible?))
+        (inside (-> lev inside-boxes?)))
+    (set! (-> lev bsp current-leaf-idx) (-> vv leaf))
+    (set! (-> lev all-visible?) (-> vv all-visible?))
+    (set! (-> lev inside-boxes?) (-> vv inside-boxes?))
+    (set! (-> vv leaf) leaf)
+    (set! (-> vv all-visible?) all)
+    (set! (-> vv inside-boxes?) inside))
+  (none))
+
+(defun coop-view-vis-enter ()
+  "Start of player 2's pass, with player 2's camera set up: trade in player 2's vis and update it for
+   this camera."
+  (dotimes (i (-> *level* length))
+    (let ((lev (level-slot i))
+          (vv (-> *coop-view-vis* slot i)))
+      (when (= (-> lev status) 'active)
+        (when (or (!= (-> vv bsp) (-> lev bsp)) (!= (-> vv name) (-> lev name)))
+          ;; a level new to this slot: everything visible until player 2's vis string is loaded
+          (set! (-> vv bsp) (-> lev bsp))
+          (set! (-> vv name) (-> lev name))
+          (dotimes (j 128)
+            (set! (-> vv vis-bits j) (the uint128 0)))
+          (quad-copy! (the pointer (-> vv vis-bits)) (-> lev bsp all-visible-list) (/ (+ (-> lev bsp visible-list-length) 15) 16))
+          (dotimes (j 8)
+            (set! (-> vv vis-string j) (the uint -1))
+            (set! (-> vv vis-waiting j) 0))
+          (set! (-> vv leaf) 0)
+          (set! (-> vv all-visible?) #t))
+        (set! (-> vv inside-boxes?) (point-in-boxes? lev (-> *math-camera* trans)))
+        (coop-view-vis-trade lev vv)
+        (set! (-> vv in?) #t))))
+  (update-visible *math-camera*)
+  (none))
+
+(defun coop-view-vis-exit ()
+  "End of player 2's pass: player 1's vis back into the levels."
+  (dotimes (i COOP_LEVEL_SLOTS)
+    (let ((vv (-> *coop-view-vis* slot i)))
+      (when (-> vv in?)
+        (coop-view-vis-trade (level-slot i) vv)
+        (set! (-> vv in?) #f))))
+  (none))
+
 (defun coop-draw-view-only ()
   "The view dependent part of real-main-draw-hook, for player 2's view.
    Nothing here may advance the simulation: touching events, actors-update, time of day, ocean
@@ -1369,6 +1461,7 @@
     ;; player 2's camera rig -> player 2's math camera, frustum, tie/shrub constants
     (with-coop-view-camera
       (update-camera))
+    (coop-view-vis-enter)
     (coop-draw-view-only)
     (if (not *progress-process*) (depth-cue *display*))
     ;; the camera dependent setup of this group's tie and merc buckets, with this view's camera.
@@ -1380,6 +1473,7 @@
       (set! *ocean-off* #f)
       (set! *ocean-mid-off* #f)
       (set! *ocean-near-off* #f))
+    (coop-view-vis-exit)
     (set! *coop-view* 0)
     ;; back to player 1's globals and player 1's group of buckets
     (coop-switch-context prev-player))
