@@ -241,6 +241,9 @@ the same behaviour as the existing PC "force actors" option, without changing th
   the chamber to the player at the button and puts the other player next to them; while the chamber
   holds its rider in place during the ride, the other one is held 1.5 m beside
   (`coop-carry-other-player`). Its door at the top stays open while either player is near.
+- A lightning mole's dive scene freezes the nearest player and wakes `*target*` at its end; the mole
+  moves into the hole meanwhile, so the other player can become the nearer one. The dive pins the
+  mole to the frozen player (`lightning-mole-dive`), so the end wakes the same player.
 - An NPC scene started by an event (`been-kicked`, e.g. the Citadel sages' scenes sent by their fuel
   cell) waits for the previous scene's camera to end before grabbing the player: a held player
   refuses a second grab, so grabbing first could leave both players held for good.
