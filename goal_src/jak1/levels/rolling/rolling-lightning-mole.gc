@@ -495,6 +495,9 @@
             (gp-0 (new 'stack-no-clear 'vector)))
         (vector+! gp-0 *lightning-mole-hole* (new 'static 'vector :x 81920.0 :y 40960.0))
         (hide-hud-quick)
+        ;; og:preserve-this coop: the mole moves into the hole during the scene, so the other player can
+        ;; become the nearer one: stay with the player frozen here, or the end wakes the wrong one
+        (coop-pin-to-player self (process->handle *target*))
         (if *target* (logior! (-> *target* mask) (process-mask sleep)))
         (ambient-hint-spawn "gamcam20" (the-as vector #f) *entity-pool* 'camera)
         (ja-channel-push! 1 (seconds 0.2))
@@ -512,6 +515,7 @@
           (ja :num! (seek! max f30-0))))
       (lightning-mole-task-complete?)
       (if *target* (logclear! (-> *target* mask) (process-mask sleep)))
+      (coop-unpin self) ;; og:preserve-this coop
       (go lightning-mole-gone))
   :post lightning-mole-hole-post)
 
