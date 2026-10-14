@@ -372,7 +372,8 @@ Work items are GitHub issues on the fork, not files in this folder.
 ### Shared C++ runtime review (#6)
 
 `check_upstream_compat.py` lists these files. Each change, what it does when co-op is off, and why
-an always-on part stays:
+an always-on part stays. Jak 2 and Jak 3 booted with this branch's gk and with upstream's play the
+same (TESTING.md, test 49):
 
 | Files | Change | Without co-op | Verdict |
 | --- | --- | --- | --- |
