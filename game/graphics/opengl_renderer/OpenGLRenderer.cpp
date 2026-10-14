@@ -1335,6 +1335,20 @@ void OpenGLRenderer::dispatch_jak1_split_views(DmaFollower& dma,
   }
   m_frames_since_split = 0;
 
+  // with MSAA, each view is resolved straight into its rect of the resolve buffer, which pcrtc then
+  // shows as is. Copying the multisampled view into the multisampled render_fbo and resolving that
+  // again moved every sample twice more: at 2560x1440 with MSAA 16 the second view cost a weak GPU
+  // more than a whole single-player frame (#14).
+  auto& resolve = m_fbo_state.resources.resolve_buffer;
+  m_split_resolved = resolve.valid;
+  const GLuint out_fbo = m_split_resolved ? resolve.fbo_id : m_fbo_state.render_fbo->fbo_id;
+  if (m_split_resolved) {
+    // black where no view or divider goes, as render_fbo is after setup_frame (single-sample: cheap)
+    glBindFramebuffer(GL_FRAMEBUFFER, resolve.fbo_id);
+    glClearColor(0.0, 0.0, 0.0, 0.0);
+    glClear(GL_COLOR_BUFFER_BIT);
+  }
+
   for (int view = 0; view < num_views; view++) {
     const auto& rect = rects.at(view);
 
@@ -1370,9 +1384,9 @@ void OpenGLRenderer::dispatch_jak1_split_views(DmaFollower& dma,
     }
 
     // copy into this view's rect of the game framebuffer (same sample count, same size: a plain
-    // copy, also valid between two multisampled framebuffers)
+    // copy), or resolve it into its rect of the resolve buffer (same size, as a resolve must be)
     glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo.fbo_id);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_fbo_state.render_fbo->fbo_id);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, out_fbo);
     glBlitFramebuffer(0, 0, rect.w, rect.h, rect.x, rect.y, rect.x + rect.w, rect.y + rect.h,
                       GL_COLOR_BUFFER_BIT, GL_NEAREST);
   }
@@ -1382,7 +1396,7 @@ void OpenGLRenderer::dispatch_jak1_split_views(DmaFollower& dma,
     const auto dividers =
         splitscreen::divider_rects(settings.game_res_w, settings.game_res_h,
                                    splitscreen::layout_from_int(settings.splitscreen_layout));
-    glBindFramebuffer(GL_FRAMEBUFFER, m_fbo_state.render_fbo->fbo_id);
+    glBindFramebuffer(GL_FRAMEBUFFER, out_fbo);
     const bool scissor_was_on = glIsEnabled(GL_SCISSOR_TEST);
     GLint saved_scissor[4];
     glGetIntegerv(GL_SCISSOR_BOX, saved_scissor);
@@ -1518,6 +1532,7 @@ void OpenGLRenderer::dispatch_buckets(DmaFollower dma,
   m_render_state.frame_idx++;
   switch (m_version) {
     case GameVersion::Jak1: {
+      m_split_resolved = false;
       const int num_views = count_jak1_views(dma);
       if (num_views > 1) {
         dispatch_jak1_split_views(dma, prof, settings, num_views);
@@ -1695,7 +1710,10 @@ void OpenGLRenderer::do_pcrtc_effects(float alp,
                                       SharedRenderState* render_state,
                                       ScopedProfilerNode& prof) {
   Fbo* window_blit_src = nullptr;
-  if (m_fbo_state.resources.resolve_buffer.valid) {
+  if (m_fbo_state.resources.resolve_buffer.valid && m_split_resolved) {
+    // Jak 1 co-op: the split views were resolved into resolve_buffer already
+    window_blit_src = &m_fbo_state.resources.resolve_buffer;
+  } else if (m_fbo_state.resources.resolve_buffer.valid) {
     glBindFramebuffer(GL_READ_FRAMEBUFFER, m_fbo_state.render_fbo->fbo_id);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_fbo_state.resources.resolve_buffer.fbo_id);
     glBlitFramebuffer(0,                                            // srcX0
