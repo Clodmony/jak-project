@@ -7,33 +7,28 @@ memory is not read by a session that starts in another worktree. State goes
 here; stable recipes go into `docs/splitscreen/`; personal data and hardware
 never.
 
-Last updated 2026-10-15 (after #45). A manual playtest is planned for
+Last updated 2026-10-15 (after #45 and the merges of #147, #148, #149). A manual playtest is planned for
 2026-10-16.
 
 ## Repository state
 
-- Co-op branch `feature/jak1-local-splitscreen` at 0034a8cfa (PR #145 / #6
-  merged 2026-10-14). `master` = upstream mirror.
+- Co-op branch `feature/jak1-local-splitscreen` at 65c531c11: #147 (#44
+  Geyser Rock), #149 (#45 Sandover Village) and #148 (this file, the
+  Superset setup, the fork section in AGENTS.md) merged 2026-10-15.
+  `master` = upstream mirror.
 - Merge only when the owner says so: locally as Claude with
   `git merge --no-ff -m "Merge pull request #N from Clodmony/<branch> (AI-assisted)"`
   and push, never `gh pr merge`. A worktree cannot check out the co-op branch
   while the main checkout holds it: merge on a detached HEAD at
   `origin/feature/jak1-local-splitscreen` and push `HEAD:feature/jak1-local-splitscreen`.
+  The auto-mode classifier blocks Claude's merge into the co-op branch even
+  after the owner said "merge": hand the owner the merge command to run
+  with `!`.
 - `gh` without `--repo Clodmony/opengoal-coop` queries upstream (wrong numbers).
 
-## Open pull requests (none approved for merge yet: ask the owner)
+## Open pull requests
 
-- **#147** `coop/44-geyser-rock`, Closes #44. Runtime change: `eco-door`
-  door-closed (`baseplat.gc`) opens for any player in range with blue eco,
-  not only the nearest one. TESTING.md test 50. Verify all passed.
-- **#149** `coop/45-sandover-village` @ b70324524, Closes #45. Docs only:
-  TESTING.md test 51 (manual row, runtime result, "Campaign (#45)" row).
-  `sandover-village` scenario 57/57 with no game change; verify (`--tests`,
-  sandover-village, story-npcs, warp, cell-same-frame) 85/85, compat ok,
-  goalc-test 1692. Its rows sit next to #147's test 50 rows: whichever is
-  merged second needs a trivial TESTING.md conflict fix.
-- **#148** (draft) `coop/workspace-handoff`: this file, `.superset/`,
-  `CLAUDE.md`, the fork section in AGENTS.md.
+None.
 
 ## Milestone "Harness-driven: campaign, frame time, launcher build"
 
@@ -43,8 +38,7 @@ frame-time follow-up), then #11 last. Other open issues need a person (#1,
 
 ## Next issue: #46 Sentinel Beach (`beach`)
 
-Branch `coop/46-sentinel-beach` from the co-op branch tip (or after merges
-the owner approves). Template: the `sandover-village` scenario (helpers
+Branch `coop/46-sentinel-beach` from the co-op branch tip. Template: the `sandover-village` scenario (helpers
 `sv_*`: `sv_scene` tries four sides until a talk starts, `sv_talks`,
 `sv_flop_at`, `sv_kick_at`, `sv_park`). Boot `village1-hut` and walk player 2
 to the beach (the `sandover-village` scenario does), or a beach continue
@@ -76,7 +70,7 @@ count) only decides when to pre-load the 7th fly's animation, nothing else.
 - Playtest packages: dynamic Linux build in the tools checkout's
   `scratch/build-gk`, then `scripts/coop-mod/package_mod.py --bin-dir <that>
   --allow-dynamic --out-dir <tools>/builds`. The current package
-  `builds/jak1-coop.tar.gz` is still 9ffe106a3 (without #142, #144, #147):
+  `builds/jak1-coop.tar.gz` is still 9ffe106a3 (without #142, #144, #147, #149):
   rebuild it from the co-op branch tip for the playtest. `scratch/build-gk`
   must stay while the launcher's mod points at it.
 
@@ -84,8 +78,9 @@ count) only decides when to pre-load the 7th fly's animation, nothing else.
 
 - Main checkout on `feature/jak1-local-splitscreen`, behind origin (at
   c461511c1): pull before using it. One Superset worktree on
-  `coop/45-sandover-village` (PR #149). One scratch worktree on
-  `coop/workspace-handoff`. The bridge (`demo/bridge.py serve`, test
+  `coop/45-sandover-village` (merged; reuse it for #46 with a new branch).
+  The scratch worktree `~/dev-scratch/jak-project/wt-workspace` on
+  `coop/workspace-handoff` (merged) can be removed. The bridge (`demo/bridge.py serve`, test
   instance 3) is still running; its game was stopped and the virtual pads
   unplugged at the end of the #45 session.
 - The harness checkout has the `sandover-village` scenario committed
