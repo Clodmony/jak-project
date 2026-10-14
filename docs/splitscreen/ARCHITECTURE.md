@@ -342,22 +342,19 @@ upstream OpenGOAL, never a diverging copy:
   `goal_src/jak1/pc/debug/coop-menu.gc`, `game/system/hid/coop_slots.*`,
   `game/graphics/opengl_renderer/SplitscreenLayout.h`). Edits to upstream files are short hooks.
 - With co-op off, Jak 1 behaves like upstream (the kernel hooks are `#f`, every co-op branch is
-  skipped), and Jak 2/3/X are not affected.
+  skipped), apart from the four level slots (#110, see the review below), and Jak 2/3/X are not
+  affected.
 - Files other games compile stay byte-identical to upstream: everything under `goal_src/` outside
   `goal_src/jak1/`, plus the Jak 1 files Jak 2/3/X reuse (`pckernel-h`, `pckernel-common`,
   `pc-debug-common`).
 - Every hand edit in a decompiled file carries `og:preserve-this` (upstream's CI then flags any
   regeneration that would drop it).
-- Shared C++ runtime changes only take effect when Jak 1 turns co-op on. One exception, a bug fix:
-  `gk --port` now sets the listener port (upstream declared it as a flag and the listener used a
-  fixed port); without `--port` nothing changes. The local test tools use it to run several games.
-- Repository path (a bug fix, shared C++): the tools and test programs found the repository only if a
-  folder named `jak-project` was in their path. This fork is `opengoal-coop`, so its clones and CI
-  checkouts have that name; `file_util::try_get_jak_project_path` now falls back to the closest folder
-  above the program that contains `goal_src/` and `decompiler/config/`. Where the old rule finds
-  a path nothing changes.
+- Shared C++ runtime files: compiled for every game, so co-op code there only runs once Jak 1 turns
+  co-op on. The exceptions (Jak 1's four level slots, three bug fixes) are listed in the review
+  below.
 - Co-op code writes files through `*pc-settings-folder*`, not `*pc-user-dir-base-path*` (the latter
   ignores the launcher's `--config-path`).
+
 
 Tools:
 - `scripts/splitscreen/check_upstream_compat.py`: checks the file rules against the merge base with
@@ -371,3 +368,27 @@ Tools:
   pauses scheduled workflows after 60 days without repository activity.
 
 Work items are GitHub issues on the fork, not files in this folder.
+
+### Shared C++ runtime review (#6)
+
+`check_upstream_compat.py` lists these files. Each change, what it does when co-op is off, and why
+an always-on part stays. Jak 2 and Jak 3 booted with this branch's gk and with upstream's play the
+same (TESTING.md, test 49):
+
+| Files | Change | Without co-op | Verdict |
+| --- | --- | --- | --- |
+| `common/goal_constants.h`, `game/kernel/jak1/kmachine.cpp` | `jak1::LEVEL_MAX` 2 -> 4; Jak 1's global heap ends at 88 MB (the debug heap is 8 MB smaller); `__pc-set-levels` takes one name per slot; `__pc-get-bucket-draw-order` | Jak 1 always reserves four level heaps. Jak 2/3/X keep their own `LEVEL_MAX` and heaps | Always on in Jak 1, needed for the four level slots (#110) |
+| `game/graphics/opengl_renderer/buckets.h`, `OpenGLRenderer.cpp/.h` | Jak 1 bucket set per level slot, drawn in `kBucketDrawOrder`; a frame with more than one bucket group is drawn as split views | Jak 1: a one-view frame takes the old path; per frame the renderer reads a few DMA tags to count the views, and the split framebuffer is freed 600 frames after the last split frame. Jak 2/3: `do_pcrtc_effects` tests one flag that only Jak 1 split frames set | Always on in Jak 1 (bucket layout, #110); split views opt-in |
+| `game/mips2c/jak1_functions/sparticle_launcher.cpp` | particles spawned in level slots 3 and 4 get their level flag | Jak 1 only: two more heap range tests per launched particle | Always on in Jak 1 (#110) |
+| `game/overlord/jak1/srpc.cpp` | unloading a sound bank clears its name | Jak 1 only. Upstream kept the name, so loading the same bank again was skipped (silent level) | Bug fix, always on; four slots unload and reload banks more often |
+| `game/system/hid/devices/game_controller.cpp/.h` | pressure axis events only for the controller that sent them | All games. Every mapped controller sees every SDL event; upstream applied one PS3-style controller's pressure axes to the other's port too. With one controller nothing changes | Bug fix, always on |
+| `game/main.cpp`, `game/runtime.cpp`, `game/common/game_common_types.h` | `gk --port` sets the listener port | All games. Upstream declared `--port` as a flag and the listener used a fixed port; without `--port` the port is the same as before. The local test tools use it to run several games | Bug fix, always on |
+| `common/util/FileUtil.cpp/.h` | the repository is also found under another folder name: the closest folder above the program with `goal_src/` and `decompiler/config/` | All games and tools, only where upstream found no path (installed games use their data folder before this). This fork's clones and CI checkouts are named `opengoal-coop` | Bug fix, always on |
+| `game/kernel/common/kmachine.cpp` | `pc-coop-*` and `pc-set-splitscreen-layout!` | Defined for every game, called only by Jak 1's co-op code | Opt-in |
+| `game/kernel/common/kmemcard.cpp/.h`, `game/kernel/jak1/kscheme.cpp` | save subfolder (`pc-set-memcard-namespace!`, defined for Jak 1) | Empty by default, so saves go where upstream puts them; `MC_run` tests one flag | Opt-in |
+| `game/graphics/gfx.h`, `game/graphics/pipelines/opengl.cpp`, `SplitscreenLayout.h` | split layout setting handed to the renderer | Only read for frames with more than one view | Opt-in |
+| `game/system/hid/input_manager.cpp/.h`, `coop_slots.cpp/.h`, `devices/keyboard.cpp/.h`, `game/CMakeLists.txt` | device to player slot assignment | Two atomic flag tests per SDL event; a controller hotplug also copies the controller list for co-op (under its lock). Keyboard/mouse events go to the same port as before (port 0 always exists), `set_controller_for_port` and `is_keyboard_enabled` are unchanged | Opt-in |
+| `game/sce/libpad.cpp` | in co-op a port without a device reads as a disconnected pad | Every port reads as a connected pad, as upstream (scenario `solo-runtime`) | Opt-in |
+
+The compatibility check also fails on line ending or whitespace-only changes in these files (rule 5):
+`FileUtil.cpp/.h` had lost upstream's CRLF line endings, which made the whole file one diff.
