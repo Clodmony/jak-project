@@ -15,8 +15,10 @@ else master) and checks:
      there must only run when Jak 1 turns co-op on: review them, this script can't tell.
   4. Level slots (#110): a loop over (-> *level* length) must reach the levels through level-slot,
      never (-> *level* level i): the array index of a slot skips level-default (0 1 3 4).
+  5. Changed shared C++/tool files keep upstream's formatting (#6): the same line endings, and no
+     hunk that only changes whitespace. Either would conflict with every upstream edit nearby.
 
-Exit code 1 if rule 1, 2 or 4 is broken.
+Exit code 1 if rule 1, 2, 4 or 5 is broken.
 
   python3 scripts/splitscreen/check_upstream_compat.py [--base <commit>]
 """
@@ -126,6 +128,30 @@ def level_slot_misuse_in_tree():
     return bad
 
 
+def whitespace_only_hunks(base, path):
+    """Hunks whose removed and added lines are the same text once all whitespace is dropped."""
+    bad = []
+    hunk = None
+    for line in git("diff", "-U0", base, "--", path).split("\n") + ["@@"]:
+        if line.startswith("@@"):
+            if hunk and hunk["-"] and hunk["+"] and \
+                    "".join("".join(hunk["-"]).split()) == "".join("".join(hunk["+"]).split()):
+                bad.append((hunk["start"], hunk["+"][0].strip()))
+            m = re.match(r"@@ -\d+(?:,\d+)? \+(\d+)", line)
+            hunk = {"start": int(m.group(1)), "-": [], "+": []} if m else None
+        elif hunk is not None and line[:1] in ("-", "+") and not line.startswith(("---", "+++")):
+            hunk[line[0]].append(line[1:])
+    return bad
+
+
+def line_endings_changed(base, path):
+    """True if the file has CRLF line endings upstream and not now, or the other way round."""
+    upstream = subprocess.run(["git", "cat-file", "blob", f"{base}:{path}"], cwd=ROOT, check=True,
+                              capture_output=True).stdout
+    now = open(os.path.join(ROOT, path), "rb").read()
+    return (b"\r\n" in upstream) != (b"\r\n" in now)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--base", help="commit to compare with (default: merge base with upstream/master)")
@@ -159,6 +185,15 @@ def main():
         print(f"\nreview: {len(runtime)} shared runtime/tool files changed (co-op code must only run when Jak 1 enables it):")
         for p in sorted(runtime):
             print(f"  {changes[p]} {p}")
+        for p in sorted(runtime):
+            if changes[p] != "M":
+                continue
+            if line_endings_changed(base, p):
+                print(f"ERROR {p}: line endings differ from upstream (whole-file diff)")
+                errors += 1
+            for line, text in whitespace_only_hunks(base, p):
+                print(f"ERROR {p}:{line}: whitespace-only change: {text[:80]}")
+                errors += 1
 
     print(f"\n{'FAILED' if errors else 'OK'}: {errors} problem(s); shared GOAL files checked: {', '.join(shared_goal)}")
     return 1 if errors else 0
