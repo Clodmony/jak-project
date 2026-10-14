@@ -7,8 +7,8 @@ memory is not read by a session that starts in another worktree. State goes
 here; stable recipes go into `docs/splitscreen/`; personal data and hardware
 never.
 
-Last updated 2026-10-14 (after #44 and the workspace pull request). A manual
-playtest is planned for 2026-10-16.
+Last updated 2026-10-15 (after #45). A manual playtest is planned for
+2026-10-16.
 
 ## Repository state
 
@@ -21,18 +21,19 @@ playtest is planned for 2026-10-16.
   `origin/feature/jak1-local-splitscreen` and push `HEAD:feature/jak1-local-splitscreen`.
 - `gh` without `--repo Clodmony/opengoal-coop` queries upstream (wrong numbers).
 
-## Open pull requests
+## Open pull requests (none approved for merge yet: ask the owner)
 
-- **#147** `coop/44-geyser-rock` @ 50f73b33d, Closes #44, not merged: ask the
-  owner. Runtime change: `eco-door` door-closed (`baseplat.gc`) checks every
-  player in range for blue eco (`coop-for-each-player-context`); before, only
-  the nearest player counted, so player 1 without eco standing closer kept
-  the Geyser Rock iris door shut for player 2 with eco. TESTING.md test 50 and
-  the "Campaign (#44)" scripted row, an ARCHITECTURE.md bullet. Verify:
-  compile ok, 61/61 scenarios (geyser-rock 40, warp, pov-cameras,
-  cell-same-frame), compat ok, goalc-test 1692. Media 102/103.
-- The workspace pull request (`coop/workspace-handoff`): this file,
-  `.superset/`, `CLAUDE.md`, the fork section in AGENTS.md.
+- **#147** `coop/44-geyser-rock`, Closes #44. Runtime change: `eco-door`
+  door-closed (`baseplat.gc`) opens for any player in range with blue eco,
+  not only the nearest one. TESTING.md test 50. Verify all passed.
+- **#149** `coop/45-sandover-village` @ b70324524, Closes #45. Docs only:
+  TESTING.md test 51 (manual row, runtime result, "Campaign (#45)" row).
+  `sandover-village` scenario 57/57 with no game change; verify (`--tests`,
+  sandover-village, story-npcs, warp, cell-same-frame) 85/85, compat ok,
+  goalc-test 1692. Its rows sit next to #147's test 50 rows: whichever is
+  merged second needs a trivial TESTING.md conflict fix.
+- **#148** (draft) `coop/workspace-handoff`: this file, `.superset/`,
+  `CLAUDE.md`, the fork section in AGENTS.md.
 
 ## Milestone "Harness-driven: campaign, frame time, launcher build"
 
@@ -40,26 +41,30 @@ Order: #44 -> #60 (campaign levels, one per session), then #146 (iGPU
 frame-time follow-up), then #11 last. Other open issues need a person (#1,
 #3, #8) or the owner's decision (#7).
 
-## Next issue: #45 Sandover Village (`village1`)
+## Next issue: #46 Sentinel Beach (`beach`)
 
-A branch `coop/45-sandover-village` exists in the Superset worktree at the
-co-op branch's tip (no commits yet). Follow the `geyser-rock` scenario as the
-template (`scenarios.py`, helpers `gr_*`, `chamber_flop` for ground pounds,
-`actor_state`, `gr_find`): boot `village1-warp` or `village1-hut`, list
-`actors`, drive each piece with both players by turns (NPC talks: sage,
-farmer and yakows, explorer, the fisherman's boat to Misty is #48, oracle,
-Mayor and uncle, the bird lady, warp gate, orbs, scout flies with ground
-pounds), fix or document, test 51. Known from earlier issues: NPC talks with
-either player, the boat, swimming, orbs, save and load are tested; Sandover's
-farmer hint holds both players about 13 s (teleports during it keep them
-held).
+Branch `coop/46-sentinel-beach` from the co-op branch tip (or after merges
+the owner approves). Template: the `sandover-village` scenario (helpers
+`sv_*`: `sv_scene` tries four sides until a talk starts, `sv_talks`,
+`sv_flop_at`, `sv_kick_at`, `sv_park`). Boot `village1-hut` and walk player 2
+to the beach (the `sandover-village` scenario does), or a beach continue
+point; list `actors`; drive each cell with both players by turns (the seagulls,
+the cannon (#21), the sentinels/eco vents, the lurker puppy and the grotto,
+the flut-flut egg, the pelican, the scout flies, orbs), fix or document,
+test 52. Known: enemies target the closer player, both can kill them,
+crates.
 
-Lessons from #44 (harness): steel scout-fly crates break only with a ground
-pound beside them; the 7th crate stays in `special-contents-die` for its
+Lessons from #44 and #45 (harness): scout-fly crates break only with a
+ground pound beside them, and a fly is collected by walking into it, not by
+standing on it; the 7th crate stays in `special-contents-die` for its
 animation; collected pills stay as processes in `pickup` state; level hints
-(`level-hint-spawn`) do not play under the harness even in single player, so
-do not check them; a "could not tell which pad" boot error with `(paused?)`
-#t means a controller hotplug paused the game.
+do not play under the harness, do not check them; a "could not tell which
+pad" boot error with `(paused?)` #t means a controller hotplug paused the
+game. A teleport into a cluster of collectables (the orb cache's falling
+column) fills the 32-pair touching list in single player too: compare with
+a `coop=False` boot before blaming co-op; `*mcp-touch-peak*` can be read
+and reset around such a step. `*target* fact buzzer` (player 1's own fly
+count) only decides when to pre-load the 7th fly's animation, nothing else.
 
 ## Verify and build
 
@@ -77,11 +82,14 @@ do not check them; a "could not tell which pad" boot error with `(paused?)`
 
 ## Worktrees and background processes
 
-- Main checkout on `feature/jak1-local-splitscreen`, clean. One Superset
-  worktree on `coop/45-sandover-village`. One scratch worktree on
-  `coop/workspace-handoff`. The bridge (`demo/bridge.py serve`, test instance
-  3) may still be running from the #44 session; its game was stopped and the
-  virtual pads unplugged.
+- Main checkout on `feature/jak1-local-splitscreen`, behind origin (at
+  c461511c1): pull before using it. One Superset worktree on
+  `coop/45-sandover-village` (PR #149). One scratch worktree on
+  `coop/workspace-handoff`. The bridge (`demo/bridge.py serve`, test
+  instance 3) is still running; its game was stopped and the virtual pads
+  unplugged at the end of the #45 session.
+- The harness checkout has the `sandover-village` scenario committed
+  (34c4fc0); `wip/` is untracked there as before.
 
 ## Cleanup the owner may approve
 
