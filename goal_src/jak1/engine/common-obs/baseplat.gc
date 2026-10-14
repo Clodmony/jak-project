@@ -156,14 +156,21 @@ eco-door-event-handler
       (update-transforms! (-> self root))
       (ja-post)
       (loop
-        (when (and *target* (>= (-> self open-distance) (vector-vector-distance (-> self root trans) (-> *target* control trans))))
-          (eco-door-method-26 self)
-          (if (and (not (-> self locked))
-                   (or (and (-> self entity) (logtest? (-> self entity extra perm status) (entity-perm-status complete)))
-                       (send-event *target* 'query 'powerup (pickup-type eco-blue))
-                       (and (-> self one-way) (< (vector4-dot (-> self out-dir) (target-pos 0)) -8192.0))))
-            (go-virtual door-opening))
-          (level-hint-spawn (text-id zero) (the-as string #f) (-> self entity) *entity-pool* (game-task none)))
+        ;; og:preserve-this coop: any player in range carrying blue eco opens the door, not only the nearest
+        ;; one (a player without eco standing closer would keep it shut for the partner behind them)
+        (let ((coop-near #f)
+              (coop-open #f))
+          (coop-for-each-player-context
+            (when (and *target* (>= (-> self open-distance) (vector-vector-distance (-> self root trans) (-> *target* control trans))))
+              (set! coop-near #t)
+              (if (or (and (-> self entity) (logtest? (-> self entity extra perm status) (entity-perm-status complete)))
+                      (send-event *target* 'query 'powerup (pickup-type eco-blue))
+                      (and (-> self one-way) (< (vector4-dot (-> self out-dir) (target-pos 0)) -8192.0)))
+                (set! coop-open #t))))
+          (when coop-near
+            (eco-door-method-26 self)
+            (if (and (not (-> self locked)) coop-open) (go-virtual door-opening))
+            (level-hint-spawn (text-id zero) (the-as string #f) (-> self entity) *entity-pool* (game-task none))))
         (suspend))))
 
 (defstate door-opening (eco-door)
