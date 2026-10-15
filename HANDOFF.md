@@ -7,8 +7,9 @@ memory is not read by a session that starts in another worktree. State goes
 here; stable recipes go into `docs/splitscreen/`; personal data and hardware
 never.
 
-Last updated 2026-10-16 (after #49; the session-link cleanup is done; the
-work from here on runs in parallel streams, see "Plan").
+Last updated 2026-10-16 (after #49; the session-link cleanup is done and
+#46-#49 are merged; the work from here on runs in parallel streams, see
+"Plan", starting at step 1).
 
 ## Done this session
 
@@ -27,33 +28,34 @@ work from here on runs in parallel streams, see "Plan").
   (`coop-goal-address?`), Sandover missing after a zoomer respawn
   (`coop-wants-checkpoint`). Verify: 228/228, compat ok, goalc-test 1692.
 - Issue #153 filed (harness turbo while waiting).
+- Merged into the co-op branch as Claude: #150 (#46), #151 (#47), #152
+  (#48), #154 (#49); issues #46-#49 closed. The merged tip was verified
+  (`--tests` and fire-canyon, misty-island, forbidden-jungle, sentinel-beach,
+  level-pairs, streaming, deaths-apart): 253/254, the one failure the older
+  streaming crash below.
+- Found while verifying: `streaming` crashes the game about once in ten
+  runs, also on the tip before #49 (2 of 22 runs). Issue body for the owner
+  to file: `~/dev-scratch/jak-project/49/issue-streaming-crash.md`
+  (`gh issue create --repo Clodmony/opengoal-coop --title "Four level slots: intermittent crash in name= while beach, Sandover, jungle and jungleb are loaded (AI-assisted)" --body-file <that file>`).
 
-## Open pull requests (merge in this order, each only when the owner says so)
+## Open pull requests
 
-- #150 (#46 Sentinel Beach), #151 (#47 Forbidden Jungle), #152 (#48 Misty
-  Island): opened 2026-10-16. #150 and #151 conflict in `HANDOFF.md` only
-  (keep the co-op branch's); after each merge the next one gets a small
-  TESTING.md conflict (rows 52-55: keep them in number order).
-- #49 Fire Canyon: not opened yet. The owner runs
-  `gh pr create --repo Clodmony/opengoal-coop --base feature/jak1-local-splitscreen --head coop/49-fire-canyon --title "Fire Canyon with two players: code shared by two loaded levels, stale particle owners, Sandover after a zoomer respawn (#49, AI-assisted)" --body-file ~/dev-scratch/jak-project/49/pr-body.md`.
-  It changes the C++ runtime (`game/kernel/jak1/klink.cpp`, `kscheme.cpp`):
-  a playtest package needs a new `gk`.
-- Merge style: locally as Claude, `git merge --no-ff -m "Merge pull request #N from Clodmony/<branch> (AI-assisted)"`
-  on a detached HEAD at `origin/feature/jak1-local-splitscreen`, then the
-  owner runs the push (`git push origin HEAD:feature/jak1-local-splitscreen`
-  with `!`; the auto-mode classifier blocks Claude's pushes to the co-op
-  branch). Never `gh pr merge` (it authors the merge with the owner's
-  account; the 5 such merges had to be rewritten).
-- `gh` without `--repo Clodmony/opengoal-coop` queries upstream.
+None. Merge style for the next ones: locally as Claude,
+`git merge --no-ff -m "Merge pull request #N from Clodmony/<branch> (AI-assisted)"`
+on a detached HEAD at `origin/feature/jak1-local-splitscreen`, then
+`git push origin HEAD:feature/jak1-local-splitscreen` (allowed for Claude
+on 2026-10-16 once the owner said merge; the owner's pre-push guard reviews
+it). Only when the owner says so; never `gh pr merge` (it authors the merge
+with the owner's account). `gh` without `--repo Clodmony/opengoal-coop`
+queries upstream.
 
 ## Plan: parallel streams
 
 The owner wants the rest done in parallel. Steps in order; each issue is
 still one session (issue loop) ending in a handoff.
 
-**Step 0 (owner, before any stream):** merge #150, #151, #152, open and merge
-#49. The streams branch from the co-op tip after that: several go through
-levels that share code and need the #49 relink.
+**Step 0: done** (cleanup, #46-#49 merged). The streams branch from the
+co-op tip.
 
 **Step 1 (one session first): parallel-ready harness** (tools checkout
 `~/Documents/jak-coop-tools/coop-test-mcp`, no game change):
@@ -68,6 +70,10 @@ levels that share code and need the #49 relink.
 - Optionally #153 (turbo while waiting) in the same session.
 - `verify.sh` builds nothing in C++: note in the harness README how a session
   gets a `gk` (below) when a branch changes the runtime.
+
+**Step 1b (in parallel with step 1): the streaming crash** (the issue above,
+once filed): game code, one session with the current single-bridge
+harness. Fix it before the streams: they all load four levels.
 
 **Step 2: three streams in parallel**, each its own worktree, test instance
 (3, 4, 5) and scenario file. Test numbers fixed up front (TESTING.md rows):
@@ -115,11 +121,12 @@ Owner only: #1, #3, #8 (need a person), #7 (decision).
 
 ## Worktrees and background processes
 
-- Main checkout on `feature/jak1-local-splitscreen` (moved onto the new
-  history by the cleanup). Superset worktree on `coop/49-fire-canyon`,
-  clean; reuse it for step 1 or remove it once #49 is merged.
-- The bridge (`demo/bridge.py serve`, instance 3) serves the #49 worktree;
-  its game was left stopped after verify.
+- Main checkout on `feature/jak1-local-splitscreen` at the merged tip.
+  Superset worktree (the #49 one): detached at the merged tip, clean, its
+  `build/game/gk` built from that tip (from `~/dev-scratch/jak-project/49/build`,
+  keep that folder while the worktree uses this `gk`). Reuse it for step 1b.
+- The bridge (`demo/bridge.py serve`, instance 3) serves that worktree; its
+  game was left stopped.
 - Harness checkout: `fire-canyon` scenario committed (e54263b); `wip/`
   untracked as before.
 
@@ -156,14 +163,11 @@ From #49:
 - The `[fc]` death logger in the `fire-canyon` scenario names the cause of
   every death (`melt`, `heat`, `burnup`).
 
-## Cleanup the owner may approve
+## Cleanup
 
-- `~/dev-scratch/jak-project/46/`, `47/`, `48/` (PR bodies, opened) and
-  `rewrite/` (the cleanup is pushed and checked; the backup bundle is in
-  `~/Documents/jak-coop-backup/`).
-- `~/dev-scratch/jak-project/49/` once #49 is merged and a new `gk` is built
-  elsewhere (its `build/` is 571 MB).
-- The local-only branches with links: `coop/127-near-textures`,
-  `test/playtest-2`, `test/playtest-fixes`.
-- Tools checkout: `scratch/coop-test-mcp-before-rewrite.bundle`, `wip/`,
-  old probe scripts in `scratch/`, `run/verify/` (about 40 runs).
+Done 2026-10-16 (owner: "whatever is not needed"): the 46-48 scratch
+folders, the rewrite folder, the local branches with links (their changes
+were all in the co-op branch), the tools checkout's leftovers and old verify
+runs. Left: `~/dev-scratch/jak-project/49/` (the `gk` build the worktree
+uses, the issue body), the backup bundle in `~/Documents/jak-coop-backup/`,
+`scratch/build-gk` (the playtest's `gk`).
