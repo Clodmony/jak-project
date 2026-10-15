@@ -7,7 +7,7 @@ memory is not read by a session that starts in another worktree. State goes
 here; stable recipes go into `docs/splitscreen/`; personal data and hardware
 never.
 
-Last updated 2026-10-15 (after #45 and the merges of #147, #148, #149). A manual playtest is planned for
+Last updated 2026-10-15 (after #46, PR open). A manual playtest is planned for
 2026-10-16.
 
 ## Repository state
@@ -28,7 +28,19 @@ Last updated 2026-10-15 (after #45 and the merges of #147, #148, #149). A manual
 
 ## Open pull requests
 
-None.
+- #46 Sentinel Beach, branch `coop/46-sentinel-beach` (docs only: TESTING.md
+  test 52 and a "Campaign (#46)" row; no game change was needed). Verify
+  (`--tests`, sentinel-beach, sandover-village, geyser-rock): 162/162 checks,
+  compat ok, goalc-test 1692, all passed. Needs the owner's OK to merge.
+
+## New issue: harness turbo
+
+Filed 2026-10-15 (not in the milestone order): run the game uncapped while the
+harness waits, to shorten test runs. The issue holds the analysis (game time is
+one fixed step per frame; talks, scenes, sound and loading stay real time;
+expected about 1.5-2x per campaign run) and the plan (turbo only inside
+`wait_until`, A/B of the suite with `--jobs 3`). Harness-only work in the tools
+checkout; the owner decides when it comes.
 
 ## Milestone "Harness-driven: campaign, frame time, launcher build"
 
@@ -36,29 +48,40 @@ Order: #44 -> #60 (campaign levels, one per session), then #146 (iGPU
 frame-time follow-up), then #11 last. Other open issues need a person (#1,
 #3, #8) or the owner's decision (#7).
 
-## Next issue: #46 Sentinel Beach (`beach`)
+## Next issue: #47 Forbidden Jungle (`jungle`, `jungleb`)
 
-Branch `coop/46-sentinel-beach` from the co-op branch tip. Template: the `sandover-village` scenario (helpers
-`sv_*`: `sv_scene` tries four sides until a talk starts, `sv_talks`,
-`sv_flop_at`, `sv_kick_at`, `sv_park`). Boot `village1-hut` and walk player 2
-to the beach (the `sandover-village` scenario does), or a beach continue
-point; list `actors`; drive each cell with both players by turns (the seagulls,
-the cannon (#21), the sentinels/eco vents, the lurker puppy and the grotto,
-the flut-flut egg, the pelican, the scout flies, orbs), fix or document,
-test 52. Known: enemies target the closer player, both can kill them,
-crates.
+Branch `coop/47-forbidden-jungle` from the co-op branch tip (after the #46
+merge, or from the tip if it is still open: #46 only touches TESTING.md).
+Templates: the `sentinel-beach` scenario (helpers `sb_*`: `sb_take_cell`
+finds the cell nearest a spot or accepts one already taken, `sb_kill`
+spin-kicks an enemy until it dies) and the shared `scout_flies(t, task,
+taker)`, which picks crates by their task (neighbouring levels' crates are
+loaded too). Boot a jungle continue point, list `actors`, and drive each cell
+by turns: the mirrors and periscopes (#21), the fisherman (#21), the elevator
+(#12), the plant boss (#18, `plant` scenario), the blue eco switch and the
+river platforms, the lurker machine tower, the scout flies, orbs. Fix or
+document, test 53. Known: the cell cinematic and the dark vines work.
 
-Lessons from #44 and #45 (harness): scout-fly crates break only with a
-ground pound beside them, and a fly is collected by walking into it, not by
+Lessons from #44-#46 (harness): scout-fly crates break only with a ground
+pound beside them, and a fly is collected by walking into it, not by
 standing on it; the 7th crate stays in `special-contents-die` for its
 animation; collected pills stay as processes in `pickup` state; level hints
 do not play under the harness, do not check them; a "could not tell which
 pad" boot error with `(paused?)` #t means a controller hotplug paused the
-game. A teleport into a cluster of collectables (the orb cache's falling
-column) fills the 32-pair touching list in single player too: compare with
-a `coop=False` boot before blaming co-op; `*mcp-touch-peak*` can be read
-and reset around such a step. `*target* fact buzzer` (player 1's own fly
-count) only decides when to pre-load the 7th fly's animation, nothing else.
+game. A teleport into a cluster of collectables fills the 32-pair touching
+list in single player too: compare with a `coop=False` boot before blaming
+co-op; `*mcp-touch-peak*` can be read and reset around such a step. Touch
+events need movement: a player teleported inside an object's sphere never
+touches it, walk in from outside (blue eco launchers: walk on from outside
+their 3 m sphere, then jump). A cell born where a player stands is taken at
+once, but its task only reads done after the collection scene. Inside an
+attack event `*target*` is the attacker (the event takes the sender's
+context), not the nearest player. Objects with grips or buttons above their
+root: read the collision prims' world spheres for the spot (the beach
+cannon's grips are 7 m up). An NPC who gives a reward may be a second actor
+in another place (the bird lady's flut flut reward is `bird-lady-beach` on
+the beach). `str.replace` edits of scenarios.py hit every copy of a repeated
+block: check the count first.
 
 ## Verify and build
 
@@ -78,13 +101,14 @@ count) only decides when to pre-load the 7th fly's animation, nothing else.
 
 - Main checkout on `feature/jak1-local-splitscreen`, behind origin (at
   c461511c1): pull before using it. One Superset worktree on
-  `coop/45-sandover-village` (merged; reuse it for #46 with a new branch).
+  `coop/46-sentinel-beach` (PR open; reuse it for #47 with a new branch).
   The scratch worktree `~/dev-scratch/jak-project/wt-workspace` on
   `coop/workspace-handoff` (merged) can be removed. The bridge (`demo/bridge.py serve`, test
   instance 3) is still running; its game was stopped and the virtual pads
-  unplugged at the end of the #45 session.
-- The harness checkout has the `sandover-village` scenario committed
-  (34c4fc0); `wip/` is untracked there as before.
+  unplugged at the end of the #46 session.
+- The harness checkout has the `sentinel-beach` scenario and the shared
+  `scout_flies` helper committed (5e35bc0); `wip/` is untracked there as
+  before.
 
 ## Cleanup the owner may approve
 
