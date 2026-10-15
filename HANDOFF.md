@@ -187,11 +187,11 @@ imports. Scout fly crates hop while a player is near: pound when settled.
 - Playtest packages: dynamic Linux build in the tools checkout's
   `scratch/build-gk`, then `scripts/coop-mod/package_mod.py --bin-dir <that>
   --allow-dynamic --out-dir <tools>/builds`. The current package
-  `builds/jak1-coop.tar.gz` is still 9ffe106a3 (without #142, #144, #147, #149):
-  rebuild it from the co-op branch tip for the playtest. A build without
-  #48 strands both players on Misty Island after the boat ride (no boat
-  back): build from `coop/48-misty-island` (or the tip after its merge)
-  if the playtest goes to Misty. `scratch/build-gk`
+  `builds/jak1-coop.tar.gz` was rebuilt on 2026-10-15 from
+  `coop/48-misty-island` (afe0c99bb: the co-op branch tip with the #48 boat
+  fix, without #46/#47) for the playtest; the owner adds it in the launcher.
+  A build without #48 strands both players on Misty Island after the boat
+  ride. `scratch/build-gk`
   must stay while the launcher's mod points at it.
 
 ## Worktrees and background processes
