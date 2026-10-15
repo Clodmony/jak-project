@@ -7,7 +7,7 @@ memory is not read by a session that starts in another worktree. State goes
 here; stable recipes go into `docs/splitscreen/`; personal data and hardware
 never.
 
-Last updated 2026-10-15 (after #47; the #46 and #47 PRs wait for the
+Last updated 2026-10-15 (after #48; the #46, #47 and #48 PRs wait for the
 session-link cleanup below). A manual playtest is planned for 2026-10-16.
 
 ## Pending: session-link cleanup (the owner runs it)
@@ -34,9 +34,9 @@ repository), reading each stage's output before the next:
 4. `local`: moves local branches and clean worktrees onto the new history;
    lists the branches that only exist locally.
 
-Then the owner opens the #46 and #47 PRs and files the turbo issue (commands
-under "Open pull requests"). `coop/47-forbidden-jungle` is pushed, so
-`prepare` rewrites it too. A branch started later and not pushed before
+Then the owner opens the #46, #47 and #48 PRs and files the turbo issue
+(commands under "Open pull requests"). `coop/47-forbidden-jungle` and
+`coop/48-misty-island` are pushed, so `prepare` rewrites them too. A branch started later and not pushed before
 `prepare` stays on the old history: rebase it onto the rewritten co-op
 branch (old tips are in `rewrite/old-refs.txt`) before its PR, and check
 `git log --format=%B` for the line. Old commits stay readable
@@ -61,10 +61,11 @@ through `refs/pull/*` until GitHub Support purges them (as after the
 
 ## Open pull requests
 
-Neither PR is open yet: the owner opens both after the cleanup, #46 first,
-then needs to OK each merge. #46 and #47 both add rows to TESTING.md after
-row 51 (tests 52 and 53): the second merge has a small conflict there, keep
-both rows in number order.
+None of the three PRs is open yet: the owner opens them after the cleanup, in
+number order, then needs to OK each merge. All three add TESTING.md rows
+after row 51 (tests 52, 53, 54): each later merge has a small conflict
+there, keep the rows in number order. #47 and #48 touch different game files
+(`jungle-obs.gc`; `fishermans-boat.gc`, `load-boundary.gc`).
 
 - #46 Sentinel Beach, branch `coop/46-sentinel-beach` (docs only: TESTING.md
   test 52 and a "Campaign (#46)" row; no game change was needed). Verify
@@ -72,13 +73,23 @@ both rows in number order.
   compat ok, goalc-test 1692, all passed.
   `gh pr create --repo Clodmony/opengoal-coop --base feature/jak1-local-splitscreen --head coop/46-sentinel-beach --title "Sentinel Beach with two players: playthrough test 52 (#46, AI-assisted)" --body-file ~/dev-scratch/jak-project/46/pr-body.md`
 - #47 Forbidden Jungle, branch `coop/47-forbidden-jungle`: the temple door
-  (`maindoor`) and the precursor bridge (`precurbridge`, `jungle-obs.gc`)
-  took blue eco only from the nearest player; now from any player in range
-  (`coop-for-each-player-context`, as #44's eco doors). Test 53, scenario
-  `forbidden-jungle` (71 checks, all eight cells). Verify (`--tests`,
-  forbidden-jungle, plant, jungle-elevator, periscope, fisher, geyser-rock):
+  and the precursor bridge took blue eco only from the nearest player; now
+  from any player in range. Test 53, scenario `forbidden-jungle`. Verify:
   156/156 checks, compat ok, goalc-test 1692, all passed.
   `gh pr create --repo Clodmony/opengoal-coop --base feature/jak1-local-splitscreen --head coop/47-forbidden-jungle --title "Forbidden Jungle with two players: temple door and precursor bridge take any player's blue eco, playthrough test 53 (#47, AI-assisted)" --body-file ~/dev-scratch/jak-project/47/pr-body.md`
+- #48 Misty Island, branch `coop/48-misty-island` (from the co-op branch tip,
+  without #46/#47): the fisherman's boat left player 2 in the water at the
+  dock it left (runtime result 30 no longer held), and once both stood on
+  Misty co-op dropped Sandover and the boat with it (no way back). Fixed:
+  the boat is pinned to the boarder and puts the other player next to them
+  at each ride's end; a script's `save` command saves the players' level
+  pairs too (`load-boundary.gc`). Test 54, scenario `misty-island` (70
+  checks, from a new game in Sandover, boat both ways). Verify (`--tests`,
+  misty-island): 71/71, compat ok, goalc-test 1692, all passed; a wider run
+  (cannon, warp, streaming, level-pairs, ambient-crossing, gondola, sky-pair,
+  jungle-elevator, sandover-village, geyser-rock) passed every scenario
+  but a harness miss in misty-island, since fixed.
+  `gh pr create --repo Clodmony/opengoal-coop --base feature/jak1-local-splitscreen --head coop/48-misty-island --title "Misty Island with two players: the boat takes both players and keeps Sandover loaded, playthrough test 54 (#48, AI-assisted)" --body-file ~/dev-scratch/jak-project/48/pr-body.md`
 
 ## New issue: harness turbo
 
@@ -97,20 +108,18 @@ Order: #44 -> #60 (campaign levels, one per session), then #146 (iGPU
 frame-time follow-up), then #11 last. Other open issues need a person (#1,
 #3, #8) or the owner's decision (#7).
 
-## Next issue: #48 Misty Island (`misty`)
+## Next issue: #49 Fire Canyon (`firecanyon`)
 
-Branch `coop/48-misty-island` from the co-op branch tip (after the #46/#47
-merges, or from the tip if they are still open: they touch TESTING.md and
-`jungle-obs.gc` only). Boot a misty continue point, list `actors`, and drive
-each cell by turns: the arrival by boat (tested), the zoomer part (#16), the
-cannon (#21; `scenario_cannon` and `sb_cannon` as templates), the balloon
-lurkers, the ambush arena, the muse, the bone bridge, the scout flies (shared
-`scout_flies`). Templates: `forbidden-jungle` (helpers `fj_*`: `fj_blue` takes
-eco from a vent, `fj_plat` an eco platform, `fj_aim` turns a periscope by
-stick with feedback, `fj_glide` walks both players across load boundaries)
-and `sentinel-beach` (`sb_*`). Fix or document, test 54. Look for more
-blue-eco or proximity checks on `*target*` alone (the nearest player): every
-one found so far (#44, #47) was that pattern.
+Branch `coop/49-fire-canyon` from the co-op branch tip (after the #46-#48
+merges, or from the tip if they are still open). Known: the zoomer level
+(#16; scenarios `firecanyon-finish`, `firecanyon-pad`, `lavatube` as
+templates, `mount_zoomers`). Boot `firecanyon-start`, list `actors`, drive
+the race to the end (the balloon at the end and its cell, the 50 orbs, the
+scout flies on the zoomer: crates broken by driving into them), the heat
+and the deaths, the cell at the end pad for both. Fix or document, test 55.
+Look for checks on `*target*` alone with an extra condition (eco carried,
+a state, racing): plain distance checks have been fine so far; the bugs
+found were such conditions (#44, #47) and a scripted level change (#48).
 
 Open observation from #47, not filed (owner decides): after both players
 glide from the jungle to Sandover by the sage's hut, single player's
@@ -120,7 +129,14 @@ normally in the run; if it matters it would show as occlusion culling off
 or wrong in Sandover after the jungle. Probe: boot jungle-start, glide both
 from (205, 22, -131) to the hut and print `(mcp-levels)` (its last field).
 
-Lessons from #44-#47 (harness): scout-fly crates break only with a ground
+Open observation from #48, not filed (owner decides): at Misty's dock
+single player displays Sandover as `special` (the boat's command list),
+co-op as `display` ("level village1 displayed in full again (was special):
+player 1 is in it" in the log). Both views drew normally; if it matters it
+costs frame time at Misty's dock. Probe: `(mcp-levels)` after the boat ride
+in `misty-island`, with `coop=False` for the comparison.
+
+Lessons from #44-#48 (harness): scout-fly crates break only with a ground
 pound beside them, and a fly is collected by walking into it, not by
 standing on it; the 7th crate stays in `special-contents-die` for its
 animation; collected pills stay as processes in `pickup` state; level hints
@@ -150,7 +166,16 @@ room), so do Sandover errands before going below the temple. REPL blue eco
 (`'get-pickup ... eco-blue 1.0`) lasts 5 s, a vent's 20 s. A bounce pad
 fires on a landing (`bonk`), not a walk-on. Never dereference an actor that
 may be gone in a REPL probe (`(the mayor (process-by-ename ...))` on #f
-crashed the game).
+crashed the game). #48: `mcp-kill-enemies-near` also deactivates a battle
+controller (it is an enemy), which kills the battle without its reward:
+remove the controller's children instead (`MI_KILL_KIDS`). The boat's
+ride starts within 1.5 m of its rigid body centre, not its origin
+(`mi_boat_body`). `task-complete?` reads the `real-complete` perm bit
+(`close-specific-task!` doesn't set it). GOAL `format` takes at most six
+values. Balloon lurkers drift up to 25 m/s and a missed zoomer drop can
+set off a mine that throws them 100 m up: read and teleport in one form.
+A probe script named like a stdlib module (`dis.py`) breaks anyio's
+imports. Scout fly crates hop while a player is near: pound when settled.
 
 ## Verify and build
 
@@ -163,27 +188,32 @@ crashed the game).
   `scratch/build-gk`, then `scripts/coop-mod/package_mod.py --bin-dir <that>
   --allow-dynamic --out-dir <tools>/builds`. The current package
   `builds/jak1-coop.tar.gz` is still 9ffe106a3 (without #142, #144, #147, #149):
-  rebuild it from the co-op branch tip for the playtest. `scratch/build-gk`
+  rebuild it from the co-op branch tip for the playtest. A build without
+  #48 strands both players on Misty Island after the boat ride (no boat
+  back): build from `coop/48-misty-island` (or the tip after its merge)
+  if the playtest goes to Misty. `scratch/build-gk`
   must stay while the launcher's mod points at it.
 
 ## Worktrees and background processes
 
 - Main checkout on `feature/jak1-local-splitscreen`, behind origin: the
   cleanup's `local` stage moves it, otherwise pull before using it. One
-  Superset worktree on `coop/47-forbidden-jungle` (reuse it for #48 with a
+  Superset worktree on `coop/48-misty-island` (reuse it for #49 with a
   new branch).
   The scratch worktree `~/dev-scratch/jak-project/wt-workspace` on
   `coop/workspace-handoff` (merged) can be removed. The bridge (`demo/bridge.py serve`, test
   instance 3) is still running; its game was stopped and the virtual pads
   unplugged at the end of the #46 session.
-- The harness checkout has the `forbidden-jungle` scenario committed
-  (bac02e8, after `sentinel-beach` 5e35bc0); `wip/` is untracked there as
-  before. The bridge's game was stopped at the end of the #47 session.
+- The harness checkout has the `misty-island` scenario committed (2a29447,
+  after `forbidden-jungle` bac02e8); `wip/` is untracked there as before.
+  The bridge's game was stopped and its pads unplugged at the end of the
+  #48 session; the bridge itself (instance 3, serving this worktree) runs.
 
 ## Cleanup the owner may approve
 
-- After the #46 and #47 PRs and the turbo issue exist:
-  `~/dev-scratch/jak-project/46/`, `~/dev-scratch/jak-project/47/` and, once
+- After the #46, #47 and #48 PRs and the turbo issue exist:
+  `~/dev-scratch/jak-project/46/`, `47/`, `48/` (only the PR bodies are
+  left in them) and, once
   the cleanup is pushed and checked, `~/dev-scratch/jak-project/rewrite/`.
 - In the tools checkout: `scratch/coop-test-mcp-before-rewrite.bundle` and
   coop-test-mcp's `refs/original` and reflog; `coop-test-mcp/wip/`; old probe
@@ -191,5 +221,6 @@ crashed the game).
   runs).
 - Idle coop-test MCP server processes left by other sessions (instance 0);
   harmless unless they boot.
+- `coop-test-mcp/run/verify/` now holds about 35 runs.
 - Merged local branches were deleted on 2026-10-14; `coop/127-near-textures`,
   `test/playtest-2` and `test/playtest-fixes` remain unmerged.
