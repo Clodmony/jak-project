@@ -446,6 +446,10 @@
 
 ;; both players' pairs become the first two wants (co-op start, checkpoint reload)
 (define-extern coop-wants-reset (function none))
+;; one player's pair becomes a checkpoint's levels (a zoomer respawn there, #49)
+(define-extern coop-wants-checkpoint (function int continue-point none))
+;; level unload!: code shared with another loaded level is pointed at that level's copy (#49)
+(define-extern coop-relink-level (function level none))
 (define-extern coop-wants-backup (function none))
 (define-extern coop-wants-restore (function none))
 (define-extern coop-crossing-to-backup (function object none))

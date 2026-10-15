@@ -667,6 +667,8 @@
   "Unloads the level. This does not free the heap. The level will be made inactive and ready to be loaded some other time."
   (deactivate this)
   (when (!= (-> this status) 'inactive)
+    ;; og:preserve-this coop: code this level shares with another loaded level stays usable (#49)
+    (coop-relink-level this)
     ;; if we linked art group, unlink it.
     (when (or (= (-> this status) 'loaded) (= (-> this status) 'alive) (= (-> this status) 'active) (= (-> this status) 'login))
       (dotimes (s5-0 (-> this art-group art-group-array length))

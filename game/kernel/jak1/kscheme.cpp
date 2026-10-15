@@ -1,6 +1,8 @@
 #include "kscheme.h"
 
 #include <cstring>
+#include <string>
+#include <vector>
 
 #include "common/common_types.h"
 #include "common/log/log.h"
@@ -1735,6 +1737,12 @@ s32 InitHeapAndSymbol() {
   make_function_symbol_from_c("mc-makefile", (void*)MC_makefile);
   make_function_symbol_from_c("kset-language", (void*)MC_set_language);
   make_function_symbol_from_c("pc-set-memcard-namespace!", (void*)MC_set_namespace);
+  // og:preserve-this coop (#49): levels that share code
+  make_function_symbol_from_c("pc-coop-relink-begin", (void*)coop_relink_begin);
+  make_function_symbol_from_c("pc-coop-relink-addr", (void*)coop_relink_addr);
+  make_function_symbol_from_c("pc-coop-relink-stack", (void*)coop_relink_stack);
+  make_function_symbol_from_c("pc-coop-relink-words", (void*)coop_relink_words);
+  make_function_symbol_from_c("pc-coop-relink-end", (void*)coop_relink_end);
 
   // set *debug-segment*
   auto ds_symbol = intern_from_c("*debug-segment*");
@@ -1883,6 +1891,167 @@ s64 load_and_link(const char* filename, char* decode_name, kheapinfo* heap, u32 
     return (s32)link_and_exec(rv, decode_name, sz, make_ptr(heap), flags, false).offset;
   }
   return (s32)rv.offset;
+}
+
+// og:preserve-this coop (#49): levels that share code.
+// Some code files are packed into several levels' DGOs (the village code into the three villages
+// and the citadel, the zoomer code into five levels). Each level links its own copy, and the copy
+// linked last is the one the symbols and method tables point to. The original game never had two
+// such levels loaded at once; co-op's four level slots do (village1 and village2 in Fire Canyon).
+// When the copy in use unloads while another copy stays loaded, whatever still points into the
+// unloading copy is pointed at the same place in the other one (the copies are the same object
+// file). The kernel side: the code ranges, symbols and methods; the GOAL side (coop-relink-level)
+// does processes and particles with pc-coop-relink-addr, -words and -stack.
+namespace {
+struct CoopLinkedObject {
+  std::string name;
+  u32 base;
+  u32 size;
+};
+// the main segment of every object linked so far (the ones of unloaded levels are dropped)
+std::vector<CoopLinkedObject> g_coop_linked;
+
+struct CoopRelink {
+  u32 from;
+  u32 size;
+  u32 to;
+};
+// while a level unloads: its objects' code and the same objects' code in another loaded level
+std::vector<CoopRelink> g_coop_relink;
+
+u32 coop_relink_lookup(u32 addr) {
+  for (auto& r : g_coop_relink) {
+    if (addr >= r.from && addr - r.from < r.size) {
+      return r.to + (addr - r.from);
+    }
+  }
+  return 0;
+}
+
+bool coop_is_type(u32 value) {
+  if ((value < SymbolTable2.offset || 0x7ffffff < value) &&
+      (value < 0x84000 || 0x100000 <= value)) {
+    return false;
+  }
+  if ((value & OFFSET_MASK) != BASIC_OFFSET) {
+    return false;
+  }
+  return *Ptr<u32>(value - 4) == *(s7 + FIX_SYM_TYPE_TYPE);
+}
+}  // namespace
+
+void coop_link_record(const char* name, u32 base, u32 size) {
+  // a heap that was reset and filled again: drop what was there
+  for (auto it = g_coop_linked.begin(); it != g_coop_linked.end();) {
+    if (it->base < base + size && base < it->base + it->size) {
+      it = g_coop_linked.erase(it);
+    } else {
+      ++it;
+    }
+  }
+  g_coop_linked.push_back({name, base, size});
+}
+
+/*!
+ * The level whose heap is [heap_base, heap_top) unloads: pair each of its objects with the same
+ * object in another loaded heap (the latest linked), point the symbols and the methods of all types
+ * that point into the unloading code at that copy, and forget the unloading objects. Returns how
+ * many objects were paired. The pairs stay for pc-coop-relink-addr and pc-coop-relink-stack until
+ * pc-coop-relink-end.
+ */
+u64 coop_relink_begin(u32 heap_base, u32 heap_top) {
+  g_coop_relink.clear();
+  auto inside = [&](u32 a) { return a >= heap_base && a < heap_top; };
+  for (auto& obj : g_coop_linked) {
+    if (!inside(obj.base)) {
+      continue;
+    }
+    for (auto it = g_coop_linked.rbegin(); it != g_coop_linked.rend(); ++it) {
+      if (!inside(it->base) && it->size == obj.size && it->name == obj.name) {
+        g_coop_relink.push_back({obj.base, obj.size, it->base});
+        break;
+      }
+    }
+  }
+  std::erase_if(g_coop_linked, [&](const CoopLinkedObject& o) { return inside(o.base); });
+  if (g_coop_relink.empty()) {
+    return 0;
+  }
+  u32 moved = 0;
+  for (u32 sym = SymbolTable2.offset; sym < LastSymbol.offset; sym += 8) {
+    u32 value = *Ptr<u32>(sym);
+    if (auto to = coop_relink_lookup(value)) {
+      *Ptr<u32>(sym) = to;
+      moved++;
+    } else if (coop_is_type(value)) {
+      auto type = Ptr<Type>(value);
+      for (u32 i = 0; i < type->num_methods; i++) {
+        if (auto m = coop_relink_lookup(type->get_method(i).offset)) {
+          type->get_method(i).offset = m;
+          moved++;
+        }
+      }
+    }
+  }
+  lg::info("[coop] shared code: {} objects paired, {} symbols and methods moved",
+           g_coop_relink.size(), moved);
+  return g_coop_relink.size();
+}
+
+/*!
+ * Where a GOAL address of the unloading code is in the copy that stays, or the address itself.
+ */
+u64 coop_relink_addr(u32 addr) {
+  auto to = coop_relink_lookup(addr);
+  return to ? to : addr;
+}
+
+/*!
+ * A suspended thread's saved stack [lo, hi) (GOAL addresses): return addresses into the unloading
+ * code (absolute, 8 bytes each) are moved to the copy that stays. Returns how many.
+ */
+u64 coop_relink_stack(u32 lo, u32 hi) {
+  u64 moved = 0;
+  if (g_coop_relink.empty() || lo >= hi || hi > 0x8000000) {
+    return 0;
+  }
+  const u64 exec = (u64)g_ee_main_mem_exec;
+  for (u32 a = (lo + 7) & ~7u; a + 8 <= hi; a += 8) {
+    u64 word = *Ptr<u64>(a);
+    if (word >= exec && word < exec + 0x8000000) {
+      if (auto to = coop_relink_lookup((u32)(word - exec))) {
+        *Ptr<u64>(a) = exec + to;
+        moved++;
+      }
+    }
+  }
+  return moved;
+}
+
+/*!
+ * A process's memory [lo, hi) (GOAL addresses): 4-byte words that point into the unloading code are
+ * moved to the copy that stays. Processes keep code pointers in fields of their own (a manipy's
+ * hooks, part trackers' callbacks), so all of a process is checked. The code ranges are the shared
+ * objects' main segments only, so a word that isn't a pointer falls in one only by chance (a game
+ * time stamp would after more than 30 hours of play). Returns how many.
+ */
+u64 coop_relink_words(u32 lo, u32 hi) {
+  u64 moved = 0;
+  if (g_coop_relink.empty() || lo >= hi || hi > 0x8000000) {
+    return 0;
+  }
+  for (u32 a = (lo + 3) & ~3u; a + 4 <= hi; a += 4) {
+    if (auto to = coop_relink_lookup(*Ptr<u32>(a))) {
+      *Ptr<u32>(a) = to;
+      moved++;
+    }
+  }
+  return moved;
+}
+
+u64 coop_relink_end() {
+  g_coop_relink.clear();
+  return 0;
 }
 
 }  // namespace jak1

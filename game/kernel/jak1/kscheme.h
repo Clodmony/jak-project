@@ -73,4 +73,11 @@ s32 InitHeapAndSymbol();
 u64 call_goal_function_by_name(const char* name);
 Ptr<Type> alloc_and_init_type(Ptr<Symbol> sym, u32 method_count);
 Ptr<Symbol> set_fixed_symbol(u32 offset, const char* name, u32 value);
+// og:preserve-this coop (#49): code shared by levels loaded at the same time
+void coop_link_record(const char* name, u32 base, u32 size);
+u64 coop_relink_begin(u32 heap_base, u32 heap_top);
+u64 coop_relink_addr(u32 addr);
+u64 coop_relink_stack(u32 lo, u32 hi);
+u64 coop_relink_words(u32 lo, u32 hi);
+u64 coop_relink_end();
 }  // namespace jak1

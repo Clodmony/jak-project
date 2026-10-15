@@ -194,6 +194,20 @@ cross them (#69):
 - the DGO loader, the login state and the loading heap are global, so levels load one at a time:
   with four wants two can be missing at once, and `load-state update!` adds the next one only when no
   slot is loading or logging in (`level-load-in-progress?`; the original never had two missing wants);
+- levels that share code (#49): some code files are in several levels' DGOs (the village code in the
+  three villages and the citadel, the zoomer code in Fire Canyon, Lava Tube, Misty, Mountain Pass and
+  Precursor Basin). Each level links its own copy and the copy linked last is the one symbols,
+  methods and new processes use. The original never had two of them loaded at once; four slots do
+  (village1 and village2 in Fire Canyon, with the players on both sides of the canyon's middle). The
+  kernel records each object's code segment at link time (`coop_link_record`, `klink.cpp`); when a
+  level unloads with four slots in use, `coop-relink-level` (from `level unload!`) points everything
+  that points into code it shares with another loaded level at that level's copy: symbols and every
+  type's methods (`pc-coop-relink-begin`), each process's memory as 4-byte words (states, hooks,
+  launch controls, code pointers in fields of its own such as a manipy's hooks;
+  `pc-coop-relink-words`), suspended threads' saved stacks (`pc-coop-relink-stack`), the particle
+  group and launcher tables and the live particles. The copies are the same object file, so an
+  address keeps its offset in the object. Before, the game crashed once the freed copy's slot was
+  loaded again;
 - the continue point, `level-distance`, vis, music, ambients and the sound listener stay with player 1;
 - sky, fog and lighting blend two levels, as in the original (`update-time-of-day`): the two slots
   nearest player 1's camera, each level keeping its side of the blend while it stays in the pair
@@ -224,6 +238,10 @@ the same behaviour as the existing PC "force actors" option, without changing th
   a reload after both died doesn't leave it for a later death in another level. A zoomer remount with
   no zoomer in the loaded levels keeps the player on foot: the zoomer states live in the zoomer
   levels' heaps and are garbage once such a level is replaced.
+- A zoomer respawn at the player's checkpoint is a teleport, which crosses no load boundary: the
+  player's pair of levels becomes the checkpoint's two (`coop-wants-checkpoint`), displayed as a
+  reload there wants them, so Sandover is there behind a player who overheated past Fire Canyon's
+  middle and came back at its start (#49).
 - Players collide and can hit each other (`coop-contact-update`, once per tick). While both are in
   play and free (not held, on a zoomer, in a minigame, spawning, warping, hidden for a cinematic or
   frozen), the `target` kind is in the collide-with of each player's root and body spheres: the
