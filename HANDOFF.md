@@ -34,9 +34,7 @@ Last updated 2026-10-16 (after #49; the session-link cleanup is done and
   level-pairs, streaming, deaths-apart): 253/254, the one failure the older
   streaming crash below.
 - Found while verifying: `streaming` crashes the game about once in ten
-  runs, also on the tip before #49 (2 of 22 runs). Issue body for the owner
-  to file: `~/dev-scratch/jak-project/49/issue-streaming-crash.md`
-  (`gh issue create --repo Clodmony/opengoal-coop --title "Four level slots: intermittent crash in name= while beach, Sandover, jungle and jungleb are loaded (AI-assisted)" --body-file <that file>`).
+  runs, also on the tip before #49 (2 of 22 runs): issue #155.
 
 ## Open pull requests
 
@@ -71,9 +69,9 @@ co-op tip.
 - `verify.sh` builds nothing in C++: note in the harness README how a session
   gets a `gk` (below) when a branch changes the runtime.
 
-**Step 1b (in parallel with step 1): the streaming crash** (the issue above,
-once filed): game code, one session with the current single-bridge
-harness. Fix it before the streams: they all load four levels.
+**Step 1b (in parallel with step 1): #155, the streaming crash.** Game
+code, one session with the current single-bridge harness. Fix it before
+the streams: they all load four levels.
 
 **Step 2: three streams in parallel**, each its own worktree, test instance
 (3, 4, 5) and scenario file. Test numbers fixed up front (TESTING.md rows):
@@ -169,5 +167,5 @@ Done 2026-10-16 (owner: "whatever is not needed"): the 46-48 scratch
 folders, the rewrite folder, the local branches with links (their changes
 were all in the co-op branch), the tools checkout's leftovers and old verify
 runs. Left: `~/dev-scratch/jak-project/49/` (the `gk` build the worktree
-uses, the issue body), the backup bundle in `~/Documents/jak-coop-backup/`,
+uses), the backup bundle in `~/Documents/jak-coop-backup/`,
 `scratch/build-gk` (the playtest's `gk`).
