@@ -1322,6 +1322,7 @@
                    (set! (-> *time-of-day-proc* 0 time-ratio) 0.0))))))
            ((= v1-4 'save)
             (mem-copy! (&-> *backup-load-state* type) (&-> this type) (size-of coop-load-state)) ;; og:preserve-this coop
+            (coop-wants-backup) ;; og:preserve-this coop: the players' level pairs go with the saved wants
             (set! (-> *backup-load-state* command-list) '())
             (dotimes (v1-112 256)
               (if (-> *backup-load-state* object-name v1-112) (set! (-> *backup-load-state* object-name v1-112) #f))))

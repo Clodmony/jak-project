@@ -637,6 +637,7 @@
           (set! (-> s5-1 flags) (font-flags shadow kerning large))
           (print-game-text (lookup-text! *common-text* (text-id press-to-use) #f) s5-1 #f 128 22))
         (when (and (cpad-pressed? (target-cpad-idx) circle) (process-grab? *target*)) ;; og:preserve-this coop: pad of the player using it
+          (coop-pin-to-player self (process->handle *target*)) ;; og:preserve-this coop: the ride stays with the player who boarded
           (set! (-> self waiting-for-player) #f)
           (set! (-> self player-riding) #t)
           (set! (-> self auto-pilot) #t)
@@ -1093,6 +1094,7 @@
           (update-transforms! (-> self root-overlay))
           (move-to-ground (-> *target* control) 4096.0 40960.0 #t (-> *target* control root-prim collide-with))
           (logior! (-> *target* control status) (cshape-moving-flags onsurf onground tsurf))
+          (coop-put-other-player-near *target* (-> *target* control trans)) ;; og:preserve-this coop: the other player rides along
           (suspend)
           (send-event *camera* 'teleport-to-other-start-string))
         (set-continue! *game-info* "misty-start"))
@@ -1101,6 +1103,7 @@
       (set! (-> self anchored) #t)
       (set! (-> self propeller enable) #t)
       (fishermans-boat-play-sounds)
+      (coop-unpin self) ;; og:preserve-this coop
       (apply-settings *setting-control*)
       (process-spawn-function process
         (lambda :behavior fishermans-boat ()
@@ -1173,6 +1176,7 @@
           (update-transforms! (-> self root-overlay))
           (move-to-ground (-> *target* control) 4096.0 40960.0 #t (-> *target* control root-prim collide-with))
           (logior! (-> *target* control status) (cshape-moving-flags onsurf onground tsurf))
+          (coop-put-other-player-near *target* (-> *target* control trans)) ;; og:preserve-this coop: the other player rides along
           (suspend)
           (send-event *camera* 'teleport-to-other-start-string))
         (set-continue! *game-info* "village1-hut"))
@@ -1182,6 +1186,7 @@
       (set! (-> self propeller enable) #t)
       (fishermans-boat-play-sounds)
       (process-entity-status! self (entity-perm-status complete) #t)
+      (coop-unpin self) ;; og:preserve-this coop
       (go fishermans-boat-docked-village))
   :post
     (behavior ()
