@@ -184,7 +184,10 @@ cross them (#69):
   around a cutscene's or checkpoint's commands (`coop-wants-backup`/`-restore`), and a player's
   crossing while a backup is held (an ambient's spooled animation, the sage's lines at his hut) goes
   into the backup too (`coop-crossing-to-backup`), so the restore doesn't switch off a level the
-  other player walked into; a checkpoint reload
+  other player walked into. A script's `save` command (the fisherman's boat rides end with one)
+  makes the current wants the ones the restore brings back; the pairs are saved with them, or the
+  restore put back the pairs from before the script and the wants shrank to the levels the players
+  stand in (#48: Sandover, which holds the boat back, was dropped at Misty's dock); a checkpoint reload
   gives both players the checkpoint's two levels (`coop-wants-reset`); `coop-stop` leaves player 1's
   pair as the wants. Turning off the display of the other player's level is ignored. Vis
   and checkpoints follow player 1 only;
@@ -261,6 +264,10 @@ the same behaviour as the existing PC "force actors" option, without changing th
   checks each player at the car (`coop-for-each-player-context`) and either can start it; the
   gondola is pinned to the player who pressed for the ride, and at the other end the other player
   is put next to them (`coop-put-other-player-near`).
+- The fisherman's boat (`fishermans-boat.gc`): the player who boards and presses circle pins it for
+  the ride; at its end the other player is put next to the rider (#48: the ride's script keeps both
+  levels loaded, so the old safety net that moved player 2 when their level went away no longer
+  did, and player 2 stayed in the water at the dock they left).
 - Lost Precursor City's exit chamber: its origin also stays at the bottom. The button's press pins
   the chamber to the player at the button and puts the other player next to them; while the chamber
   holds its rider in place during the ride, the other one is held 1.5 m beside
