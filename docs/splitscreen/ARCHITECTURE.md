@@ -275,7 +275,10 @@ the same behaviour as the existing PC "force actors" option, without changing th
 - Moving platforms reserve at least two rider slots.
 - Eco doors (`eco-door`, `baseplat.gc`) open for any player within their open distance who carries
   blue eco, checked per player (`coop-for-each-player-context`), not only for the nearest one: a
-  player without eco standing closer would otherwise keep the door shut for the partner.
+  player without eco standing closer would otherwise keep the door shut for the partner. The jungle's
+  temple door (`maindoor`) and precursor bridge (`precurbridge`, `jungle-obs.gc`) check their blue eco
+  the same way: the door opens for any player within 15 m carrying it, the bridge rises for any player
+  on its activation spot carrying it.
 - Pause: right before `determine-pause-mode`, player 2's Start/Select are merged into pad 0, and a
   player 2 controller loss injects a pause (`coop-merge-pause-buttons`; player 1's loss pauses as in
   single player). While a player's controller is disconnected the screen says so ("Player 2 /
