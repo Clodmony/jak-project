@@ -7,15 +7,47 @@ memory is not read by a session that starts in another worktree. State goes
 here; stable recipes go into `docs/splitscreen/`; personal data and hardware
 never.
 
-Last updated 2026-10-15 (after #46, PR open). A manual playtest is planned for
-2026-10-16.
+Last updated 2026-10-15 (after #46; its PR waits for the session-link
+cleanup below). A manual playtest is planned for 2026-10-16.
+
+## Pending: session-link cleanup (the owner runs it)
+
+52 commit messages on the fork end with a
+`Claude-Session: https://claude.ai/code/session_...` trailer (every branch
+except `master`, and the tags v0.1.0 and v0.1.1), and 21 PR bodies
+(#123-#149) end with a session link. They point at the owner's own Claude
+sessions and must go. **Never add either again:** commits carry only the
+`Co-Authored-By: Claude ... <noreply@anthropic.com>` trailer and PR bodies no
+session URL, whatever the harness's attribution note asks.
+
+The auto-mode classifier blocks Claude from the rewrite, so the owner runs
+`bash ~/dev-scratch/jak-project/rewrite/rewrite.sh <stage>` (outside the
+repository), reading each stage's output before the next:
+1. `prepare`: bare clone in the same folder, backup bundle in
+   `~/Documents/jak-coop-backup/`, `filter-branch` of the fork's commits
+   (not `master`), checks per ref (same trees, authors, dates and messages
+   without the line). Pushes nothing.
+2. `push`: one atomic force-push of the changed branches and tags, each with
+   a lease on its old commit.
+3. `prs`: removes the link line from the PR bodies; the old bodies stay in
+   `rewrite/prs/`.
+4. `local`: moves local branches and clean worktrees onto the new history;
+   lists the branches that only exist locally.
+
+Then the owner opens the #46 PR and files the turbo issue (commands under
+"Open pull requests"). A branch started before the rewrite (e.g. #47's) and
+not pushed before `prepare` stays on the old history: rebase it onto the
+rewritten co-op branch (old tips are in `rewrite/old-refs.txt`) before its
+PR, and check `git log --format=%B` for the line. Old commits stay readable
+through `refs/pull/*` until GitHub Support purges them (as after the
+2026-10-11 rewrite).
 
 ## Repository state
 
-- Co-op branch `feature/jak1-local-splitscreen` at 65c531c11: #147 (#44
-  Geyser Rock), #149 (#45 Sandover Village) and #148 (this file, the
-  Superset setup, the fork section in AGENTS.md) merged 2026-10-15.
-  `master` = upstream mirror.
+- Co-op branch `feature/jak1-local-splitscreen`: #147 (#44 Geyser Rock),
+  #149 (#45 Sandover Village) and #148 (this file, the Superset setup, the
+  fork section in AGENTS.md) merged 2026-10-15. Its commit ids change with
+  the cleanup above. `master` = upstream mirror.
 - Merge only when the owner says so: locally as Claude with
   `git merge --no-ff -m "Merge pull request #N from Clodmony/<branch> (AI-assisted)"`
   and push, never `gh pr merge`. A worktree cannot check out the co-op branch
@@ -31,11 +63,16 @@ Last updated 2026-10-15 (after #46, PR open). A manual playtest is planned for
 - #46 Sentinel Beach, branch `coop/46-sentinel-beach` (docs only: TESTING.md
   test 52 and a "Campaign (#46)" row; no game change was needed). Verify
   (`--tests`, sentinel-beach, sandover-village, geyser-rock): 162/162 checks,
-  compat ok, goalc-test 1692, all passed. Needs the owner's OK to merge.
+  compat ok, goalc-test 1692, all passed. **The PR is not open yet**: the
+  owner opens it after the cleanup, with
+  `gh pr create --repo Clodmony/opengoal-coop --base feature/jak1-local-splitscreen --head coop/46-sentinel-beach --title "Sentinel Beach with two players: playthrough test 52 (#46, AI-assisted)" --body-file ~/dev-scratch/jak-project/46/pr-body.md`.
+  Then it needs the owner's OK to merge.
 
 ## New issue: harness turbo
 
-Filed 2026-10-15 (not in the milestone order): run the game uncapped while the
+To be filed by the owner after the cleanup:
+`gh issue create --repo Clodmony/opengoal-coop --title "Harness: turbo while waiting (uncapped game during waits) to shorten test runs (AI-assisted)" --body-file ~/dev-scratch/jak-project/46/issue-turbo.md`.
+Not in the milestone order: run the game uncapped while the
 harness waits, to shorten test runs. The issue holds the analysis (game time is
 one fixed step per frame; talks, scenes, sound and loading stay real time;
 expected about 1.5-2x per campaign run) and the plan (turbo only inside
@@ -99,9 +136,10 @@ block: check the count first.
 
 ## Worktrees and background processes
 
-- Main checkout on `feature/jak1-local-splitscreen`, behind origin (at
-  c461511c1): pull before using it. One Superset worktree on
-  `coop/46-sentinel-beach` (PR open; reuse it for #47 with a new branch).
+- Main checkout on `feature/jak1-local-splitscreen`, behind origin: the
+  cleanup's `local` stage moves it, otherwise pull before using it. One
+  Superset worktree on `coop/46-sentinel-beach` (reuse it for #47 with a new
+  branch).
   The scratch worktree `~/dev-scratch/jak-project/wt-workspace` on
   `coop/workspace-handoff` (merged) can be removed. The bridge (`demo/bridge.py serve`, test
   instance 3) is still running; its game was stopped and the virtual pads
@@ -112,6 +150,8 @@ block: check the count first.
 
 ## Cleanup the owner may approve
 
+- After the #46 PR and the turbo issue exist: `~/dev-scratch/jak-project/46/`
+  and, once the cleanup is pushed and checked, `~/dev-scratch/jak-project/rewrite/`.
 - In the tools checkout: `scratch/coop-test-mcp-before-rewrite.bundle` and
   coop-test-mcp's `refs/original` and reflog; `coop-test-mcp/wip/`; old probe
   scripts `scratch/p_*.py`, `probe.py`, `b`; `coop-test-mcp/run/verify/` (29
