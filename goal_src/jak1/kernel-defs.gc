@@ -494,6 +494,14 @@
 (define-extern pc-coop-prepare-join! (function none)) ;; join screen: P1 keeps their device, P2 joins with a button
 (define-extern pc-coop-swap-players! (function none))
 (define-extern pc-coop-slot-name (function int string symbol)) ;; controller name of a slot, #f for keyboard/none
+;; levels that share code (#49): on a level's unload, move what points into its code to the same
+;; object's copy in another loaded level (begin: number of objects paired; addr: the moved address;
+;; stack: return addresses moved in a saved stack [lo, hi); words: pointers in a process's memory)
+(define-extern pc-coop-relink-begin (function int int int))
+(define-extern pc-coop-relink-addr (function int int))
+(define-extern pc-coop-relink-stack (function int int int))
+(define-extern pc-coop-relink-words (function int int int)) ;; 4-byte words in [lo, hi)
+(define-extern pc-coop-relink-end (function int))
 
 (define-extern pc-set-mouse-options! (function symbol symbol symbol none))
 

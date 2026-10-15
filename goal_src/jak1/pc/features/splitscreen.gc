@@ -890,6 +890,7 @@
        (let ((cp (coop-racer-checkpoint idx)))
          (set! (-> pos quad) (-> cp trans quad))
          (quaternion-copy! quat (-> cp quat))
+         (coop-wants-checkpoint idx cp)
          (-> cp name))))))
 
 (defun coop-elevator-called? ((plat process-drawable) (height float))
@@ -1182,9 +1183,11 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defmacro coop-goal-address? (ptr)
-  "Is ptr an address inside the game's memory (so it can be read without crashing)?"
+  "Is ptr an address inside the game's memory (so it can be read without crashing)? The runtime
+   protects the first 512 KB (EE_MAIN_MEM_LOW_PROTECT, runtime.cpp): a stale particle launcher
+   pointer of #x10008 crashed coop-sprite-owner in Fire Canyon (#49)."
   `(let ((coop-addr (the-as uint ,ptr)))
-     (and (>= coop-addr #x10000) (< coop-addr #x8000000))))
+     (and (>= coop-addr #x80000) (< coop-addr #x8000000))))
 
 (defun coop-sprite-owner ((info sparticle-cpuinfo))
   "The player a 2d particle belongs to (0 or 1), or -1: the player bit of its launcher's process, or
@@ -2096,6 +2099,84 @@
     (set! (-> *coop-wants* crossed p) #f))
   (set! *coop-want-player* -1)
   (set! *coop-wants-backed-up?* #f)
+  (none))
+
+(defun coop-wants-checkpoint ((p int) (cp continue-point))
+  "Player p comes back alone at the checkpoint cp (a death on a zoomer): their pair becomes cp's two
+   levels, and a level cp displays is displayed, as a reload there wants them. The respawn is a
+   teleport, which crosses no boundary, and the level boxes at a checkpoint can hold only one of its
+   levels (firecanyon-start: Sandover stayed unloaded behind player 2, who fell through on the way
+   back). A display already on stays as it is."
+  (set! *coop-want-player* p)
+  (coop-want-levels *load-state* (-> cp lev0) (-> cp lev1))
+  (dotimes (i (load-want-count))
+    (let ((want (load-want *load-state* i)))
+      (when (not (-> want display?))
+        (cond
+          ((and (-> cp lev0) (= (-> want name) (-> cp lev0))) (set! (-> want display?) (-> cp disp0)))
+          ((and (-> cp lev1) (= (-> want name) (-> cp lev1))) (set! (-> want display?) (-> cp disp1)))))))
+  (none))
+
+;;;; Levels that share code (#49)
+
+;; Some code files are in several levels' DGOs (the village code in the three villages and the
+;; citadel, the zoomer code in five levels), and the copy linked last is the one symbols, methods and
+;; new processes use. The original never had two of those levels loaded at once; four slots do
+;; (village1 and village2 in Fire Canyon: one player at the start, the other past the middle). When
+;; the copy in use unloaded while another stayed, everything still pointing into it ran freed code
+;; once the slot was loaded again (a crash). The kernel moves the symbols and methods to the copy that
+;; stays (pc-coop-relink-begin); this moves the rest that can point into code: everything in the
+;; processes' memory (states, hooks, launch controls, code pointers in fields of their own) and their
+;; suspended threads' stacks, the particle tables and the live particles.
+
+(defmacro coop-relink! (place type)
+  "Point place at the copy that stays, if it points into the unloading code."
+  `(set! ,place (the-as ,type (pc-coop-relink-addr (the-as int ,place)))))
+
+(defun coop-relink-thread ((th cpu-thread))
+  "A suspended thread: its resume address and the return addresses in its saved stack."
+  (when (coop-goal-address? th)
+    (coop-relink! (-> th pc) pointer)
+    ;; thread-suspend saves the frames from sp up to stack-top at the end of the thread's stack buffer
+    (let ((used (&- (-> th stack-top) (the-as uint (-> th sp)))))
+      (when (and (> used 0) (<= used (-> th stack-size)))
+        (let ((end (&+ (the-as pointer (-> th stack)) (-> th stack-size))))
+          (pc-coop-relink-stack (the-as int (&- end (the-as uint used))) (the-as int end))))))
+  (none))
+
+(defun coop-relink-particles ((sys sparticle-system))
+  (dotimes (i (+ (-> sys length 0) (-> sys length 1)))
+    (let ((info (-> sys cpuinfo-table i)))
+      (when (-> info valid)
+        (coop-relink! (-> info func) basic)
+        (coop-relink! (-> info next-launcher) basic))))
+  (none))
+
+(defun coop-relink-level ((lev level))
+  "level unload! hook, after the level's processes are gone and before its heap is reset: what points
+   into code the level shares with another loaded level is pointed at that level's copy. Only with
+   four level slots in use (co-op started at some point): with two, no two loaded levels share code."
+  (when (> (-> *level* length) 2)
+    (let ((paired (pc-coop-relink-begin (the-as int (-> lev heap base)) (the-as int (-> lev heap top-base)))))
+      (when (> paired 0)
+        ;; every process's own memory (states, hooks, its thread's resume address, launch controls, and
+        ;; code pointers kept in fields of its own: a manipy's hooks), then the saved stacks
+        (iterate-process-tree *active-pool*
+                              (lambda ((p process))
+                                (pc-coop-relink-words (the-as int (&- (the-as pointer p) 4)) (the-as int (-> p heap-top)))
+                                (coop-relink-thread (-> p main-thread))
+                                (if (!= (-> p top-thread) (-> p main-thread)) (coop-relink-thread (the-as cpu-thread (-> p top-thread))))
+                                #t)
+                              *null-kernel-context*)
+        (dotimes (i (-> *part-group-id-table* length))
+          (coop-relink! (-> *part-group-id-table* i) sparticle-launch-group))
+        (dotimes (i (-> *part-id-table* length))
+          (coop-relink! (-> *part-id-table* i) sparticle-launcher))
+        (coop-relink-particles *sp-particle-system-2d*)
+        (coop-relink-particles *sp-particle-system-3d*)
+        (format 0 "[coop] level ~A unloads: ~D of its code objects are in another loaded level, pointed there~%"
+                (-> lev name) paired))
+      (pc-coop-relink-end)))
   (none))
 
 (defun coop-wants-backup ()
