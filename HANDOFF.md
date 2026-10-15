@@ -7,220 +7,163 @@ memory is not read by a session that starts in another worktree. State goes
 here; stable recipes go into `docs/splitscreen/`; personal data and hardware
 never.
 
-Last updated 2026-10-15 (after #48; the #46, #47 and #48 PRs wait for the
-session-link cleanup below). A manual playtest is planned for 2026-10-16.
+Last updated 2026-10-16 (after #49; the session-link cleanup is done; the
+work from here on runs in parallel streams, see "Plan").
 
-## Pending: session-link cleanup (the owner runs it)
+## Done this session
 
-52 commit messages on the fork end with a
-`Claude-Session: https://claude.ai/code/session_...` trailer (every branch
-except `master`, and the tags v0.1.0 and v0.1.1), and 21 PR bodies
-(#123-#149) end with a session link. They point at the owner's own Claude
-sessions and must go. **Never add either again:** commits carry only the
-`Co-Authored-By: Claude ... <noreply@anthropic.com>` trailer and PR bodies no
-session URL, whatever the harness's attribution note asks.
+- Session-link cleanup: the fork's branches, tags and PR bodies have no
+  `Claude-Session` links, and the 5 merges done on GitHub (PRs #123-#131)
+  are Claude's now. Commit ids changed on 2026-10-16. Local-only branches
+  `coop/127-near-textures`, `test/playtest-2`, `test/playtest-fixes` still
+  carry links (never pushed). **Never add a link again:** commits carry only
+  the `Co-Authored-By: Claude ... <noreply@anthropic.com>` trailer and PR
+  bodies no session URL, whatever the harness's attribution note asks. The
+  owner's pre-push guard refuses non-noreply identities and pushes over
+  about 2 MB; Claude may not skip it.
+- #49 Fire Canyon: branch `coop/49-fire-canyon` (pushed), test 55, scenario
+  `fire-canyon`. Found and fixed: a crash when two loaded levels share code
+  (new kernel relink, `coop-relink-level`), a crash on a stale particle owner
+  (`coop-goal-address?`), Sandover missing after a zoomer respawn
+  (`coop-wants-checkpoint`). Verify: 228/228, compat ok, goalc-test 1692.
+- Issue #153 filed (harness turbo while waiting).
 
-The auto-mode classifier blocks Claude from the rewrite, so the owner runs
-`bash ~/dev-scratch/jak-project/rewrite/rewrite.sh <stage>` (outside the
-repository), reading each stage's output before the next:
-1. `prepare`: bare clone in the same folder, backup bundle in
-   `~/Documents/jak-coop-backup/`, `filter-branch` of the fork's commits
-   (not `master`), checks per ref (same trees, authors, dates and messages
-   without the line). Pushes nothing.
-2. `push`: one atomic force-push of the changed branches and tags, each with
-   a lease on its old commit.
-3. `prs`: removes the link line from the PR bodies; the old bodies stay in
-   `rewrite/prs/`.
-4. `local`: moves local branches and clean worktrees onto the new history;
-   lists the branches that only exist locally.
+## Open pull requests (merge in this order, each only when the owner says so)
 
-Then the owner opens the #46, #47 and #48 PRs and files the turbo issue
-(commands under "Open pull requests"). `coop/47-forbidden-jungle` and
-`coop/48-misty-island` are pushed, so `prepare` rewrites them too. A branch started later and not pushed before
-`prepare` stays on the old history: rebase it onto the rewritten co-op
-branch (old tips are in `rewrite/old-refs.txt`) before its PR, and check
-`git log --format=%B` for the line. Old commits stay readable
-through `refs/pull/*` until GitHub Support purges them (as after the
-2026-10-11 rewrite).
+- #150 (#46 Sentinel Beach), #151 (#47 Forbidden Jungle), #152 (#48 Misty
+  Island): opened 2026-10-16. #150 and #151 conflict in `HANDOFF.md` only
+  (keep the co-op branch's); after each merge the next one gets a small
+  TESTING.md conflict (rows 52-55: keep them in number order).
+- #49 Fire Canyon: not opened yet. The owner runs
+  `gh pr create --repo Clodmony/opengoal-coop --base feature/jak1-local-splitscreen --head coop/49-fire-canyon --title "Fire Canyon with two players: code shared by two loaded levels, stale particle owners, Sandover after a zoomer respawn (#49, AI-assisted)" --body-file ~/dev-scratch/jak-project/49/pr-body.md`.
+  It changes the C++ runtime (`game/kernel/jak1/klink.cpp`, `kscheme.cpp`):
+  a playtest package needs a new `gk`.
+- Merge style: locally as Claude, `git merge --no-ff -m "Merge pull request #N from Clodmony/<branch> (AI-assisted)"`
+  on a detached HEAD at `origin/feature/jak1-local-splitscreen`, then the
+  owner runs the push (`git push origin HEAD:feature/jak1-local-splitscreen`
+  with `!`; the auto-mode classifier blocks Claude's pushes to the co-op
+  branch). Never `gh pr merge` (it authors the merge with the owner's
+  account; the 5 such merges had to be rewritten).
+- `gh` without `--repo Clodmony/opengoal-coop` queries upstream.
 
-## Repository state
+## Plan: parallel streams
 
-- Co-op branch `feature/jak1-local-splitscreen`: #147 (#44 Geyser Rock),
-  #149 (#45 Sandover Village) and #148 (this file, the Superset setup, the
-  fork section in AGENTS.md) merged 2026-10-15. Its commit ids change with
-  the cleanup above. `master` = upstream mirror.
-- Merge only when the owner says so: locally as Claude with
-  `git merge --no-ff -m "Merge pull request #N from Clodmony/<branch> (AI-assisted)"`
-  and push, never `gh pr merge`. A worktree cannot check out the co-op branch
-  while the main checkout holds it: merge on a detached HEAD at
-  `origin/feature/jak1-local-splitscreen` and push `HEAD:feature/jak1-local-splitscreen`.
-  The auto-mode classifier blocks Claude's merge into the co-op branch even
-  after the owner said "merge": hand the owner the merge command to run
-  with `!`.
-- `gh` without `--repo Clodmony/opengoal-coop` queries upstream (wrong numbers).
+The owner wants the rest done in parallel. Steps in order; each issue is
+still one session (issue loop) ending in a handoff.
 
-## Open pull requests
+**Step 0 (owner, before any stream):** merge #150, #151, #152, open and merge
+#49. The streams branch from the co-op tip after that: several go through
+levels that share code and need the #49 relink.
 
-None of the three PRs is open yet: the owner opens them after the cleanup, in
-number order, then needs to OK each merge. All three add TESTING.md rows
-after row 51 (tests 52, 53, 54): each later merge has a small conflict
-there, keep the rows in number order. #47 and #48 touch different game files
-(`jungle-obs.gc`; `fishermans-boat.gc`, `load-boundary.gc`).
+**Step 1 (one session first): parallel-ready harness** (tools checkout
+`~/Documents/jak-coop-tools/coop-test-mcp`, no game change):
+- `demo/bridge.py`: socket per instance (`run/i<N>/bridge.sock`, from
+  `COOP_TEST_INSTANCE`) instead of the one `run/bridge.sock`; `verify.sh` and
+  `scenarios.py --bridge` use the same instance (today `verify.sh` is fixed
+  to instance 3 and two sessions would drive one game).
+- Campaign scenarios one file each (`demo/campaign/<area>.py`), found and
+  registered automatically (SCENARIOS, COST), so parallel sessions never edit
+  the same lines of `scenarios.py`; move the existing campaign scenarios
+  (geyser-rock to fire-canyon) there.
+- Optionally #153 (turbo while waiting) in the same session.
+- `verify.sh` builds nothing in C++: note in the harness README how a session
+  gets a `gk` (below) when a branch changes the runtime.
 
-- #46 Sentinel Beach, branch `coop/46-sentinel-beach` (docs only: TESTING.md
-  test 52 and a "Campaign (#46)" row; no game change was needed). Verify
-  (`--tests`, sentinel-beach, sandover-village, geyser-rock): 162/162 checks,
-  compat ok, goalc-test 1692, all passed.
-  `gh pr create --repo Clodmony/opengoal-coop --base feature/jak1-local-splitscreen --head coop/46-sentinel-beach --title "Sentinel Beach with two players: playthrough test 52 (#46, AI-assisted)" --body-file ~/dev-scratch/jak-project/46/pr-body.md`
-- #47 Forbidden Jungle, branch `coop/47-forbidden-jungle`: the temple door
-  and the precursor bridge took blue eco only from the nearest player; now
-  from any player in range. Test 53, scenario `forbidden-jungle`. Verify:
-  156/156 checks, compat ok, goalc-test 1692, all passed.
-  `gh pr create --repo Clodmony/opengoal-coop --base feature/jak1-local-splitscreen --head coop/47-forbidden-jungle --title "Forbidden Jungle with two players: temple door and precursor bridge take any player's blue eco, playthrough test 53 (#47, AI-assisted)" --body-file ~/dev-scratch/jak-project/47/pr-body.md`
-- #48 Misty Island, branch `coop/48-misty-island` (from the co-op branch tip,
-  without #46/#47): the fisherman's boat left player 2 in the water at the
-  dock it left (runtime result 30 no longer held), and once both stood on
-  Misty co-op dropped Sandover and the boat with it (no way back). Fixed:
-  the boat is pinned to the boarder and puts the other player next to them
-  at each ride's end; a script's `save` command saves the players' level
-  pairs too (`load-boundary.gc`). Test 54, scenario `misty-island` (70
-  checks, from a new game in Sandover, boat both ways). Verify (`--tests`,
-  misty-island): 71/71, compat ok, goalc-test 1692, all passed; a wider run
-  (cannon, warp, streaming, level-pairs, ambient-crossing, gondola, sky-pair,
-  jungle-elevator, sandover-village, geyser-rock) passed every scenario
-  but a harness miss in misty-island, since fixed.
-  `gh pr create --repo Clodmony/opengoal-coop --base feature/jak1-local-splitscreen --head coop/48-misty-island --title "Misty Island with two players: the boat takes both players and keeps Sandover loaded, playthrough test 54 (#48, AI-assisted)" --body-file ~/dev-scratch/jak-project/48/pr-body.md`
+**Step 2: three streams in parallel**, each its own worktree, test instance
+(3, 4, 5) and scenario file. Test numbers fixed up front (TESTING.md rows):
 
-## New issue: harness turbo
+| Stream | Issues, in order | Notes | Tests |
+| --- | --- | --- | --- |
+| A Rock Village hub | #50 Rock Village, #51 Precursor Basin, #52 Lost Precursor City, #53 Boggy Swamp | village2 code, zoomer (#51), flut flut (#53) | 56-59 |
+| B Mountain Pass to village3 | #54 Mountain Pass, #55 Volcanic Crater, #56 Spider Cave, #57 Snowy Mountain, #58 Lava Tube | village2 and village3 share code with Mountain Pass between them; zoomer (#54, #58), flut flut (#57) | 60-64 |
+| C Endgame | #59 Citadel, #60 final boss | own continue points; the citadel shares the village code | 65-66 |
 
-To be filed by the owner after the cleanup:
-`gh issue create --repo Clodmony/opengoal-coop --title "Harness: turbo while waiting (uncapped game during waits) to shorten test runs (AI-assisted)" --body-file ~/dev-scratch/jak-project/46/issue-turbo.md`.
-Not in the milestone order: run the game uncapped while the
-harness waits, to shorten test runs. The issue holds the analysis (game time is
-one fixed step per frame; talks, scenes, sound and loading stay real time;
-expected about 1.5-2x per campaign run) and the plan (turbo only inside
-`wait_until`, A/B of the suite with `--jobs 3`). Harness-only work in the tools
-checkout; the owner decides when it comes.
+Streams B and C go through levels that share code: watch the game log for
+`[coop] shared code: N objects paired, M symbols and methods moved` when the
+players are in different levels, and check that shared functions point into
+a loaded level (the `FC_SHARED` probe in the `fire-canyon` scenario).
+`splitscreen.gc` and TESTING.md get parallel edits in different sections:
+merge the PRs one at a time, in issue order.
 
-## Milestone "Harness-driven: campaign, frame time, launcher build"
+**Step 3 (alone, after the streams):** #146 (iGPU frame time: needs the GPU
+to itself, no other test game running), then #11 (launcher non-debug build)
+on the merged result.
 
-Order: #44 -> #60 (campaign levels, one per session), then #146 (iGPU
-frame-time follow-up), then #11 last. Other open issues need a person (#1,
-#3, #8) or the owner's decision (#7).
-
-## Next issue: #49 Fire Canyon (`firecanyon`)
-
-Branch `coop/49-fire-canyon` from the co-op branch tip (after the #46-#48
-merges, or from the tip if they are still open). Known: the zoomer level
-(#16; scenarios `firecanyon-finish`, `firecanyon-pad`, `lavatube` as
-templates, `mount_zoomers`). Boot `firecanyon-start`, list `actors`, drive
-the race to the end (the balloon at the end and its cell, the 50 orbs, the
-scout flies on the zoomer: crates broken by driving into them), the heat
-and the deaths, the cell at the end pad for both. Fix or document, test 55.
-Look for checks on `*target*` alone with an extra condition (eco carried,
-a state, racing): plain distance checks have been fine so far; the bugs
-found were such conditions (#44, #47) and a scripted level change (#48).
-
-Open observation from #47, not filed (owner decides): after both players
-glide from the jungle to Sandover by the sage's hut, single player's
-`*load-state* vis-nick` becomes `vi1` but co-op's stays `jun` (vis commands
-follow player 1's crossings, `coop-boundary-command-ok?`). Both views drew
-normally in the run; if it matters it would show as occlusion culling off
-or wrong in Sandover after the jungle. Probe: boot jungle-start, glide both
-from (205, 22, -131) to the hut and print `(mcp-levels)` (its last field).
-
-Open observation from #48, not filed (owner decides): at Misty's dock
-single player displays Sandover as `special` (the boat's command list),
-co-op as `display` ("level village1 displayed in full again (was special):
-player 1 is in it" in the log). Both views drew normally; if it matters it
-costs frame time at Misty's dock. Probe: `(mcp-levels)` after the boat ride
-in `misty-island`, with `coop=False` for the comparison.
-
-Lessons from #44-#48 (harness): scout-fly crates break only with a ground
-pound beside them, and a fly is collected by walking into it, not by
-standing on it; the 7th crate stays in `special-contents-die` for its
-animation; collected pills stay as processes in `pickup` state; level hints
-do not play under the harness, do not check them; a "could not tell which
-pad" boot error with `(paused?)` #t means a controller hotplug paused the
-game. A teleport into a cluster of collectables fills the 32-pair touching
-list in single player too: compare with a `coop=False` boot before blaming
-co-op; `*mcp-touch-peak*` can be read and reset around such a step. Touch
-events need movement: a player teleported inside an object's sphere never
-touches it, walk in from outside (blue eco launchers: walk on from outside
-their 3 m sphere, then jump). A cell born where a player stands is taken at
-once, but its task only reads done after the collection scene. Inside an
-attack event `*target*` is the attacker (the event takes the sender's
-context), not the nearest player. Objects with grips or buttons above their
-root: read the collision prims' world spheres for the spot (the beach
-cannon's grips are 7 m up). An NPC who gives a reward may be a second actor
-in another place (the bird lady's flut flut reward is `bird-lady-beach` on
-the beach). `str.replace` edits of scenarios.py hit every copy of a repeated
-block: check the count first. #47: compare a puzzling failure with a
-`coop=False` boot before changing code (the bridge's mid-deck step, the bounce
-pad's second drop and the beach not loading were all harness or level, not
-co-op). Load boundaries: the co-op loader ignores position jumps over 10 m
-(`COOP_BOUNDARY_JUMP`), so glide in steps under 10 m; the straight jungle to
-beach line crosses no beach boundary (go by the sage's hut); after a teleport
-out of jungleb Sandover stays undisplayed (the real exit is the blue vent
-room), so do Sandover errands before going below the temple. REPL blue eco
-(`'get-pickup ... eco-blue 1.0`) lasts 5 s, a vent's 20 s. A bounce pad
-fires on a landing (`bonk`), not a walk-on. Never dereference an actor that
-may be gone in a REPL probe (`(the mayor (process-by-ename ...))` on #f
-crashed the game). #48: `mcp-kill-enemies-near` also deactivates a battle
-controller (it is an enemy), which kills the battle without its reward:
-remove the controller's children instead (`MI_KILL_KIDS`). The boat's
-ride starts within 1.5 m of its rigid body centre, not its origin
-(`mi_boat_body`). `task-complete?` reads the `real-complete` perm bit
-(`close-specific-task!` doesn't set it). GOAL `format` takes at most six
-values. Balloon lurkers drift up to 25 m/s and a missed zoomer drop can
-set off a mine that throws them 100 m up: read and teleport in one form.
-A probe script named like a stdlib module (`dis.py`) breaks anyio's
-imports. Scout fly crates hop while a player is near: pound when settled.
+Owner only: #1, #3, #8 (need a person), #7 (decision).
 
 ## Verify and build
 
-- The verify script and the in-game harness (coop-test MCP server, bridge,
-  scenarios) live outside the repository in the owner's
-  `~/Documents/jak-coop-tools/coop-test-mcp` checkout:
+- The verify script and the in-game harness live outside the repository in
+  `~/Documents/jak-coop-tools/coop-test-mcp`:
   `demo/verify.sh [--tests] [--suite] <worktree> [scenario ...]`, run in the
   background with the bridge up; read only `run/verify/<stamp>/summary.txt`.
-- Playtest packages: dynamic Linux build in the tools checkout's
-  `scratch/build-gk`, then `scripts/coop-mod/package_mod.py --bin-dir <that>
+  The session's own MCP tools (instance 0) point at the main checkout; for a
+  worktree use the bridge (`~/Documents/jak-coop-tools/scratch/b <tool> ...`
+  or probe files run with `scratch/probe.py`).
+- `gk` (C++): `verify.sh` and the bridge use `<worktree>/build/game/gk`, a
+  copied binary. A branch that changes the runtime builds it in its own
+  folder: `cmake -B ~/dev-scratch/jak-project/<issue>/build --preset=Release-linux-clang`
+  then `cmake --build <that> --target gk`, and copies `build/game/gk` into
+  the worktree (it loads its libraries from that build folder: keep it while
+  the worktree uses it). Never build in the tools checkout's
+  `scratch/build-gk`: the playtest launcher's mod points at it. The #49
+  worktree's `gk` comes from `~/dev-scratch/jak-project/49/build`.
+- After a `kernel-defs.gc` change: `restart_compiler` before `build`.
+- Playtest packages: `scripts/coop-mod/package_mod.py --bin-dir <build>
   --allow-dynamic --out-dir <tools>/builds`. The current package
-  `builds/jak1-coop.tar.gz` was rebuilt on 2026-10-15 from
-  `coop/48-misty-island` (afe0c99bb: the co-op branch tip with the #48 boat
-  fix, without #46/#47) for the playtest; the owner adds it in the launcher.
-  A build without #48 strands both players on Misty Island after the boat
-  ride. `scratch/build-gk`
-  must stay while the launcher's mod points at it.
+  (`builds/jak1-coop.tar.gz`, from #48, without #49) is what the owner plays.
 
 ## Worktrees and background processes
 
-- Main checkout on `feature/jak1-local-splitscreen`, behind origin: the
-  cleanup's `local` stage moves it, otherwise pull before using it. One
-  Superset worktree on `coop/48-misty-island` (reuse it for #49 with a
-  new branch).
-  The scratch worktree `~/dev-scratch/jak-project/wt-workspace` on
-  `coop/workspace-handoff` (merged) can be removed. The bridge (`demo/bridge.py serve`, test
-  instance 3) is still running; its game was stopped and the virtual pads
-  unplugged at the end of the #46 session.
-- The harness checkout has the `misty-island` scenario committed (2a29447,
-  after `forbidden-jungle` bac02e8); `wip/` is untracked there as before.
-  The bridge's game was stopped and its pads unplugged at the end of the
-  #48 session; the bridge itself (instance 3, serving this worktree) runs.
+- Main checkout on `feature/jak1-local-splitscreen` (moved onto the new
+  history by the cleanup). Superset worktree on `coop/49-fire-canyon`,
+  clean; reuse it for step 1 or remove it once #49 is merged.
+- The bridge (`demo/bridge.py serve`, instance 3) serves the #49 worktree;
+  its game was left stopped after verify.
+- Harness checkout: `fire-canyon` scenario committed (e54263b); `wip/`
+  untracked as before.
+
+## Lessons (harness)
+
+From #44-#48: scout-fly crates break only with a ground pound beside them;
+a fly is collected by walking into it. Level hints don't play under the
+harness. A teleport into a cluster of collectables fills the 32-pair
+touching list in single player too: compare with a `coop=False` boot before
+blaming co-op. Touch events need movement: walk in from outside. A cell
+born where a player stands is taken at once; its task reads done after the
+scene. Inside an attack event `*target*` is the attacker. Load boundaries:
+the co-op loader ignores jumps over 10 m (`COOP_BOUNDARY_JUMP`): glide in
+steps under 10 m. Never dereference an actor that may be gone in a REPL
+probe. `mcp-kill-enemies-near` also kills battle controllers.
+`task-complete?` reads the `real-complete` bit. GOAL `format` takes at most
+six values. A probe script named like a stdlib module breaks anyio.
+
+From #49:
+- **A REPL form that writes through a missing field crashes the game**: a
+  player's zoomer data (`racer`) is 0 until their first mount, and writing
+  `(-> p racer heat)` on a fresh player wrote to protected memory (4 of the
+  session's 9 crashes were the harness's). Guard with `(nonzero? (-> p racer))`.
+- A crash with no message: `coredumpctl list`, then gdb on the core:
+  `r13` is the GOAL process, `r15` the memory base; the function is the
+  symbol whose value is the nearest below `rip - r15` (symbol names at
+  `sym + 0x20000`, see `jak1::SYM_INFO_OFFSET`). This found both game crashes.
+- Fire Canyon's floor is lava in places (`melt`): a rider parked on it
+  dies; park riders frozen in the air (sleep mask), but a frozen player
+  stops the other one's driving; a zoomer standing still heats up until it
+  explodes. Crates break when a rider is teleported through them in 1.5 m
+  steps (no throttle, no overshoot into lava).
+- The start pad's prompt shows within 5 m of the pad, not of `FC_PAD`.
+- The `[fc]` death logger in the `fire-canyon` scenario names the cause of
+  every death (`melt`, `heat`, `burnup`).
 
 ## Cleanup the owner may approve
 
-- After the #46, #47 and #48 PRs and the turbo issue exist:
-  `~/dev-scratch/jak-project/46/`, `47/`, `48/` (only the PR bodies are
-  left in them) and, once
-  the cleanup is pushed and checked, `~/dev-scratch/jak-project/rewrite/`.
-- In the tools checkout: `scratch/coop-test-mcp-before-rewrite.bundle` and
-  coop-test-mcp's `refs/original` and reflog; `coop-test-mcp/wip/`; old probe
-  scripts `scratch/p_*.py`, `probe.py`, `b`; `coop-test-mcp/run/verify/` (30
-  runs).
-- Idle coop-test MCP server processes left by other sessions (instance 0);
-  harmless unless they boot.
-- `coop-test-mcp/run/verify/` now holds about 35 runs.
-- Merged local branches were deleted on 2026-10-14; `coop/127-near-textures`,
-  `test/playtest-2` and `test/playtest-fixes` remain unmerged.
+- `~/dev-scratch/jak-project/46/`, `47/`, `48/` (PR bodies, opened) and
+  `rewrite/` (the cleanup is pushed and checked; the backup bundle is in
+  `~/Documents/jak-coop-backup/`).
+- `~/dev-scratch/jak-project/49/` once #49 is merged and a new `gk` is built
+  elsewhere (its `build/` is 571 MB).
+- The local-only branches with links: `coop/127-near-textures`,
+  `test/playtest-2`, `test/playtest-fixes`.
+- Tools checkout: `scratch/coop-test-mcp-before-rewrite.bundle`, `wip/`,
+  old probe scripts in `scratch/`, `run/verify/` (about 40 runs).
