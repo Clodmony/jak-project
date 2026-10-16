@@ -31,6 +31,18 @@ New unit tests (`build/goalc-test --gtest_filter='CoopSlots*:SplitscreenLayout*:
 - `test/test_memcard_namespace.cpp` (2 tests): the co-op save folder name is accepted, path-like
   names (`..`, slashes, too long) are rejected.
 
+### In-game harness: one test instance per session
+
+The scripted scenarios run through the in-game harness, a local tool outside this repository (its
+README; where it lives: `HANDOFF.md`). Several sessions can test at the same time, each in its own
+worktree with its own test instance (`COOP_TEST_INSTANCE`; the parallel streams use 3, 4 and 5): its
+own game, virtual pads, ports, settings folder and bridge. The verify script takes the instance from
+the environment, starts that instance's bridge for its worktree when none runs, and refuses one that
+serves another worktree. The campaign scenarios are one file per area (`demo/campaign/<area>.py`),
+so sessions on different areas never edit the same lines; the streams' test numbers are fixed in
+`HANDOFF.md`. The harness's own self-test (`demo/selftest.py`, no game) runs two bridges side by side
+and loads the campaign files.
+
 ## Manual test plan (needs your game files)
 
 Setup, from the repository root:
