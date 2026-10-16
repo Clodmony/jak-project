@@ -303,6 +303,25 @@ the same behaviour as the existing PC "force actors" option, without changing th
   the chamber to the player at the button and puts the other player next to them; while the chamber
   holds its rider in place during the ride, the other one is held 1.5 m beside
   (`coop-carry-other-player`). Its door at the top stays open while either player is near.
+- The elevator between Rock Village and Lost Precursor City (`sunken-elevator`): no button calls it
+  back, so a player left behind at either end had no way to follow. When it starts, the other player
+  is put onto it (`coop-put-onto-platform`), in both directions (#52).
+- Lost Precursor City's platform puzzle (`qbert-plat-master`) resets when the player falls into the
+  water or walks out of its bounds. It watched only the nearest player, so the partner waiting at the
+  entrance (out of bounds) reset it whenever the hopping player moved farther from its middle. Each
+  player within 40 m of it is now watched with their own two flags (player 2's in
+  `*coop-qbert-p2-flags*`, `coop-for-each-player-context`) (#52).
+- The slide tubes (`slide-control`, `target-tube.gc`) put only the nearest player into tube mode, and
+  one rider at a time: a player going in while the other stood nearer, or while the other rode, stood
+  in the tube without sliding. Either player goes in now (`slide-control-coop-enter`, measured from the
+  tube's start), two can ride at once, and each rider's place along the path (`pos`, where the tube's
+  search for the rider's point starts) is their own (`*coop-tube-pos*`); the tube stays ridden while
+  either player is in it (#52).
+- A hazard that rises over the last checkpoint (the helix's dark eco, `helix-water`) reports its
+  surface every frame while it rises (`coop-flood-at`). A player who dies meanwhile comes back next to
+  the other player, not at a checkpoint below it (`coop-checkpoint-flooded?`): in single player the
+  death resets the helix, in co-op the other player climbs on and the dark eco stays, so the
+  checkpoint at the bottom killed the respawned player again and again (#52).
 - A lightning mole's dive scene freezes the nearest player and wakes `*target*` at its end; the mole
   moves into the hole meanwhile, so the other player can become the nearer one. The dive pins the
   mole to the frozen player (`lightning-mole-dive`), so the end wakes the same player.
