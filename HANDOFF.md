@@ -7,31 +7,42 @@ memory is not read by a session that starts in another worktree. State goes
 here; stable recipes go into `docs/splitscreen/`; personal data and hardware
 never.
 
-Last updated 2026-10-16 (after #155, step 1b of the plan, merged; next: step 1, the parallel-ready
-harness, then the streams; #157 is open, low priority).
+Last updated 2026-10-16 (step 1 of the plan, the parallel-ready harness, done: PR #158; next:
+step 2, the three streams in parallel; #157 and #153 open, low priority).
 
 ## Done this session
 
-- #155 (streaming crash): branch `coop/155-art-group-lists`, PR #156, scenario `art-group-lists`
-  (harness commits 6a0e2c3 and the README after it). Both dumps showed an 11th entry in
-  level-default's art-group list pointing into a reloaded slot heap. The cause: with co-op stopped
-  the four slots stay in use, but the one-load-at-a-time guard only applied while co-op ran; a load
-  begun during another level's login lost `loading-level` when that login ended. Fixed there, plus
-  `coop-forget-art-in-heap` as a safety net. Also fixed: the residency guard used the "nearest
-  level", a tie of zero bsp spheres that the first slot won (`streaming` failed every run once the
-  beach sat in slot 0). Verify: 20 `streaming` runs in a row passed, 369/370 checks, compat ok,
-  goalc-test 1692.
-- Seen once in that verify, not explained: a crash in the listener path (`ProcessListenerMessage`
-  -> `link_and_exec` with a garbage message, size 0), during `sky-pair`; `sky-pair` alone then passed
-  5 of 5. Filed as #157.
-- #156 merged into the co-op branch as Claude (owner said merge); #155 closed by it.
-- Found by reading only, not fixed: a level discarded while a code object links keeps `linking`, and
-  `load-continue` keeps resuming that link on the inactive slot (`level.gc` `unload!`). The owner
-  chose not to file it; the safety net drops any art group it could add.
+- Step 1, parallel-ready harness (no game change). Branch `coop/parallel-harness`, PR #158 (docs:
+  TESTING.md's "one test instance per session", `.superset/setup.sh` copies the test binaries and
+  game data into a new workspace, this note). No GitHub issue: `gh issue create` was
+  blocked by the session's permission rules (the body is in the PR). Harness commits in the tools
+  checkout: `02ac235` (campaign files), `2a949e1` (parallel sessions), `83ba543` (worktree setup).
+  - Reproduced: a second bridge (instance 2) took over the one `run/bridge.sock`, a `stop-bridge`
+    sent as instance 3 stopped instance 2's bridge and orphaned instance 3's; instance 4 stopped at
+    start-up (`IndexError` at `PAD_PRODUCTS[INSTANCE]`). Found on the way: editing `verify.sh`
+    while it runs breaks the runs in progress (bash reads it as it goes).
+  - Fixed: bridge per instance (`run/i<n>/bridge.sock`, `COOP_TEST_INSTANCE` required, `bridge.py
+    info`, a lock refuses a second bridge); `verify.sh` per instance (bridge, compile ports 8200+n,
+    log folder `<stamp>-i<n>`), starts its instance's bridge when none runs and stops it, refuses
+    one serving another worktree, `goalc-test` one at a time (`flock`), checks the worktree's
+    binaries, one function (edits can't disturb a run); pad ids for instances 0-7; media numbers
+    under a lock; the six campaign scenarios moved unchanged into `demo/campaign/<area>.py`
+    (loaded by `scenarios.py`, `--list`); `demo/worktree-setup.sh` (binaries and game data into a
+    worktree); `demo/selftest.py` (no game, 15 checks).
+  - Results: self-test 15/15 (the old harness fails it). Three `verify.sh` runs started together on
+    instances 3, 4, 5 (one worktree, games on ports 8142/8152/8162): `warp deaths-apart` 17/17 each;
+    the six moved campaign scenarios two per instance, 111/111, 127/127, 98/98 (336 checks, the counts
+    TESTING.md records), with `verify.sh` edited during the runs. A fresh worktree set up only by
+    `worktree-setup.sh` passed `warp` on instance 4 while the tip checkout passed it on instance 5
+    (the tip build's `gk`); the tip asking for instance 4 while 4 served the other worktree was
+    refused. Not run: `--suite`.
 
 ## Open pull requests
 
-None (#156 merged). Merge style: locally as Claude,
+- #158 `coop/parallel-harness`: docs, `.superset/setup.sh` and this note (the harness itself is the
+  local tools checkout, already committed there). Needs: the owner's merge.
+
+Merge style: locally as Claude,
 `git merge --no-ff -m "Merge pull request #N from Clodmony/<branch> (AI-assisted)"`
 on a detached HEAD at `origin/feature/jak1-local-splitscreen`, then
 `git push origin HEAD:feature/jak1-local-splitscreen`. Only when the owner says so; never
@@ -43,38 +54,41 @@ on a detached HEAD at `origin/feature/jak1-local-splitscreen`, then
 The owner wants the rest done in parallel. Steps in order; each issue is
 still one session (issue loop) ending in a handoff.
 
-**Step 0: done** (cleanup, #46-#49 merged). The streams branch from the
-co-op tip.
+**Step 0, 1b, 1: done** (cleanup #46-#49; #155; the parallel-ready harness). The streams branch
+from the co-op tip.
 
-**Step 1 (one session first): parallel-ready harness** (tools checkout
-`~/Documents/jak-coop-tools/coop-test-mcp`, no game change):
-- `demo/bridge.py`: socket per instance (`run/i<N>/bridge.sock`, from
-  `COOP_TEST_INSTANCE`) instead of the one `run/bridge.sock`; `verify.sh` and
-  `scenarios.py --bridge` use the same instance (today `verify.sh` is fixed
-  to instance 3 and two sessions would drive one game).
-- Campaign scenarios one file each (`demo/campaign/<area>.py`), found and
-  registered automatically (SCENARIOS, COST), so parallel sessions never edit
-  the same lines of `scenarios.py`; move the existing campaign scenarios
-  (geyser-rock to fire-canyon) there.
-- Optionally #153 (turbo while waiting) in the same session.
-- `verify.sh` builds nothing in C++: note in the harness README how a session
-  gets a `gk` (below) when a branch changes the runtime.
+**Step 2: three streams in parallel**, each its own worktree, test instance and scenario file. Test
+numbers fixed up front (TESTING.md rows):
 
-**Step 1b: done** (#155, PR #156, merged).
+| Stream | Instance | Issues, in order | Notes | Tests |
+| --- | --- | --- | --- | --- |
+| A Rock Village hub | 3 | #50 Rock Village, #51 Precursor Basin, #52 Lost Precursor City, #53 Boggy Swamp | village2 code, zoomer (#51), flut flut (#53) | 56-59 |
+| B Mountain Pass to village3 | 4 | #54 Mountain Pass, #55 Volcanic Crater, #56 Spider Cave, #57 Snowy Mountain, #58 Lava Tube | village2 and village3 share code with Mountain Pass between them; zoomer (#54, #58), flut flut (#57) | 60-64 |
+| C Endgame | 5 | #59 Citadel, #60 final boss | own continue points; the citadel shares the village code | 65-66 |
 
-**Step 2: three streams in parallel**, each its own worktree, test instance
-(3, 4, 5) and scenario file. Test numbers fixed up front (TESTING.md rows):
-
-| Stream | Issues, in order | Notes | Tests |
-| --- | --- | --- | --- |
-| A Rock Village hub | #50 Rock Village, #51 Precursor Basin, #52 Lost Precursor City, #53 Boggy Swamp | village2 code, zoomer (#51), flut flut (#53) | 56-59 |
-| B Mountain Pass to village3 | #54 Mountain Pass, #55 Volcanic Crater, #56 Spider Cave, #57 Snowy Mountain, #58 Lava Tube | village2 and village3 share code with Mountain Pass between them; zoomer (#54, #58), flut flut (#57) | 60-64 |
-| C Endgame | #59 Citadel, #60 final boss | own continue points; the citadel shares the village code | 65-66 |
+A stream session's first steps:
+1. Worktree from the tip: a Superset workspace, or `git worktree add -b coop/<issue>-<topic>
+   ~/dev-scratch/jak-project/<issue> origin/feature/jak1-local-splitscreen`; run
+   `.superset/setup.sh` in it (after #158 is merged; before, run step 2 by hand).
+2. Binaries and game data: `.superset/setup.sh` runs
+   `~/Documents/jak-coop-tools/coop-test-mcp/demo/worktree-setup.sh <worktree>`: `gk`, `goalc`,
+   `goalc-test` from `~/dev-scratch/jak-project/tip/build` (a build of the tip, a78ec8b9d), the
+   game data, `out/jak1` and the goalc user settings from `~/dev-scratch/jak-project/tip/src` (a
+   worktree of the tip), as reflinks. A branch that changes C++ builds its own folder and passes
+   it (commands at the top of that script).
+3. Every bridge and verify call with the stream's instance: `COOP_TEST_INSTANCE=<n> .../verify.sh
+   <worktree> <scenarios>`, `COOP_TEST_INSTANCE=<n> ~/Documents/jak-coop-tools/scratch/b <tool> ...`.
+   Never the session's own MCP tools for the worktree: they are instance 0 on the main checkout.
+4. The area's scenario is a new file `demo/campaign/<area>.py` (copy the header of
+   `fire_canyon.py`: `from scenarios import *`, `import scenarios as S`, `SCENARIOS`, `COST`);
+   commit only that path in the tools checkout (`git commit -- demo/campaign/<area>.py`). Shared
+   helpers (`scenarios.py`'s campaign helpers section, `server.py`, `mcp-helper.gc`) change in a
+   small finished commit of their own: the other streams use the same checkout.
 
 Streams B and C go through levels that share code: watch the game log for
 `[coop] shared code: N objects paired, M symbols and methods moved` when the
 players are in different levels, and check that shared functions point into
-a loaded level (the `FC_SHARED` probe in the `fire-canyon` scenario).
+a loaded level (the `FC_SHARED` probe in `campaign/fire_canyon.py`).
 `splitscreen.gc` and TESTING.md get parallel edits in different sections:
 merge the PRs one at a time, in issue order.
 
@@ -82,25 +96,20 @@ merge the PRs one at a time, in issue order.
 to itself, no other test game running), then #11 (launcher non-debug build)
 on the merged result.
 
-Owner only: #1, #3, #8 (need a person), #7 (decision).
+Owner only: #1, #3, #8 (need a person), #7 (decision). Low priority: #157 (listener crash seen
+once), #153 (turbo while waiting).
 
 ## Verify and build
 
 - The verify script and the in-game harness live outside the repository in
-  `~/Documents/jak-coop-tools/coop-test-mcp`:
-  `demo/verify.sh [--tests] [--suite] <worktree> [scenario ...]`, run in the
-  background with the bridge up; read only `run/verify/<stamp>/summary.txt`.
-  The session's own MCP tools (instance 0) point at the main checkout; for a
-  worktree use the bridge (`~/Documents/jak-coop-tools/scratch/b <tool> ...`
-  or probe files run with `scratch/probe.py`).
-- `gk` (C++): `verify.sh` and the bridge use `<worktree>/build/game/gk`, a
-  copied binary. A branch that changes the runtime builds it in its own
-  folder: `cmake -B ~/dev-scratch/jak-project/<issue>/build --preset=Release-linux-clang`
-  then `cmake --build <that> --target gk`, and copies `build/game/gk` into
-  the worktree (it loads its libraries from that build folder: keep it while
-  the worktree uses it). Never build in the tools checkout's
-  `scratch/build-gk`: the playtest launcher's mod points at it. The #49
-  worktree's `gk` comes from `~/dev-scratch/jak-project/49/build`.
+  `~/Documents/jak-coop-tools/coop-test-mcp` (its README: "Parallel sessions", "A worktree's
+  binaries"): `COOP_TEST_INSTANCE=<n> demo/verify.sh [--tests] [--suite] <worktree> [scenario ...]`,
+  run in the background; read only `run/verify/<stamp>-i<n>/summary.txt`. It starts instance n's
+  bridge for the worktree when none runs and stops it afterwards; a bridge of that instance serving
+  another worktree is an error. Instance 3 is the default.
+- `demo/selftest.py` (about 20 s, no game, instances 6 and 7): run after a change to the bridge or
+  the campaign loader.
+- A worktree's binaries and data: `demo/worktree-setup.sh` (above, step 2 of a stream's first steps).
 - After a `kernel-defs.gc` change: `restart_compiler` before `build`.
 - Playtest packages: `scripts/coop-mod/package_mod.py --bin-dir <build>
   --allow-dynamic --out-dir <tools>/builds`. The current package
@@ -108,13 +117,15 @@ Owner only: #1, #3, #8 (need a person), #7 (decision).
 
 ## Worktrees and background processes
 
-- Main checkout on `feature/jak1-local-splitscreen` at the merged tip.
-  Superset worktree (the #49/#155 one): detached at the merged tip, clean. Its
-  `build/game/gk` is the one from `~/dev-scratch/jak-project/49/build` (#155 changed no C++; keep
-  that folder while a worktree uses this `gk`).
-- The bridge (`demo/bridge.py serve`, instance 3) serves that worktree; its game is stopped and
-  the pads unplugged.
-- Harness checkout: `art-group-lists` scenario and README row committed (not pushed anywhere).
+- Main checkout on `feature/jak1-local-splitscreen` (the owner's; its `build/` is from 2026-10-12,
+  older than #49's C++: don't copy binaries from it).
+- Superset worktree (the #49/#155/step 1 one): on `coop/parallel-harness`, clean after the commit. Its
+  binaries now come from `tip/build` (its `.superset/setup.sh` ran).
+- `~/dev-scratch/jak-project/tip/`: `src` (a detached worktree of the tip, a78ec8b9d, with game data
+  and a compiled `out/`) and `build` (gk, goalc, goalc-test built from it): the source of every
+  stream worktree's binaries and data. Keep it while the streams run; the copied `gk` loads its
+  libraries from `tip/build`.
+- No bridge or test game running; pads unplugged.
 - Pushes: the owner's global push guard (`~/.gitconfig` `hook.push-guard`, pre-push) blocks
   Claude-Session links and secrets on every push; on public pushes also non-noreply emails and a
   failed headless review. Large files (10 MB) only warn. Never `--no-verify`.
@@ -165,9 +176,21 @@ From #155:
   listener instead.
 - zsh doesn't split an unquoted `$S`: build repeated scenario lists in bash arrays.
 
+From step 1:
+- bash reads a script as it runs: an edit to a running script breaks it at the next line it reads
+  (`verify.sh` is now one function). The same holds for any shell script another session runs.
+- `gh issue create` (and other GitHub writes the owner didn't ask for in so many words) can be
+  blocked by the session's permission rules: ask the owner, don't work around it.
+- A module run as `__main__` and imported by name is two modules: `scenarios.py` registers itself as
+  `scenarios` before loading the campaign files, else they would get a second copy (own `CHECKS`,
+  flags never set).
+
 ## Cleanup
 
-Done 2026-10-16: #155's scratch (`~/dev-scratch/jak-project/155`, probes and cores). Left:
-`~/dev-scratch/jak-project/49/` (the `gk` build the worktree uses), the backup bundle in
-`~/Documents/jak-coop-backup/`, `scratch/build-gk` (the playtest's `gk`), and the gk core dumps
-in `coredumpctl` (systemd ages them out).
+Done 2026-10-16: step 1's scratch (`~/dev-scratch/jak-project/harness`: probes, the old-harness and
+stream-test worktrees). Left: `~/dev-scratch/jak-project/tip/` (above, while the streams run),
+`~/dev-scratch/jak-project/49/` (#49's build; no worktree uses it any more: the owner may approve
+deleting it), the backup bundle in `~/Documents/jak-coop-backup/`, `scratch/build-gk` (the
+playtest's `gk`), the gk core dumps in `coredumpctl` (systemd ages them out), and the test
+instances' run folders `run/i<n>/` in the tools checkout (settings copies; 6 and 7 are the
+self-test's).
