@@ -319,6 +319,19 @@ the same behaviour as the existing PC "force actors" option, without changing th
   jungle elevator: when it starts, the other player is put onto it (`coop-put-onto-platform`; they
   keep their eco, unlike in the jungle's `coop-bring-onto-platform`) and moved with it
   (`coop-move-other-rider`). Before, a partner standing on it fell down the shaft (#59).
+- Gol and Maia's blue eco platform (`plat-eco-finalboss`, `sage-finalboss.gc`) from the elevator's top down to
+  the arena goes, when nobody rides it, to the end nearer to the player; with the players nearer to
+  different ends it waits at the end it reached for 8 s and while a player stands within 6 m of it, then
+  goes to the other end (`plat-eco-finalboss-dest`). Before, it followed the nearest player: the one who rode down and stepped off
+  kept it at the bottom, and the partner at the top had no way down (#60). Any eco platform (`plat-eco.gc`)
+  starts for a rider carrying blue eco: it stays noticed (`notice-blue`) while any player carries blue eco, and
+  its `'ridden` event asks the rider it names (`plat-eco-rider`). Both used to ask `*target*`, the player the
+  platform runs for, which with both on it is the nearer one: with the partner without eco nearer, it fell
+  back to idle at once and never started.
+- A dark eco bomb of Gol and Maia that no player escaped knocks out every player in play
+  (`coop-blast-players`), so both are down and the checkpoint reloads as in single player. Before, only
+  `*target*` died, the other player fought on and the boss waited forever: that path never sends
+  `'bomb-done` (#60).
 - Pause: right before `determine-pause-mode`, player 2's Start/Select are merged into pad 0, and a
   player 2 controller loss injects a pause (`coop-merge-pause-buttons`; player 1's loss pauses as in
   single player). While a player's controller is disconnected the screen says so ("Player 2 /
