@@ -7,45 +7,37 @@ memory is not read by a session that starts in another worktree. State goes
 here; stable recipes go into `docs/splitscreen/`; personal data and hardware
 never.
 
-Last updated 2026-10-16 (after #49; the session-link cleanup is done and
-#46-#49 are merged; the work from here on runs in parallel streams, see
-"Plan", starting at step 1).
+Last updated 2026-10-16 (after #155, step 1b of the plan; step 1, the parallel-ready harness, is
+still open and comes next).
 
 ## Done this session
 
-- Session-link cleanup: the fork's branches, tags and PR bodies have no
-  `Claude-Session` links, and the 5 merges done on GitHub (PRs #123-#131)
-  are Claude's now. Commit ids changed on 2026-10-16. Local-only branches
-  `coop/127-near-textures`, `test/playtest-2`, `test/playtest-fixes` still
-  carry links (never pushed). **Never add a link again:** commits carry only
-  the `Co-Authored-By: Claude ... <noreply@anthropic.com>` trailer and PR
-  bodies no session URL, whatever the harness's attribution note asks. The
-  owner's pre-push guard refuses non-noreply identities and pushes over
-  about 2 MB; Claude may not skip it.
-- #49 Fire Canyon: branch `coop/49-fire-canyon` (pushed), test 55, scenario
-  `fire-canyon`. Found and fixed: a crash when two loaded levels share code
-  (new kernel relink, `coop-relink-level`), a crash on a stale particle owner
-  (`coop-goal-address?`), Sandover missing after a zoomer respawn
-  (`coop-wants-checkpoint`). Verify: 228/228, compat ok, goalc-test 1692.
-- Issue #153 filed (harness turbo while waiting).
-- Merged into the co-op branch as Claude: #150 (#46), #151 (#47), #152
-  (#48), #154 (#49); issues #46-#49 closed. The merged tip was verified
-  (`--tests` and fire-canyon, misty-island, forbidden-jungle, sentinel-beach,
-  level-pairs, streaming, deaths-apart): 253/254, the one failure the older
-  streaming crash below.
-- Found while verifying: `streaming` crashes the game about once in ten
-  runs, also on the tip before #49 (2 of 22 runs): issue #155.
+- #155 (streaming crash): branch `coop/155-art-group-lists`, PR #156, scenario `art-group-lists`
+  (harness commits 6a0e2c3 and the README after it). Both dumps showed an 11th entry in
+  level-default's art-group list pointing into a reloaded slot heap. The cause: with co-op stopped
+  the four slots stay in use, but the one-load-at-a-time guard only applied while co-op ran; a load
+  begun during another level's login lost `loading-level` when that login ended. Fixed there, plus
+  `coop-forget-art-in-heap` as a safety net. Also fixed: the residency guard used the "nearest
+  level", a tie of zero bsp spheres that the first slot won (`streaming` failed every run once the
+  beach sat in slot 0). Verify: 20 `streaming` runs in a row passed, 369/370 checks, compat ok,
+  goalc-test 1692.
+- Seen once in that verify, not explained: a crash in the listener path (`ProcessListenerMessage`
+  -> `link_and_exec` with a garbage message, size 0), during `sky-pair`; `sky-pair` alone then passed
+  5 of 5. Candidate issue (owner's call, below).
+- Found by reading only, not fixed: a level discarded while a code object links keeps `linking`, and
+  `load-continue` keeps resuming that link on the inactive slot (`level.gc` `unload!`). Candidate
+  issue.
 
 ## Open pull requests
 
-None. Merge style for the next ones: locally as Claude,
+- #156 (`coop/155-art-group-lists`, closes #155): ready for the owner's review and merge.
+
+Merge style: locally as Claude,
 `git merge --no-ff -m "Merge pull request #N from Clodmony/<branch> (AI-assisted)"`
 on a detached HEAD at `origin/feature/jak1-local-splitscreen`, then
-`git push origin HEAD:feature/jak1-local-splitscreen` (allowed for Claude
-on 2026-10-16 once the owner said merge; the owner's pre-push guard reviews
-it). Only when the owner says so; never `gh pr merge` (it authors the merge
-with the owner's account). `gh` without `--repo Clodmony/opengoal-coop`
-queries upstream.
+`git push origin HEAD:feature/jak1-local-splitscreen`. Only when the owner says so; never
+`gh pr merge` (it authors the merge with the owner's account). `gh` without
+`--repo Clodmony/opengoal-coop` queries upstream.
 
 ## Plan: parallel streams
 
@@ -69,9 +61,7 @@ co-op tip.
 - `verify.sh` builds nothing in C++: note in the harness README how a session
   gets a `gk` (below) when a branch changes the runtime.
 
-**Step 1b (in parallel with step 1): #155, the streaming crash.** Game
-code, one session with the current single-bridge harness. Fix it before
-the streams: they all load four levels.
+**Step 1b: done** (#155, PR #156; merge it before the streams).
 
 **Step 2: three streams in parallel**, each its own worktree, test instance
 (3, 4, 5) and scenario file. Test numbers fixed up front (TESTING.md rows):
@@ -120,13 +110,15 @@ Owner only: #1, #3, #8 (need a person), #7 (decision).
 ## Worktrees and background processes
 
 - Main checkout on `feature/jak1-local-splitscreen` at the merged tip.
-  Superset worktree (the #49 one): detached at the merged tip, clean, its
-  `build/game/gk` built from that tip (from `~/dev-scratch/jak-project/49/build`,
-  keep that folder while the worktree uses this `gk`). Reuse it for step 1b.
-- The bridge (`demo/bridge.py serve`, instance 3) serves that worktree; its
-  game was left stopped.
-- Harness checkout: `fire-canyon` scenario committed (e54263b); `wip/`
-  untracked as before.
+  Superset worktree (the #49/#155 one): on `coop/155-art-group-lists`, clean, pushed. Its
+  `build/game/gk` is the one from `~/dev-scratch/jak-project/49/build` (#155 changed no C++; keep
+  that folder while a worktree uses this `gk`). Remove the worktree's branch once #156 is merged.
+- The bridge (`demo/bridge.py serve`, instance 3) serves that worktree; its game is stopped and
+  the pads unplugged.
+- Harness checkout: `art-group-lists` scenario and README row committed (not pushed anywhere).
+- Pushes: the owner's global push guard (`~/.gitconfig` `hook.push-guard`, pre-push) blocks
+  Claude-Session links and secrets on every push; on public pushes also non-noreply emails and a
+  failed headless review. Large files (10 MB) only warn. Never `--no-verify`.
 
 ## Lessons (harness)
 
@@ -161,11 +153,22 @@ From #49:
 - The `[fc]` death logger in the `fire-canyon` scenario names the cause of
   every death (`melt`, `heat`, `burnup`).
 
+From #155:
+- A crash dump names its GOAL function and callers: read `g_ee_main_mem`, `SymbolTable2`,
+  `LastSymbol` from the gk binary whose build id the core lists (`eu-unstrip -n --core`; the
+  playtest `gk` in `scratch/build-gk` made older cores), map return addresses on the stack to the
+  nearest function/method entry, and to object files through the kernel's `g_coop_linked` records
+  (40-byte entries: std::string, base, size). A level's art-group list: `level + 48` (load-dir),
+  arrays at `+4`/`+8`, data at `+12`.
+- Every level's bsp sphere is zero: never pick "the nearest level" by `bsp bsphere`.
+- A REPL form that spins `load-continue` drives a load frame-free (the IOP loads meanwhile): good
+  for exact orderings (a load begun during a login); a bounded `dotimes` of 1e8 spins times out the
+  listener instead.
+- zsh doesn't split an unquoted `$S`: build repeated scenario lists in bash arrays.
+
 ## Cleanup
 
-Done 2026-10-16 (owner: "whatever is not needed"): the 46-48 scratch
-folders, the rewrite folder, the local branches with links (their changes
-were all in the co-op branch), the tools checkout's leftovers and old verify
-runs. Left: `~/dev-scratch/jak-project/49/` (the `gk` build the worktree
-uses), the backup bundle in `~/Documents/jak-coop-backup/`,
-`scratch/build-gk` (the playtest's `gk`).
+Done 2026-10-16: #155's scratch (`~/dev-scratch/jak-project/155`, probes and cores). Left:
+`~/dev-scratch/jak-project/49/` (the `gk` build the worktree uses), the backup bundle in
+`~/Documents/jak-coop-backup/`, `scratch/build-gk` (the playtest's `gk`), and the gk core dumps
+in `coredumpctl` (systemd ages them out).
