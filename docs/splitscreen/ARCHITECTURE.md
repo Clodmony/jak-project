@@ -175,8 +175,13 @@ cross them (#69):
 - every crossing command goes through `coop-boundary-command-ok?`. A load `(load a b)` is the crossing
   player's own pair of levels (`*coop-wants*`); the game's wants become the union of both players'
   pairs, the crossing player's first (`coop-want-levels`, the `want-levels` hook; at most four names,
-  so nobody's level goes away for the other player's loads). A script's load (boats, warp gates,
-  cutscenes take both players along) sets both pairs. A player who got into a level without crossing
+  so nobody's level goes away for the other player's loads). A script's load sets both pairs, except
+  a cutscene's (its commands run while the load state is backed up): that one is the pair of the
+  player the scene runs for, and the other player, held where they are, keeps theirs (#50: the
+  gambler's introduction loads Precursor Basin, and Fire Canyon went away under player 2 waiting at
+  its end, who fell once the scene let go). The fisherman's boat ride is such a scene: the rider's
+  pair changes, and at the ride's end the boat puts the other player next to the rider, whose levels
+  then become theirs too (`coop-wants-update`). A player who got into a level without crossing
   a boundary (respawned elsewhere, teleported) gets the levels whose boxes hold them as their pair
   (`coop-wants-update`, once per frame). A pair the player's own crossing set stays while it holds
   one of those levels (the boundary named the levels needed there; a teleport, seen by
