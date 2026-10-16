@@ -392,6 +392,7 @@
   (set! (-> this entity) #f)
   (set! (-> this ambient) #f)
   (set! (-> this linking) #f)
+  (coop-forget-art-in-heap (-> this heap)) ;; og:preserve-this coop (#155)
   (vis-clear this)
   (set! (-> this status) 'loading)
   ;; incoming textures should use the level allocator
@@ -592,9 +593,13 @@
   (load-dbg "package load~%")
   (load-required-packages loaded-level)
   (set! (-> loaded-level status) 'loaded)
-  (set! loading-level global)
-  (set! (-> *level* loading-level) (-> *level* level-default))
-  (set! (-> *level* log-in-level-bsp) #f)
+  ;; og:preserve-this coop: only while it is still this level's load (#155). With four slots a second level
+  ;; can begin loading during this login; resetting its loading-level put its art groups in level-default's
+  ;; list, where they pointed into a heap that was later reloaded.
+  (when (= (-> *level* loading-level) loaded-level)
+    (set! loading-level global)
+    (set! (-> *level* loading-level) (-> *level* level-default))
+    (set! (-> *level* log-in-level-bsp) #f))
   ; 0
   ; (.mfc0 v1-154 Count)
   ; (- v1-154 initial-timer)
@@ -706,6 +711,7 @@
         (set! s5-3 (cdr s5-3))
         (set! a0-29 (car s5-3))))
     (vis-clear this)
+    (coop-forget-art-in-heap (-> this heap)) ;; og:preserve-this coop (#155)
     ;; reset the level heap!
     (let ((v1-64 (-> this heap))) (set! (-> v1-64 current) (-> v1-64 base)))
     (set! (-> this code-memory-start) (the-as pointer 0))
@@ -1150,7 +1156,9 @@
           ;; level at a time. The original never had two missing wants at once (two wants, two slots);
           ;; with four (issue #110) a second load would start between two objects of the first (the RPC is
           ;; idle while an object links) and clobber it, so co-op waits until nothing is loading.
-          (when (and (not (and (coop-active?) (level-load-in-progress?)))
+          ;; Also with co-op stopped while the four slots are in use (#155): the test tools' warm boot, a
+          ;; co-op game quit to single player.
+          (when (and (not (and (> (-> *level* length) LEVEL_COUNT) (level-load-in-progress?)))
                      (or s5-1 (not (check-busy *load-dgo-rpc*))))
             (format 0 "Adding level ~A~%" (-> (load-want this s4-1) name))
             (let ((s3-0 (level-get-for-use *level* (the-as symbol (-> (load-want this s4-1) name)) 'loaded)))
