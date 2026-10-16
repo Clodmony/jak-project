@@ -32,6 +32,14 @@
   ((plat-eco-lit-lod0-mg (meters 20)) (plat-eco-lit-lod1-mg (meters 40)) (plat-eco-lit-lod2-mg (meters 999999)))
   :bounds (static-spherem 0 0 0 3))
 
+;; og:preserve-this coop: the player a 'ridden or 'edge-grabbed is about. A 'ridden comes from the platform
+;; itself and runs in its player's context, which can be the other player (both on it: the nearer one), so
+;; a rider carrying blue eco next to a partner without didn't start it (#60). The rider is in the event.
+(defun plat-eco-rider ((message symbol) (block event-message-block))
+  (if (= message 'ridden)
+    (handle->process (-> (the-as collide-sticky-rider (-> block param 0)) rider-handle))
+    *target*))
+
 (defstate plat-idle (plat-eco)
   :virtual #t
   :event
@@ -40,7 +48,8 @@
         (('wake) (go-virtual plat-path-active (the-as plat #f)))
         (('eco-blue) (go-virtual notice-blue (process->handle proc)))
         (('ridden 'edge-grabbed)
-         (when (send-event *target* 'query 'powerup (pickup-type eco-blue))
+         ;; og:preserve-this coop: the rider's own eco (a 'ridden runs for whoever the platform runs for)
+         (when (send-event (plat-eco-rider message block) 'query 'powerup (pickup-type eco-blue))
            (send-to-all (-> self link) 'wake)
            (go-virtual plat-path-active (the-as plat #f))))))
   :enter
@@ -70,7 +79,8 @@
          (sound-play "blue-eco-on" :position (the-as symbol (-> self root trans)))
          (go-virtual plat-path-active (the-as plat #f)))
         (('ridden 'edge-grabbed)
-         (when (send-event *target* 'query 'powerup (pickup-type eco-blue))
+         ;; og:preserve-this coop: the rider's own eco (a 'ridden runs for whoever the platform runs for)
+         (when (send-event (plat-eco-rider message block) 'query 'powerup (pickup-type eco-blue))
            (send-to-all (-> self link) 'wake)
            (go-virtual plat-path-active (the-as plat #f))))))
   :trans
@@ -82,7 +92,11 @@
         (set! (-> a1-0 message) 'query)
         (set! (-> a1-0 param 0) (the-as uint 'powerup))
         (set! (-> a1-0 param 1) (the-as uint 3))
-        (if (and (not (send-event-function *target* a1-0))
+        ;; og:preserve-this coop: while any player carries blue eco (it ran for the nearer player: with the
+        ;; partner without eco nearer, it went back to idle at once and never started, #60)
+        (if (and (if (coop-active?)
+                   (not (coop-powerup-player-near (-> self root trans) (meters 100000) (pickup-type eco-blue)))
+                   (not (send-event-function *target* a1-0)))
                  (begin
                    (logior! (-> self mask) (process-mask sleep-code))
                    (not (-> self bouncing))))
