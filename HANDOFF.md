@@ -7,7 +7,7 @@ memory is not read by a session that starts in another worktree. State goes
 here; stable recipes go into `docs/splitscreen/`; personal data and hardware
 never.
 
-Last updated 2026-10-16 (step 1 of the plan, the parallel-ready harness, done: PR #158; next:
+Last updated 2026-10-16 (step 1 of the plan, the parallel-ready harness, done: PR #158 merged; next:
 step 2, the three streams in parallel; #157 and #153 open, low priority).
 
 ## Done this session
@@ -15,7 +15,7 @@ step 2, the three streams in parallel; #157 and #153 open, low priority).
 - Step 1, parallel-ready harness (no game change). Branch `coop/parallel-harness`, PR #158 (docs:
   TESTING.md's "one test instance per session", `.superset/setup.sh` copies the test binaries and
   game data into a new workspace, this note). No GitHub issue: `gh issue create` was
-  blocked by the session's permission rules (the body is in the PR). Harness commits in the tools
+  blocked by the session's permission rules, and the owner chose #158 as the record. Harness commits in the tools
   checkout: `02ac235` (campaign files), `2a949e1` (parallel sessions), `83ba543` (worktree setup).
   - Reproduced: a second bridge (instance 2) took over the one `run/bridge.sock`, a `stop-bridge`
     sent as instance 3 stopped instance 2's bridge and orphaned instance 3's; instance 4 stopped at
@@ -39,8 +39,8 @@ step 2, the three streams in parallel; #157 and #153 open, low priority).
 
 ## Open pull requests
 
-- #158 `coop/parallel-harness`: docs, `.superset/setup.sh` and this note (the harness itself is the
-  local tools checkout, already committed there). Needs: the owner's merge.
+None. #158 merged into the co-op branch as Claude (owner said merge). The owner chose no GitHub
+issue for step 1: #158 is its record.
 
 Merge style: locally as Claude,
 `git merge --no-ff -m "Merge pull request #N from Clodmony/<branch> (AI-assisted)"`
@@ -69,7 +69,7 @@ numbers fixed up front (TESTING.md rows):
 A stream session's first steps:
 1. Worktree from the tip: a Superset workspace, or `git worktree add -b coop/<issue>-<topic>
    ~/dev-scratch/jak-project/<issue> origin/feature/jak1-local-splitscreen`; run
-   `.superset/setup.sh` in it (after #158 is merged; before, run step 2 by hand).
+   `.superset/setup.sh` in it (Superset runs it on its own).
 2. Binaries and game data: `.superset/setup.sh` runs
    `~/Documents/jak-coop-tools/coop-test-mcp/demo/worktree-setup.sh <worktree>`: `gk`, `goalc`,
    `goalc-test` from `~/dev-scratch/jak-project/tip/build` (a build of the tip, a78ec8b9d), the
@@ -119,8 +119,8 @@ once), #153 (turbo while waiting).
 
 - Main checkout on `feature/jak1-local-splitscreen` (the owner's; its `build/` is from 2026-10-12,
   older than #49's C++: don't copy binaries from it).
-- Superset worktree (the #49/#155/step 1 one): on `coop/parallel-harness`, clean after the commit. Its
-  binaries now come from `tip/build` (its `.superset/setup.sh` ran).
+- Superset worktree (the #49/#155/step 1 one): detached at the merged tip, clean. Its binaries come
+  from `tip/build` (its `.superset/setup.sh` ran).
 - `~/dev-scratch/jak-project/tip/`: `src` (a detached worktree of the tip, a78ec8b9d, with game data
   and a compiled `out/`) and `build` (gk, goalc, goalc-test built from it): the source of every
   stream worktree's binaries and data. Keep it while the streams run; the copied `gk` loads its
@@ -188,9 +188,8 @@ From step 1:
 ## Cleanup
 
 Done 2026-10-16: step 1's scratch (`~/dev-scratch/jak-project/harness`: probes, the old-harness and
-stream-test worktrees). Left: `~/dev-scratch/jak-project/tip/` (above, while the streams run),
-`~/dev-scratch/jak-project/49/` (#49's build; no worktree uses it any more: the owner may approve
-deleting it), the backup bundle in `~/Documents/jak-coop-backup/`, `scratch/build-gk` (the
+stream-test worktrees) and `~/dev-scratch/jak-project/49/` (#49's build, unused; owner approved).
+Left: `~/dev-scratch/jak-project/tip/` (above, while the streams run), the backup bundle in `~/Documents/jak-coop-backup/`, `scratch/build-gk` (the
 playtest's `gk`), the gk core dumps in `coredumpctl` (systemd ages them out), and the test
 instances' run folders `run/i<n>/` in the tools checkout (settings copies; 6 and 7 are the
 self-test's).
