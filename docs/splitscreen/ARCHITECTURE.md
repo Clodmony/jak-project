@@ -243,7 +243,13 @@ the same behaviour as the existing PC "force actors" option, without changing th
 
 - `target-death`: if the other player is in play, skip the world freeze, the streamed death movie and
   `initialize! 'dead`; go to `target-coop-respawn` (hidden, no collision, waits `respawn-delay`, then
-  respawns at the other player's last safe ground with full health). If both are down, the original
+  respawns at the other player's last safe ground with full health). The hidden body stays where it
+  died (`target-no-move-post`: with gravity it fell through the ground and its camera followed it,
+  #164). On the move `coop-respawn-place-camera` puts the player's camera combiner where the other
+  player's camera is relative to them (at a checkpoint: its camera; after a vehicle death: the old
+  offset), then the camera starts over (`cam-fixed`, `cam-string`, `teleport`, as a checkpoint
+  continue does). The respawn gives the game's invulnerability after a hit (`hit-invulnerable-timeout`,
+  3 s). If both are down, the original
   single checkpoint reload runs once. If co-op is stopped while a player waits to respawn, that
   player finishes the original death (checkpoint reload).
 - A death on a zoomer or flut flut is noted (`coop-racer-note-death`) so the respawn puts the player
