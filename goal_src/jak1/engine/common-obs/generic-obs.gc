@@ -1242,6 +1242,7 @@
         (if (not coop-blue) (go launcher-idle)))
       (spawn (-> self part) (-> self root trans))
       (sound-play "launch-idle" :id (-> self sound-id))
+      ;; og:preserve-this coop: each player on the pad who carries blue eco
       (coop-for-each-player-context
         (if (and (and *target*
                       (>= (+ 2867.2 (-> self root root-prim prim-core world-sphere w))
