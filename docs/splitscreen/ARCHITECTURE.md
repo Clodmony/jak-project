@@ -193,7 +193,13 @@ cross them (#69):
   and checkpoints follow player 1 only;
 - the DGO loader, the login state and the loading heap are global, so levels load one at a time:
   with four wants two can be missing at once, and `load-state update!` adds the next one only when no
-  slot is loading or logging in (`level-load-in-progress?`; the original never had two missing wants);
+  slot is loading or logging in (`level-load-in-progress?`; the original never had two missing wants).
+  This holds whenever the four slots are in use, also with co-op stopped (a warm boot of the test tools,
+  a co-op game quit to single player; #155): two loads at once stopped the game within seconds. The end
+  of a login resets the loading level only if it is still that level's, and when a level heap is loaded
+  again or unloaded, no level's art-group list (level-default's included) keeps an art group from it
+  (`coop-forget-art-in-heap`): `link-art!` reads the name of every entry of every list, and an entry
+  pointing into a reloaded heap crashed in `name=`;
 - levels that share code (#49): some code files are in several levels' DGOs (the village code in the
   three villages and the citadel, the zoomer code in Fire Canyon, Lava Tube, Misty, Mountain Pass and
   Precursor Basin). Each level links its own copy and the copy linked last is the one symbols,
@@ -216,8 +222,10 @@ cross them (#69):
   level with a sky replaces the farther of the two (#142; before, no sky was drawn in either view).
 So two players can be anywhere in the loaded levels, each in their own. Safety nets:
 - residency guard: right before a level is discarded or hidden (`load-state update!`, `level.gc`),
-  `coop-on-level-leaving` brings player 2 to player 1 if player 2 stands in it (scripts like the
-  fisherman's boat or a warp gate still switch levels for both);
+  `coop-on-level-leaving` brings player 2 to player 1 if player 2 stands in it, inside its boxes, and
+  in no other displayed level (scripts like the fisherman's boat or a warp gate still switch levels for
+  both). Not "the nearest level": every level's bsp sphere is zero, so between two levels the nearest
+  was whichever came first in the slots (#155);
 - distance leash, now 1000 m (`leash-distance`);
 - player 2's current level (endless-fall height, level-enter events) comes from its own position
   (`level-get-target-inside`), not from the continue point or player 1's camera;

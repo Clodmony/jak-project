@@ -1041,14 +1041,16 @@
           (let ((other (level-slot i)))
             (if (and (!= other lev) (= (-> other status) 'active) (-> other display?) (point-in-boxes? other pos))
               (set! safe-elsewhere #t))))
-        (when (and (not safe-elsewhere) (= (coop-level-containing *level* pos (the-as level #f)) lev))
+        ;; in it: inside its boxes. Not the nearest level: every level's bsp sphere is zero, so between two
+        ;; levels "nearest" was whichever came first in the slots (#155)
+        (when (and (not safe-elsewhere) (point-in-boxes? lev pos))
           (format 0 "[coop] level ~A goes away under player 2, bringing player 2 to player 1~%" (-> lev name))
           (coop-despawn-player2)
           ;; respawn now if player 1 is in control and the spot isn't in the leaving level too,
           ;; otherwise the manager respawns player 2 once player 1 is ready
           (when (coop-target-ready? p1)
             (let ((dest (coop-safe-position-near p1 (new 'stack-no-clear 'vector))))
-              (if (= (coop-level-containing *level* dest (the-as level #f)) lev) (set! (-> dest quad) (-> p1 control trans quad)))
+              (if (point-in-boxes? lev dest) (set! (-> dest quad) (-> p1 control trans quad)))
               (coop-spawn-player2 dest)))))))
   (none))
 

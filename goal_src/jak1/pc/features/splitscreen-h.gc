@@ -384,6 +384,31 @@
               (set! best-dist d))))))
     best))
 
+(defun coop-forget-art-in-heap ((heap kheap))
+  "level load-begin and unload! hook (#155), before the heap is used again: no level's art-group list,
+   level-default's included, keeps an art group that lives in heap. link-art! walks every list and reads
+   each entry's name; one that pointed into a reloaded heap crashed in name=. An art group of a level
+   load goes in that level's own list; one in another list came from a load whose loading-level was
+   wrong (a second load during a login with co-op stopped)."
+  (when (nonzero? (-> heap base))
+    (dotimes (i LEVEL_INDEX_COUNT)
+      (let* ((dir (-> *level* level i art-group))
+             (arts (-> dir art-group-array))
+             (names (-> dir string-array))
+             (kept 0))
+        (dotimes (k (-> arts length))
+          (let ((ag (-> arts k)))
+            (cond
+              ((and (>= (the-as int ag) (the-as int (-> heap base))) (< (the-as int ag) (the-as int (-> heap top-base))))
+               (format 0 "[coop] art group at #x~X dropped from ~A's list: its level's heap is used again~%" ag (-> *level* level i name)))
+              (else
+               (set! (-> arts kept) ag)
+               (set! (-> names kept) (-> names k))
+               (+! kept 1)))))
+        (set! (-> arts length) kept)
+        (set! (-> names length) kept))))
+  (none))
+
 (define-extern coop-on-level-leaving (function level none))
 
 (define-extern coop-send-to-other-player (function symbol symbol none))
