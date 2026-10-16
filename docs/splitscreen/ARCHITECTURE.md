@@ -312,6 +312,13 @@ the same behaviour as the existing PC "force actors" option, without changing th
   temple door (`maindoor`) and precursor bridge (`precurbridge`, `jungle-obs.gc`) check their blue eco
   the same way: the door opens for any player within 15 m carrying it, the bridge rises for any player
   on its activation spot carrying it.
+- The Citadel's blue eco chain platforms (`citb-chain-plat`, `citb-plat.gc`) rise and stay up while
+  any player within their 70 m carries blue eco (`coop-powerup-player-near`): before, a partner
+  without eco standing nearer, or riding one, let it sink (#59).
+- The Citadel's elevator to the final boss (`citb-exit-plat`) moves `*target*` by hand like the
+  jungle elevator: when it starts, the other player is put onto it (`coop-put-onto-platform`; they
+  keep their eco, unlike in the jungle's `coop-bring-onto-platform`) and moved with it
+  (`coop-move-other-rider`). Before, a partner standing on it fell down the shaft (#59).
 - Pause: right before `determine-pause-mode`, player 2's Start/Select are merged into pad 0, and a
   player 2 controller loss injects a pause (`coop-merge-pause-buttons`; player 1's loss pauses as in
   single player). While a player's controller is disconnected the screen says so ("Player 2 /

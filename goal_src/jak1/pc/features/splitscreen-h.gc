@@ -436,6 +436,7 @@
 (define-extern coop-flut-mount-at-pad? (function process-drawable target symbol))
 (define-extern coop-flut-cell-ready? (function process-drawable symbol))
 (define-extern coop-elevator-called? (function process-drawable float symbol))
+(define-extern coop-put-onto-platform (function process-drawable target none))
 (define-extern coop-bring-onto-platform (function process-drawable target none))
 (define-extern coop-move-other-rider (function process-drawable vector none))
 (define-extern coop-pin-to-player (function process handle symbol))

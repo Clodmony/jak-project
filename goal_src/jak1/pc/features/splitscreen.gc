@@ -913,10 +913,10 @@
         (return #t))))
   #f)
 
-(defun coop-bring-onto-platform ((plat process-drawable) (tgt target))
+(defun coop-put-onto-platform ((plat process-drawable) (tgt target))
   "A ride that takes one player where the other can't follow (the jungle elevator down to the plant
-   boss): the other player, if in play and not on the platform already, is put onto it on the far
-   side from tgt, and loses their eco like tgt does."
+   boss, the citadel's elevator up to the final boss): the other player, if in play and not on the
+   platform already, is put onto it on the far side from tgt."
   (when (and (coop-active?) tgt)
     (let ((other (coop-other-player-target tgt)))
       (when (and (coop-player-in-play? other)
@@ -933,7 +933,14 @@
           (set! (-> other control transv quad) (the-as uint128 0))
           (move-to-point! (-> other control) pos)
           (set! (-> other control highest-jump-mark quad) (-> pos quad))
-          (format 0 "[coop] player ~D rides along on ~A~%" (+ 1 (coop-process-player other)) (-> plat name))))
+          (format 0 "[coop] player ~D rides along on ~A~%" (+ 1 (coop-process-player other)) (-> plat name))))))
+  (none))
+
+(defun coop-bring-onto-platform ((plat process-drawable) (tgt target))
+  "coop-put-onto-platform for the jungle elevator: the other player also loses their eco like tgt does."
+  (coop-put-onto-platform plat tgt)
+  (when (and (coop-active?) tgt)
+    (let ((other (coop-other-player-target tgt)))
       (if (coop-player-in-play? other) (send-event other 'reset-pickup 'eco))))
   (none))
 

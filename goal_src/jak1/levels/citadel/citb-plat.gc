@@ -346,9 +346,8 @@
     (behavior ()
       (when (time-elapsed? (-> self state-time) (seconds 0.1))
         (set-time! (-> self state-time))
-        (if (and (and *target*
-                      (>= (-> self info idle-distance) (vector-vector-distance (-> self root-overlay trans) (-> *target* control trans))))
-                 (send-event *target* 'query 'powerup (pickup-type eco-blue)))
+        ;; og:preserve-this coop: either player in range carrying blue eco, not only the nearest one
+        (if (coop-powerup-player-near (-> self root-overlay trans) (-> self info idle-distance) (pickup-type eco-blue))
           (go-virtual rigid-body-platform-float))))
   :code
     (behavior ()
@@ -366,12 +365,13 @@
       (stop! (-> self sound)))
   :trans
     (behavior ()
+      ;; og:preserve-this coop: either player in range carrying blue eco keeps it up (a player without eco
+      ;; riding it is the nearest one)
       (cond
-        ((and (and *target*
-                   (>= (-> self info idle-distance) (vector-vector-distance (-> self root-overlay trans) (-> *target* control trans))))
-              (send-event *target* 'query 'powerup (pickup-type eco-blue)))
+        ((coop-powerup-player-near (-> self root-overlay trans) (-> self info idle-distance) (pickup-type eco-blue))
          (when (not (time-elapsed? (-> self state-time) (seconds 1)))
-           (if (rand-vu-percent? 0.05) (spawn-projectile-blue *target*)))
+           ;; og:preserve-this coop: the shot goes to the player carrying the eco
+           (if (rand-vu-percent? 0.05) (spawn-projectile-blue (coop-powerup-player-near (-> self root-overlay trans) (-> self info idle-distance) (pickup-type eco-blue)))))
          (seek! (-> self float-height-offset) (-> self float-offset) (* 8192.0 (seconds-per-frame)))
          (draw-eco-beam (-> self root-overlay trans) (-> self beam-end))
          (update-trans! (-> self sound) (-> self root-overlay trans))
@@ -780,6 +780,7 @@
       (vector-! gp-0 (-> self root trans) arg0)
       (vector-! s5-0 (-> *target* control trans) (-> self root trans))
       (set! (-> s5-0 y) 0.0)
+      (coop-move-other-rider self gp-0) ;; og:preserve-this coop: the other player on it moves along
       (let ((f30-0 (vector-length s5-0)))
         (when (< 122880.0 f30-0)
           (vector-normalize! s5-0 1.0)
@@ -791,6 +792,10 @@
 
 (defstate plat-button-move-downward (citb-exit-plat)
   :virtual #t
+  :enter
+    (behavior ()
+      (let ((t9-0 (-> (method-of-type plat-button plat-button-move-downward) enter))) (if t9-0 (t9-0)))
+      (coop-put-onto-platform self *target*)) ;; og:preserve-this coop: the other player rides along
   :trans
     (behavior ()
       (let ((gp-0 (new 'stack-no-clear 'vector)))
@@ -801,6 +806,10 @@
 
 (defstate plat-button-move-upward (citb-exit-plat)
   :virtual #t
+  :enter
+    (behavior ()
+      (let ((t9-0 (-> (method-of-type plat-button plat-button-move-upward) enter))) (if t9-0 (t9-0)))
+      (coop-put-onto-platform self *target*)) ;; og:preserve-this coop: the other player rides along
   :trans
     (behavior ()
       (let ((gp-0 (new 'stack-no-clear 'vector)))
