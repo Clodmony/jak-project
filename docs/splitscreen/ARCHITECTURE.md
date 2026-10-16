@@ -325,6 +325,12 @@ the same behaviour as the existing PC "force actors" option, without changing th
   runs for the nearer player, who can change during the race, so it sends these events to both
   players' counters (`gorge-hud-event`): before, the player nearer to the start line when the race
   began kept disabled counters after it (#51).
+- Blue eco launchers (`launcher`, `generic-obs.gc`) turn on while any player within their active distance
+  carries blue eco, checked per player (`coop-for-each-player-context`), and launch each player on the pad
+  who carries it; a partner without eco on an active pad isn't launched. Before, a partner without eco
+  standing on the pad nearer its middle kept it off for the player with eco (#56: Spider Cave's tunnel exit).
+- Spider Cave's dark crystals (`dark-crystal.gc`): the blast hurts every player within its radius (7 m, no
+  wall between) and shakes every player's camera; before, only the nearest player (#56).
 - The Citadel's blue eco chain platforms (`citb-chain-plat`, `citb-plat.gc`) rise and stay up while
   any player within their 70 m carries blue eco (`coop-powerup-player-near`): before, a partner
   without eco standing nearer, or riding one, let it sink (#59).

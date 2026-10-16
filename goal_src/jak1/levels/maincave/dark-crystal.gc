@@ -441,7 +441,8 @@
           (set-vector! (-> gp-0 fountain-rand-transv-lo) -40960.0 20480.0 -40960.0 1.0)
           (set-vector! (-> gp-0 fountain-rand-transv-hi) 40960.0 49152.0 40960.0 1.0))
         (process-spawn joint-exploder *dark-crystal-explode-sg* 5 gp-0 *dark-crystal-exploder-params* :to self))
-      (activate! *camera-smush-control* 819.2 37 210 1.0 0.995)
+      ;; og:preserve-this coop: every player's camera shakes
+      (coop-for-each-player-context (activate! *camera-smush-control* 819.2 37 210 1.0 0.995))
       (let ((gp-1 (dark-crystal-method-21 self)))
         (suspend)
         (ja-channel-set! 0)
@@ -490,27 +491,29 @@
       (cleanup-for-death self)))
 
 (defmethod dark-crystal-method-20 ((this dark-crystal))
-  (when *target*
-    (let ((s5-0 (new 'stack-no-clear 'vector))
-          (s3-0 (new 'stack-no-clear 'vector))
-          (s4-0 (new 'stack-no-clear 'vector)))
-      (set! (-> s5-0 quad) (-> this root trans quad))
-      (+! (-> s5-0 y) 6144.0)
-      (set! (-> s3-0 quad) (-> (target-pos 0) quad))
-      (+! (-> s3-0 y) 6144.0)
-      (when (>= (-> this explode-danger-radius) (vector-vector-distance s5-0 s3-0))
-        (vector-! s4-0 s3-0 s5-0)
-        (let ((t2-0 (new 'stack-no-clear 'collide-tri-result)))
-          (if (< (fill-and-probe-using-line-sphere *collide-cache*
-                                                   s5-0
-                                                   s4-0
-                                                   819.2
-                                                   (collide-kind background)
-                                                   this
-                                                   t2-0
-                                                   (new 'static 'pat-surface :noentity #x1))
-                 0.0)
-            (send-event *target* 'attack #f (new 'static 'attack-info)))))))
+  ;; og:preserve-this coop: the blast hits every player in its radius, not only the nearest one
+  (coop-for-each-player-context
+    (when *target*
+      (let ((s5-0 (new 'stack-no-clear 'vector))
+            (s3-0 (new 'stack-no-clear 'vector))
+            (s4-0 (new 'stack-no-clear 'vector)))
+        (set! (-> s5-0 quad) (-> this root trans quad))
+        (+! (-> s5-0 y) 6144.0)
+        (set! (-> s3-0 quad) (-> (target-pos 0) quad))
+        (+! (-> s3-0 y) 6144.0)
+        (when (>= (-> this explode-danger-radius) (vector-vector-distance s5-0 s3-0))
+          (vector-! s4-0 s3-0 s5-0)
+          (let ((t2-0 (new 'stack-no-clear 'collide-tri-result)))
+            (if (< (fill-and-probe-using-line-sphere *collide-cache*
+                                                     s5-0
+                                                     s4-0
+                                                     819.2
+                                                     (collide-kind background)
+                                                     this
+                                                     t2-0
+                                                     (new 'static 'pat-surface :noentity #x1))
+                   0.0)
+              (send-event *target* 'attack #f (new 'static 'attack-info))))))))
   (none))
 
 (defmethod dark-crystal-method-21 ((this dark-crystal))
