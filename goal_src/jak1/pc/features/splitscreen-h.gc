@@ -463,6 +463,7 @@
 (define-extern coop-send-to-cameras (function symbol object none))
 (define-extern coop-put-other-player-near (function target vector none))
 (define-extern coop-carry-other-player (function target vector none))
+(define-extern coop-flood-at (function float none))
 (define-extern coop-lowest-player-y (function float))
 (define-extern coop-boundary-skip-jumps (function object none))
 (define-extern coop-boundary-command-ok? (function object symbol))
