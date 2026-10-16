@@ -370,8 +370,8 @@
       (cond
         ((coop-powerup-player-near (-> self root-overlay trans) (-> self info idle-distance) (pickup-type eco-blue))
          (when (not (time-elapsed? (-> self state-time) (seconds 1)))
-           (if (rand-vu-percent? 0.05)
-             (spawn-projectile-blue (coop-powerup-player-near (-> self root-overlay trans) (-> self info idle-distance) (pickup-type eco-blue)))))
+           ;; og:preserve-this coop: the shot goes to the player carrying the eco
+           (if (rand-vu-percent? 0.05) (spawn-projectile-blue (coop-powerup-player-near (-> self root-overlay trans) (-> self info idle-distance) (pickup-type eco-blue)))))
          (seek! (-> self float-height-offset) (-> self float-offset) (* 8192.0 (seconds-per-frame)))
          (draw-eco-beam (-> self root-overlay trans) (-> self beam-end))
          (update-trans! (-> self sound) (-> self root-overlay trans))
