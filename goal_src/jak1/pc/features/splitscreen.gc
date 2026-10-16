@@ -1087,6 +1087,27 @@
        (if sidekick (logclear! (-> (the-as process-drawable sidekick) draw status) (draw-status hidden))))))
   (none))
 
+;; A hazard that rises over the last checkpoint while it runs (Lost Precursor City's helix: its dark
+;; eco climbs from the checkpoint at the bottom to the top) reports its surface every frame while it
+;; rises (coop-flood-at). A player who dies meanwhile isn't sent back to a checkpoint below it, where
+;; they would die again at once, again and again, but comes back next to the other player (#52).
+(define *coop-flood-time* (the-as time-frame 0))
+
+(define *coop-flood-y* 0.0)
+
+(defun coop-flood-at ((y float))
+  "Called every frame by a hazard rising through a checkpoint's area, with the height of its surface."
+  (when (coop-active?)
+    (set! *coop-flood-time* (current-time))
+    (set! *coop-flood-y* y))
+  (none))
+
+(defun coop-checkpoint-flooded? ((cp continue-point))
+  "Is cp below a rising hazard (or less than 10 m above it) that reported itself in the last half second?"
+  (and (nonzero? *coop-flood-time*)
+       (not (time-elapsed? *coop-flood-time* (seconds 0.5)))
+       (< (-> cp trans y) (+ *coop-flood-y* (meters 10)))))
+
 ;; a player that died while the other one is still playing. Entered from target-death instead of
 ;; the world reset. Waits respawn-delay, then respawns at the other player's last safe ground, or at
 ;; the last checkpoint when that is nearer to where they died (#110: with four level slots the
@@ -1132,12 +1153,13 @@
             (else
              ;; next to the other player, or at the last checkpoint (the continue point, which follows
              ;; player 1) when that is nearer to where we died: with four level slots the players can
-             ;; be levels apart (#110)
+             ;; be levels apart (#110). Not at a checkpoint under a rising hazard (#52).
              (let* ((cp (-> *game-info* current-continue))
                     (to-cp (vector-vector-xz-distance (-> self control trans) (-> cp trans)))
-                    (to-other (vector-vector-xz-distance (-> self control trans) (-> other control trans))))
+                    (to-other (vector-vector-xz-distance (-> self control trans) (-> other control trans)))
+                    (flooded (coop-checkpoint-flooded? cp)))
                (cond
-                 ((< to-cp to-other)
+                 ((and (< to-cp to-other) (not flooded))
                   (set! (-> pos quad) (-> cp trans quad))
                   (quaternion-copy! quat (-> cp quat))
                   (format 0 "[coop] player ~D respawns at the checkpoint ~S (~,,1m away, player ~D ~,,1m)~%"
@@ -1145,6 +1167,7 @@
                  (else
                   (coop-safe-position-near other pos)
                   (quaternion-copy! quat (-> other control quat-for-control))
+                  (if flooded (format 0 "[coop] the checkpoint ~S is under a rising hazard~%" (-> cp name)))
                   (format 0 "[coop] player ~D respawns next to player ~D (~,,1m away, the checkpoint ~,,1m)~%"
                           (+ 1 (coop-process-player self)) (- 2 (coop-process-player self)) to-other to-cp))))))
           (reset! (-> self fact) 'health)

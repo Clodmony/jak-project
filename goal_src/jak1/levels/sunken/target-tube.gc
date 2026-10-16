@@ -666,6 +666,63 @@
       (set! (-> self pos) f30-0)))
   (-> self pos))
 
+;; og:preserve-this coop: a tube takes each player who goes in, not only the nearest player, and two
+;; riders at once. The tube answers a rider's 'update with the point of its path next to them, searching
+;; on from where it found them last (pos): each player keeps their own pos here (#52).
+(define *coop-tube-pos* (new 'static 'boxed-array :type float 0.0 0.0))
+
+(define *coop-tube-scratch-pos* 0.0)
+
+(defun slide-control-coop-rider? ((this slide-control) (tgt target))
+  "Is tgt in tube mode in this tube?"
+  (and tgt
+       (nonzero? (-> tgt tube))
+       (= (handle->process (-> tgt tube tube)) this)
+       (= (send-event tgt 'query 'mode) 'tube)))
+
+(defbehavior slide-control-coop-enter slide-control ()
+  "Co-op: each player in play who isn't in this tube yet goes in when within 20 m of its start and past
+   it (the original check, measured from the start of the path, not from the last rider's place). The
+   first one in becomes the tube's rider. Returns #t when a player went in."
+  (let ((entered #f)
+        (start (new 'stack-no-clear 'vector))
+        (dir (new 'stack-no-clear 'vector)))
+    (eval-path-curve-div! (-> self path) start 0.2 'interp)
+    (path-control-method-12 (-> self path) dir 0.2)
+    (coop-for-each-player-context
+      (when (and (not (slide-control-coop-rider? self *target*))
+                 (>= 81920.0 (vector-vector-distance (-> self root trans) (-> *target* control trans)))
+                 (< 0.0 (vector-dot (vector-! (new 'stack-no-clear 'vector) (-> *target* control trans) start) dir)))
+        (set! (-> *coop-tube-pos* (coop-process-player *target*)) 0.0)
+        (when (send-event *target* 'change-mode 'tube self)
+          (set! entered #t)
+          (if (not (handle->process (-> self target))) (set! (-> self target) (process->handle *target*))))))
+    entered))
+
+(defbehavior slide-control-coop-keep-riding slide-control ((leaving process))
+  "Co-op: when the tube's rider left (leaving, or it is no longer in this tube) and the other player still
+   rides it, they become the rider. Returns #t while a player rides it (not counting leaving)."
+  (if (not (coop-active?)) (return #f))
+  (let ((rider (the-as target #f)))
+    (dotimes (i 2)
+      (let ((tgt (coop-player-target i)))
+        (if (and (!= tgt leaving) (slide-control-coop-rider? self tgt)) (set! rider tgt))))
+    (let ((current (handle->process (-> self target))))
+      (when (and rider (or (not current) (= current leaving) (not (slide-control-coop-rider? self (the-as target current)))))
+        (set! (-> self target) (process->handle rider))))
+    (if rider #t #f)))
+
+(defbehavior slide-control-coop-pos slide-control ((rider process) (in? symbol))
+  "Co-op: around a rider's 'update, pos is that rider's own: in? #t loads it, #f stores it back. Returns
+   the rider's pos (pos without co-op)."
+  (let ((result (-> self pos)))
+    (when (and (coop-active?) rider (= (-> rider type) target))
+      (let ((i (coop-process-player rider)))
+        (cond
+          (in? (set! *coop-tube-scratch-pos* (-> self pos)) (set! (-> self pos) (-> *coop-tube-pos* i)))
+          (else (set! (-> *coop-tube-pos* i) (-> self pos)) (set! (-> self pos) *coop-tube-scratch-pos*)))))
+    result))
+
 (defstate slide-control-watch (slide-control)
   :virtual #t
   :enter
@@ -676,9 +733,11 @@
       (set! (-> self pos) 0.2))
   :trans
     (behavior ()
-      (if (and (and *target* (>= 81920.0 (vector-vector-distance (-> self root trans) (-> *target* control trans))))
-               (and (< 0.0 (vector-dot (vector-! (new 'stack-no-clear 'vector) (-> *target* control trans) (-> self trans)) (-> self rot)))
-                    (send-event *target* 'change-mode 'tube self)))
+      (if (if (coop-active?) ;; og:preserve-this coop: either player can go in
+            (slide-control-coop-enter)
+            (and (and *target* (>= 81920.0 (vector-vector-distance (-> self root trans) (-> *target* control trans))))
+                 (and (< 0.0 (vector-dot (vector-! (new 'stack-no-clear 'vector) (-> *target* control trans) (-> self trans)) (-> self rot)))
+                      (send-event *target* 'change-mode 'tube self))))
         (go-virtual slide-control-ride)))
   :code anim-loop)
 
@@ -687,21 +746,25 @@
   :event
     (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
       (case message
-        (('end-mode) (go-virtual slide-control-watch))
+        (('end-mode)
+         ;; og:preserve-this coop: the tube is still ridden while the other player is in it
+         (if (not (slide-control-coop-keep-riding proc)) (go-virtual slide-control-watch)))
         (('update)
          (let* ((s4-0 proc)
                 (gp-0 (if (and (nonzero? s4-0) (type-type? (-> s4-0 type) process-drawable)) s4-0)))
+           (slide-control-coop-pos gp-0 #t) ;; og:preserve-this coop: each rider's own place along the tube
            (if gp-0 (find-target-point (-> (the-as process-drawable gp-0) root trans)))
            (set! (-> (the-as vector (-> block param 0)) quad) (-> self trans quad))
            (set! (-> (the-as vector (-> block param 1)) quad) (-> self rot quad))
            (set! (-> (the-as vector (-> block param 2)) quad) (-> self side quad))
            (eval-path-curve-div! (-> self path) (the-as vector (-> block param 3)) (+ 0.2 (-> self pos)) 'interp)
            (if (>= (-> self pos) (+ -0.2 (the float (+ (-> self path curve num-cverts) -1)))) (send-event gp-0 'end-mode)))
-         (-> self pos))))
+         (slide-control-coop-pos proc #f)))) ;; og:preserve-this coop: was (-> self pos)
   :enter
     (behavior ()
       (set! (-> self pos) 0.0)
-      (set! (-> self target) (process->handle *target*))
+      ;; og:preserve-this coop: slide-control-coop-enter set the rider (*target* is the nearest player)
+      (if (not (coop-active?)) (set! (-> self target) (process->handle *target*)))
       (process-entity-status! self (entity-perm-status bit-3) #t))
   :exit
     (behavior ()
@@ -709,6 +772,9 @@
       (process-entity-status! self (entity-perm-status bit-3) #f))
   :trans
     (behavior ()
+      (when (coop-active?) ;; og:preserve-this coop: the other player can go in too while one rides
+        (slide-control-coop-enter)
+        (slide-control-coop-keep-riding (the-as process #f)))
       (let ((gp-0 (handle->process (-> self target))))
         (cond
           ((if (and (nonzero? gp-0) (type-type? (-> gp-0 type) process-drawable)) gp-0))
