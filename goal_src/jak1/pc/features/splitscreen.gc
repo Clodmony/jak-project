@@ -2068,17 +2068,25 @@
 (defun coop-want-levels ((ls load-state) (a symbol) (b symbol))
   "want-levels with co-op running: (a b) becomes the pair of the player whose crossing it is, or of
    both players for a script's load, and the wants become the union of both pairs, that player's
-   first. Entries already wanted keep their display settings (load-state-want-names)."
-  (let ((me *coop-want-player*))
+   first. A cutscene's load (its commands run while the load state is backed up) is the pair of the
+   player the scene runs for: the other player waits where they are, and their level stays (#50: the
+   gambler's introduction loads Precursor Basin; Fire Canyon went away under player 2 waiting at its
+   end, who fell once the scene let go). Entries already wanted keep their display settings
+   (load-state-want-names)."
+  (let* ((me *coop-want-player*)
+         (only (cond
+                 ((>= me 0) me)
+                 (*coop-wants-backed-up?* *coop-player*)
+                 (else -1))))
     (set! *coop-want-player* -1)
     (dotimes (p 2)
-      (when (or (< me 0) (= p me))
+      (when (or (< only 0) (= p only))
         (set! (-> *coop-wants* name (* 2 p)) a)
         (set! (-> *coop-wants* name (+ (* 2 p) 1)) b)
         (set! (-> *coop-wants* crossed p) (>= me 0))))
     (let ((names (new 'stack-no-clear 'array 'symbol 4))
           (count 0)
-          (first (if (< me 0) 0 me)))
+          (first (if (< only 0) 0 only)))
       (dotimes (k 2)
         (let ((p (if (zero? k) first (- 1 first))))
           (dotimes (i 2)
