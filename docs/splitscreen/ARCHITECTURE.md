@@ -317,6 +317,14 @@ the same behaviour as the existing PC "force actors" option, without changing th
   temple door (`maindoor`) and precursor bridge (`precurbridge`, `jungle-obs.gc`) check their blue eco
   the same way: the door opens for any player within 15 m carrying it, the bridge rises for any player
   on its activation spot carrying it.
+- Precursor Basin's dark eco plants (`dark-plant`, `rolling-obs.gc`) die for any player within 4 m
+  carrying green eco from the vent (`coop-powerup-player-near`): before, a partner without eco
+  standing nearer kept the plant alive under the rider who had it (#51).
+- Precursor Basin's gorge race hides and disables the cell and orb counters while it runs and turns
+  them back on afterwards. Each player has their own counters (`*hud-parts*`) and the race's code
+  runs for the nearer player, who can change during the race, so it sends these events to both
+  players' counters (`gorge-hud-event`): before, the player nearer to the start line when the race
+  began kept disabled counters after it (#51).
 - The Citadel's blue eco chain platforms (`citb-chain-plat`, `citb-plat.gc`) rise and stay up while
   any player within their 70 m carries blue eco (`coop-powerup-player-near`): before, a partner
   without eco standing nearer, or riding one, let it sink (#59).
