@@ -7,8 +7,8 @@ memory is not read by a session that starts in another worktree. State goes
 here; stable recipes go into `docs/splitscreen/`; personal data and hardware
 never.
 
-Last updated 2026-10-16 (after #155, step 1b of the plan; step 1, the parallel-ready harness, is
-still open and comes next).
+Last updated 2026-10-16 (after #155, step 1b of the plan, merged; next: step 1, the parallel-ready
+harness, then the streams; #157 is open, low priority).
 
 ## Done this session
 
@@ -23,16 +23,15 @@ still open and comes next).
   goalc-test 1692.
 - Seen once in that verify, not explained: a crash in the listener path (`ProcessListenerMessage`
   -> `link_and_exec` with a garbage message, size 0), during `sky-pair`; `sky-pair` alone then passed
-  5 of 5. Candidate issue (owner's call, below).
+  5 of 5. Filed as #157.
+- #156 merged into the co-op branch as Claude (owner said merge); #155 closed by it.
 - Found by reading only, not fixed: a level discarded while a code object links keeps `linking`, and
-  `load-continue` keeps resuming that link on the inactive slot (`level.gc` `unload!`). Candidate
-  issue.
+  `load-continue` keeps resuming that link on the inactive slot (`level.gc` `unload!`). The owner
+  chose not to file it; the safety net drops any art group it could add.
 
 ## Open pull requests
 
-- #156 (`coop/155-art-group-lists`, closes #155): ready for the owner's review and merge.
-
-Merge style: locally as Claude,
+None (#156 merged). Merge style: locally as Claude,
 `git merge --no-ff -m "Merge pull request #N from Clodmony/<branch> (AI-assisted)"`
 on a detached HEAD at `origin/feature/jak1-local-splitscreen`, then
 `git push origin HEAD:feature/jak1-local-splitscreen`. Only when the owner says so; never
@@ -61,7 +60,7 @@ co-op tip.
 - `verify.sh` builds nothing in C++: note in the harness README how a session
   gets a `gk` (below) when a branch changes the runtime.
 
-**Step 1b: done** (#155, PR #156; merge it before the streams).
+**Step 1b: done** (#155, PR #156, merged).
 
 **Step 2: three streams in parallel**, each its own worktree, test instance
 (3, 4, 5) and scenario file. Test numbers fixed up front (TESTING.md rows):
@@ -110,9 +109,9 @@ Owner only: #1, #3, #8 (need a person), #7 (decision).
 ## Worktrees and background processes
 
 - Main checkout on `feature/jak1-local-splitscreen` at the merged tip.
-  Superset worktree (the #49/#155 one): on `coop/155-art-group-lists`, clean, pushed. Its
+  Superset worktree (the #49/#155 one): detached at the merged tip, clean. Its
   `build/game/gk` is the one from `~/dev-scratch/jak-project/49/build` (#155 changed no C++; keep
-  that folder while a worktree uses this `gk`). Remove the worktree's branch once #156 is merged.
+  that folder while a worktree uses this `gk`).
 - The bridge (`demo/bridge.py serve`, instance 3) serves that worktree; its game is stopped and
   the pads unplugged.
 - Harness checkout: `art-group-lists` scenario and README row committed (not pushed anywhere).
