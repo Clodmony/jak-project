@@ -57,16 +57,13 @@ Open and waiting on the owner:
   view, does it stay or flicker, time of day, camera direction). Lead: #58 found player 2's view
   drawing a level with the vis player 1's camera picked (sky and black around player 2); that is
   fixed now, so a new playtest from the tip may already answer #163.
-- Design defaults the workers took, for the owner to confirm: #164's respawn camera takes the
-  partner's direction (not the player's own); #52's Rock Village elevator pulls the partner along
-  both ways; #58: a chain mine costs a zoomer rider no health (vanilla, unchanged).
-- Issues to file (found, not fixed; the owner decides which): the rock-village gambler intro stalls
-  under the harness in 4 of 5 runs (base too); Daxter's `sidekick-clone` read an evicted spool buffer
-  (one crash, co-op likely, shared `*art-control*`); flaky `forbidden-jungle` springbox and
-  `sentinel-beach` scout fly checks; Boggy Swamp's spike gates stay up after the ambush; the citadel
-  elevator button under the harness; the sage's beach intro leaves Sandover's warp gate hidden
-  (single player too); swingpole, plat-eco, snow bumper and yeti checks look at the nearest player
-  only (low).
+- Owner decisions 2026-10-17: #164's respawn camera keeps the partner's direction; #52's Rock
+  Village elevator keeps pulling the partner along both ways. Open: #58, a chain mine costs a zoomer
+  rider no health (vanilla, unchanged).
+- Filed from the run: #175 (spool buffers with two players: Daxter `sidekick-clone` crash, gambler
+  intro stall; likely the shared `*art-control*`), #176 (flaky harness checks), #177 (Boggy Swamp
+  spike gates), #178 (nearest-player checks left, low). Not filed: the sage's beach intro leaves
+  Sandover's warp gate hidden (single player too).
 
 Owner only: #1, #3, #8 (need a person), #7 (decision). Low priority: #157 (listener crash seen
 once), #153 (turbo while waiting).
@@ -83,14 +80,16 @@ once), #153 (turbo while waiting).
   the campaign loader.
 - A worktree's binaries and data: `demo/worktree-setup.sh <worktree> [<build>]` (reflinks from
   `~/dev-scratch/jak-project/tip/`). `.superset/setup.sh` runs it in a new Superset workspace.
-  **`tip/build` predates #165** (the exit fix): rebuild it from the tip before the next worker uses it.
+  **`tip/` was removed after the run**: before the next worktree, recreate it (`tip/src` a detached
+  worktree of the tip with game data and a compiled `out/`, `tip/build` a build of it; commands at
+  the top of `worktree-setup.sh`), or pass a build folder.
 - After a `kernel-defs.gc` change: `restart_compiler` before `build`. Engine (GAME.CGO) or level
   DGO changes need `boot fresh=True`: a warm boot keeps the old code and loaded levels.
 - `goalc-test` leaves a SIGABRT core at exit in `--tests` runs while all tests pass (pre-existing).
 - Playtest packages: `scripts/coop-mod/package_mod.py --bin-dir <build> --allow-dynamic --out-dir
-  <tools>/builds` (needs `extractor` in the build folder). The last one the owner played:
-  `builds/tip-b42798cdf/jak1-coop.tar.gz` (without #60, #165 and later). Its binaries,
-  `scratch/build-play`, were since rebuilt with #165.
+  <tools>/builds` (needs `extractor` in the build folder). The newest package:
+  `builds/tip-53f3c8d25/jak1-coop.tar.gz` (the whole run, binaries `scratch/build-play`, built
+  with #165); the owner last played an older one without #60, #165 and later.
 - Pushes: the owner's global push guard (pre-push) blocks Claude-Session links and secrets, and on
   public pushes runs a headless review. Never `--no-verify`. Its review text comes from `git log -p
   -- .`, which drops a clean `--no-ff` merge whose tree equals the branch's: the review then sees
@@ -101,11 +100,8 @@ once), #153 (turbo while waiting).
 
 - Main checkout on `feature/jak1-local-splitscreen` (the owner's; its `build/` is old, don't copy
   binaries from it).
-- The coordinator's Superset workspace: detached at the merged tip. The finished workers' Superset
-  workspaces (one per issue above) are still there: remove them once the owner agrees.
-- `~/dev-scratch/jak-project/tip/` (`src` and `build`, a78ec8b9d): the source of the workspaces'
-  binaries and data; `~/dev-scratch/jak-project/streams/`: the coordinator's state, prompts and the
-  workers' handoff files.
+- The coordinator's Superset workspace: detached at the merged tip, its `build/` from
+  `scratch/build-play`. The workers' workspaces are archived (branches kept, all merged).
 - No bridge or test game running; pads unplugged.
 
 ## Lessons (harness)
@@ -181,8 +177,8 @@ machine low on memory once and killed a worker mid-change: close finished worker
 
 ## Cleanup
 
-Left for the owner to decide: the finished workers' Superset workspaces;
-`~/dev-scratch/jak-project/tip/` and `streams/`; `builds/51-precursor-basin-19d75f6a1` (an extra
-package); `scratch/build-play` (the last playtest's binaries) and `scratch/build-gk` (the installed
-launcher mod's); the backup bundle in `~/Documents/jak-coop-backup/`; gk core dumps (systemd ages
+Done 2026-10-17 (owner approved): the 14 worker workspaces archived, `~/dev-scratch/jak-project/tip/`
+and `streams/` removed, the extra packages removed. Left: `scratch/build-play` (the newest package's
+binaries) and `scratch/build-gk` (the installed launcher mod's); `builds/jak1-coop.tar.gz` (the
+installed package); the backup bundle in `~/Documents/jak-coop-backup/`; gk core dumps (systemd ages
 them out); the test instances' run folders `run/i<n>/` in the tools checkout.
