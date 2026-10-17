@@ -63,6 +63,37 @@
   (process-entity-status! this (entity-perm-status bit-3) #t)
   (none))
 
+;; og:preserve-this coop: the end of its path the platform goes to when nobody rides it. In single player
+;; (or with one player in play) the end nearer to the player. With the players nearer to different ends
+;; it keeps going where it goes; once there, it waits 8 s and as long as a player stands within 6 m of that
+;; end (they may get on), then goes to the other end: before, it followed the nearest player only, and the
+;; one who rode down and stepped off kept it at the bottom with no way down for the partner at the top (#60).
+(defbehavior plat-eco-finalboss-dest plat-eco-finalboss ((start vector) (end vector))
+  (let ((want-start #f)
+        (want-end #f)
+        (wait-here #f)
+        (here (if (< (-> self dest) 0.5) start end)))
+    (when (coop-active?)
+      (dotimes (i 2)
+        (let ((tgt (coop-player-target i)))
+          (when (coop-player-in-play? tgt)
+            (let ((pos (-> tgt control trans)))
+              (if (< (vector-vector-xz-distance pos start) (vector-vector-xz-distance pos end)) (set! want-start #t) (set! want-end #t))
+              (if (< (vector-vector-xz-distance pos here) (meters 6)) (set! wait-here #t)))))))
+    (cond
+      ((and want-start want-end)
+       (cond
+         ;; on its way: state-time marks when it was last moving (one frame back: the trans snaps the platform to its
+         ;; destination on the frame state-time equals, the first one of the state)
+         ((< 0.01 (fabs (- (-> self path-pos) (-> self dest)))) (set! (-> self state-time) (+ (current-time) -1)) (-> self dest))
+         ((or wait-here (not (time-elapsed? (-> self state-time) (seconds 8)))) (-> self dest))
+         ((< (-> self dest) 0.5) 0.99)
+         (else 0.0)))
+      (want-start 0.0)
+      (want-end 0.99)
+      ((< (vector-vector-xz-distance (target-pos 0) start) (vector-vector-xz-distance (target-pos 0) end)) 0.0)
+      (else 0.99))))
+
 (defstate plat-path-active (plat-eco-finalboss)
   :virtual #t
   :event
@@ -98,8 +129,7 @@
               (cond
                 ((>= (-> self force-dest) 0.0) (-> self force-dest))
                 ((>= (-> self targ-dest) 0.0) (-> self targ-dest))
-                ((< (vector-vector-xz-distance (target-pos 0) s5-0) (vector-vector-xz-distance (target-pos 0) gp-0)) 0.0)
-                (else 0.99))))
+                (else (plat-eco-finalboss-dest s5-0 gp-0))))) ;; og:preserve-this coop: either player's end
       (if (= (-> self state-time) (current-time)) (set! (-> self path-pos) (-> self dest)))
       (seek! (-> self path-pos) (-> self dest) (* (-> self speed) (seconds-per-frame)))
       (eval-path-curve! (-> self path) (-> self basetrans) (-> self path-pos) 'interp)

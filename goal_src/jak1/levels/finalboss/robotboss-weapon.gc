@@ -204,7 +204,12 @@
          (send-event *camera* 'change-state *camera-base-mode*)
          (send-event *camera* 'clear-entity)
          (if *target* (logclear! (-> *target* mask) (process-mask sleep)))
-         (send-event *target* 'attack-invinc #f (static-attack-info ((mode 'instant-death)))))
+         ;; og:preserve-this coop: nobody out of reach: the blast gets every player (both down, the checkpoint
+         ;; reloads as in single player). Before, only *target* died, the other played on and the boss
+         ;; waited forever for this bomb, which never says 'bomb-done on this path (#60)
+         (if (coop-active?)
+           (coop-blast-players (meters 100000) #t)
+           (send-event *target* 'attack-invinc #f (static-attack-info ((mode 'instant-death))))))
         (else (send-event (ppointer->process (-> self parent)) 'bomb-done)))
       (deactivate self))
   :post ja-post)
