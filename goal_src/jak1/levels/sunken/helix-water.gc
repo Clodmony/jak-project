@@ -419,6 +419,8 @@
       (+! (-> self root trans y) (* (-> self transv-y) (seconds-per-frame)))
       (if (< (-> self end-y) (-> self root trans y)) (set! (-> self root trans y) (-> self end-y)))
       (send-event (ppointer->process (-> self dark-eco)) 'move-to (-> self root trans))
+      ;; og:preserve-this coop: a player dying meanwhile doesn't come back at the checkpoint below
+      (coop-flood-at (-> self root trans y))
       (helix-water-method-21 self))
   :code
     (behavior ()

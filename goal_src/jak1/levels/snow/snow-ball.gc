@@ -240,9 +240,17 @@
         (('touch 'attack)
          (when (= (-> proc type) target)
            (do-push-aways! (-> self root))
-           (when (time-elapsed? (-> self hit-player-time) (seconds 0.5))
-             (set-time! (-> self hit-player-time))
-             (snow-ball-roller-method-22 self *target*))))))
+           ;; og:preserve-this coop: the 0.5 s between hits counts per player, not per snowball: a snowball that
+           ;; touched one player went through the other one unhurt. Player 2's hit time is kept in state-time,
+           ;; which no roller code uses (no type change).
+           (cond
+             ((zero? (coop-process-player proc))
+              (when (time-elapsed? (-> self hit-player-time) (seconds 0.5))
+                (set-time! (-> self hit-player-time))
+                (snow-ball-roller-method-22 self *target*)))
+             ((time-elapsed? (-> self state-time) (seconds 0.5))
+              (set-time! (-> self state-time))
+              (snow-ball-roller-method-22 self *target*)))))))
   :enter
     (behavior ()
       (set-time! (-> self last-bounce-time))
@@ -270,6 +278,7 @@
   (set! (-> self path-speed) arg2)
   (set! (-> self which-path) arg3)
   (set! (-> self hit-player-time) 0)
+  (set! (-> self state-time) 0) ;; og:preserve-this coop: player 2's hit time
   (set! (-> self entity) arg0)
   (dotimes (s3-0 4)
     (mem-copy! (the-as pointer (-> self junctions s3-0)) (the-as pointer (-> arg4 s3-0)) 16))

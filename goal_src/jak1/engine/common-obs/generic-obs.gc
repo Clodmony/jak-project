@@ -1193,13 +1193,18 @@
         (('trans) (move-to-point! (-> self root) (the-as vector (-> block param 0))) (update-transforms! (-> self root)))))
   :trans
     (behavior ()
-      (when (and *target* (>= (-> self active-distance) (vector-vector-distance (-> self root trans) (-> *target* control trans))))
-        (cond
-          ((send-event *target* 'query 'powerup (pickup-type eco-blue)) (go launcher-active))
-          (else (let ((gp-0 'target-launch)) (if (= (send-event *target* 'query 'mode) gp-0) (send-event *target* 'end-mode)))))
-        (if (and (and *target* (>= 32768.0 (vector-vector-distance (-> self root trans) (-> *target* control trans))))
-                 (not (send-event *target* 'query 'powerup (pickup-type eco-blue))))
-          (level-hint-spawn (text-id sidekick-hint-launcher) "sksp0035" (the-as entity #f) *entity-pool* (game-task none)))))
+      ;; og:preserve-this coop: any player in range carrying blue eco turns the launcher on, not only the
+      ;; nearest one (a player without eco standing on the pad nearer its middle kept it off for the partner)
+      (let ((coop-blue #f))
+        (coop-for-each-player-context
+          (when (and *target* (>= (-> self active-distance) (vector-vector-distance (-> self root trans) (-> *target* control trans))))
+            (cond
+              ((send-event *target* 'query 'powerup (pickup-type eco-blue)) (set! coop-blue #t))
+              (else (let ((gp-0 'target-launch)) (if (= (send-event *target* 'query 'mode) gp-0) (send-event *target* 'end-mode)))))
+            (if (and (and *target* (>= 32768.0 (vector-vector-distance (-> self root trans) (-> *target* control trans))))
+                     (not (send-event *target* 'query 'powerup (pickup-type eco-blue))))
+              (level-hint-spawn (text-id sidekick-hint-launcher) "sksp0035" (the-as entity #f) *entity-pool* (game-task none)))))
+        (if coop-blue (go launcher-active))))
   :code anim-loop)
 
 (defstate launcher-active (launcher)
@@ -1207,7 +1212,9 @@
     (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
       (when (or (= message 'touch) (= message 'attack))
         (set-time! (-> self state-time))
-        (send-event proc 'launch (-> self spring-height) (-> self camera) (-> self dest) (-> self seek-time)))
+        ;; og:preserve-this coop: only a player carrying blue eco is launched (the partner on the pad isn't)
+        (if (or (not (coop-active?)) (send-event proc 'query 'powerup (pickup-type eco-blue)))
+          (send-event proc 'launch (-> self spring-height) (-> self camera) (-> self dest) (-> self seek-time))))
       (cond
         ((= message 'instant-death) (go launcher-deactivated))
         ((= message 'trans)
@@ -1225,17 +1232,24 @@
         (-> v1-0 id)))
   :trans
     (behavior ()
-      (if (or (or (not *target*)
-                  (< (-> self active-distance) (vector-vector-distance (-> self root trans) (-> *target* control trans))))
-              (not (send-event *target* 'query 'powerup (pickup-type eco-blue))))
-        (go launcher-idle))
+      ;; og:preserve-this coop: on while any player in range carries blue eco, and launches each such player on it
+      (let ((coop-blue #f))
+        (coop-for-each-player-context
+          (if (not (or (or (not *target*)
+                           (< (-> self active-distance) (vector-vector-distance (-> self root trans) (-> *target* control trans))))
+                       (not (send-event *target* 'query 'powerup (pickup-type eco-blue)))))
+            (set! coop-blue #t)))
+        (if (not coop-blue) (go launcher-idle)))
       (spawn (-> self part) (-> self root trans))
       (sound-play "launch-idle" :id (-> self sound-id))
-      (if (and (and *target*
-                    (>= (+ 2867.2 (-> self root root-prim prim-core world-sphere w))
-                        (vector-vector-distance (-> self root trans) (-> *target* control trans))))
-               (not (time-elapsed? (-> self state-time) (seconds 0.5))))
-        (send-event *target* 'launch (-> self spring-height) (-> self camera) (-> self dest) (-> self seek-time))))
+      ;; og:preserve-this coop: each player on the pad who carries blue eco
+      (coop-for-each-player-context
+        (if (and (and *target*
+                      (>= (+ 2867.2 (-> self root root-prim prim-core world-sphere w))
+                          (vector-vector-distance (-> self root trans) (-> *target* control trans))))
+                 (not (time-elapsed? (-> self state-time) (seconds 0.5)))
+                 (or (not (coop-active?)) (send-event *target* 'query 'powerup (pickup-type eco-blue))))
+          (send-event *target* 'launch (-> self spring-height) (-> self camera) (-> self dest) (-> self seek-time)))))
   :code
     (behavior ()
       (sound-play "launch-start")

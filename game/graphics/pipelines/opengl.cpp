@@ -445,6 +445,12 @@ GLDisplay::~GLDisplay() {
   ImGuiIO& io = ImGui::GetIO();
   io.IniFilename = nullptr;
   io.LogFilename = nullptr;
+  // Jak 1 local co-op: free the renderer while its GL context and the GL library are still
+  // loaded. Freed after SDL_Quit (as before), its destructors (glDeleteVertexArrays, ...) called
+  // into the unloaded driver and every clean quit ended in a segfault.
+  if (m_main) {
+    gl_exit();
+  }
   ImGui_ImplOpenGL3_Shutdown();
   ImGui_ImplSDL3_Shutdown();
   ImGui::DestroyContext();
@@ -460,9 +466,6 @@ GLDisplay::~GLDisplay() {
   }
   // now quit SDL
   SDL_Quit();
-  if (m_main) {
-    gl_exit();
-  }
 }
 
 void render_game_frame(int game_width,

@@ -153,10 +153,8 @@
   :bounds (static-spherem 0 2.25 0 6))
 
 (defun dark-plant-check-target ((arg0 dark-plant))
-  (the-as symbol
-          (and *target*
-               (and (< (vector-vector-distance (-> arg0 root trans) (target-pos 0)) 16384.0)
-                    (send-event *target* 'query 'powerup (pickup-type eco-green))))))
+  ;; og:preserve-this coop: either player's green eco, not only the nearest player's
+  (the-as symbol (coop-powerup-player-near (-> arg0 root trans) 16384.0 (pickup-type eco-green))))
 
 (defun dark-plant-randomize ((arg0 dark-plant))
   (quaternion-axis-angle! (-> arg0 root quat) 0.0 1.0 0.0 (rand-vu-float-range 0.0 65536.0))
@@ -734,6 +732,16 @@
   (go gorge-finish-idle)
   (none))
 
+;; og:preserve-this coop: the race hides and shows the cell and orb counters of both players (each has
+;; their own *hud-parts*). The gorge's code runs for the nearer player, who can change during the race:
+;; the counters of the player who was nearer at the start stayed disabled after it.
+(defun gorge-hud-event ((msg symbol))
+  (dotimes (i (if (coop-active?) 2 1))
+    (with-coop-player i
+      (send-event (ppointer->process (-> *hud-parts* fuel-cell)) msg)
+      (send-event (ppointer->process (-> *hud-parts* money)) msg)))
+  (none))
+
 (defun race-time->string ((arg0 race-time))
   (cond
     ((zero? (-> arg0 digit 0))
@@ -826,8 +834,7 @@
       (until (time-elapsed? (-> self state-time) (seconds 3))
         (seekl! (-> self timer-pos-offset) 100 (the int (* 3.0 (-> *display* time-adjust-ratio))))
         (when (= (-> self timer-pos-offset) 100)
-          (send-event (ppointer->process (-> *hud-parts* fuel-cell)) 'enable)
-          (send-event (ppointer->process (-> *hud-parts* money)) 'enable))
+          (gorge-hud-event 'enable)) ;; og:preserve-this coop
         (gorge-start-draw-time #t #f)
         (suspend)
         (if (gorge-in-front self) (go gorge-start-ready)))
@@ -843,8 +850,7 @@
       (until (time-elapsed? (-> self state-time) (seconds 3))
         (seekl! (-> self timer-pos-offset) 100 (the int (* 5.0 (-> *display* time-adjust-ratio))))
         (when (= (-> self timer-pos-offset) 100)
-          (send-event (ppointer->process (-> *hud-parts* fuel-cell)) 'enable)
-          (send-event (ppointer->process (-> *hud-parts* money)) 'enable))
+          (gorge-hud-event 'enable)) ;; og:preserve-this coop
         (when (< (mod (-> *display* real-frame-counter) 90) 60)
           (let ((gp-0 (new 'stack 'font-context *font-default-matrix* 156 80 0.0 (font-color red) (font-flags shadow kerning))))
             (set-width! gp-0 200)
@@ -853,8 +859,7 @@
             (print-game-text (lookup-text! *common-text* (text-id race-aborted) #f) gp-0 #f 128 22)))
         (suspend)
         (if (gorge-in-front self) (go gorge-start-ready)))
-      (send-event (ppointer->process (-> *hud-parts* fuel-cell)) 'enable)
-      (send-event (ppointer->process (-> *hud-parts* money)) 'enable)
+      (gorge-hud-event 'enable) ;; og:preserve-this coop
       (go gorge-start-idle)))
 
 (defstate gorge-start-racing (gorge-start)
@@ -866,10 +871,8 @@
   :enter
     (behavior ()
       (send-event (handle->process (-> self start-banner)) 'break)
-      (send-event (ppointer->process (-> *hud-parts* fuel-cell)) 'disable)
-      (send-event (ppointer->process (-> *hud-parts* fuel-cell)) 'hide)
-      (send-event (ppointer->process (-> *hud-parts* money)) 'disable)
-      (send-event (ppointer->process (-> *hud-parts* money)) 'hide)
+      (gorge-hud-event 'disable) ;; og:preserve-this coop
+      (gorge-hud-event 'hide) ;; og:preserve-this coop
       (race-time-read (-> self record-time) (-> self tasks) (seconds 45))
       (set! (-> self end-banner)
             (ppointer->handle (process-spawn rolling-start (new 'static 'vector :x -86016.0 :y 112640.0 :z -6309888.0) 16384.0 :to self)))
@@ -936,8 +939,7 @@
         (suspend)
         (seekl! (-> self timer-pos-offset) 100 (the int (* 5.0 (-> *display* time-adjust-ratio))))
         (when (= (-> self timer-pos-offset) 100)
-          (send-event (ppointer->process (-> *hud-parts* fuel-cell)) 'enable)
-          (send-event (ppointer->process (-> *hud-parts* money)) 'enable))
+          (gorge-hud-event 'enable)) ;; og:preserve-this coop
         (gorge-start-draw-time #f #f)
         (cond
           ((gorge-any-behind self) (go gorge-start-racing)) ;; og:preserve-this coop: the first player to leave starts it
@@ -963,8 +965,7 @@
         (suspend)
         (seekl! (-> self timer-pos-offset) 100 (the int (* 5.0 (-> *display* time-adjust-ratio))))
         (when (= (-> self timer-pos-offset) 100)
-          (send-event (ppointer->process (-> *hud-parts* fuel-cell)) 'enable)
-          (send-event (ppointer->process (-> *hud-parts* money)) 'enable))
+          (gorge-hud-event 'enable)) ;; og:preserve-this coop
         (if (gorge-in-front self) (go gorge-start-ready)))))
 
 (defmethod init-from-entity! ((this gorge-start) (arg0 entity-actor))

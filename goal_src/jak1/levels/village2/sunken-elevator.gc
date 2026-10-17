@@ -31,6 +31,8 @@
   :enter
     (behavior ()
       (let ((t9-0 (-> (method-of-type plat-button plat-button-pressed) enter))) (if t9-0 (t9-0)))
+      ;; og:preserve-this coop: the other player rides along (no button calls the elevator back)
+      (coop-put-onto-platform self *target*)
       (case (-> self path-pos)
         ((0.0)
          (load-state-want-display-level 'sunken 'display)

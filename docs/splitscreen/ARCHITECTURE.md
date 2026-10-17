@@ -175,8 +175,13 @@ cross them (#69):
 - every crossing command goes through `coop-boundary-command-ok?`. A load `(load a b)` is the crossing
   player's own pair of levels (`*coop-wants*`); the game's wants become the union of both players'
   pairs, the crossing player's first (`coop-want-levels`, the `want-levels` hook; at most four names,
-  so nobody's level goes away for the other player's loads). A script's load (boats, warp gates,
-  cutscenes take both players along) sets both pairs. A player who got into a level without crossing
+  so nobody's level goes away for the other player's loads). A script's load sets both pairs, except
+  a cutscene's (its commands run while the load state is backed up): that one is the pair of the
+  player the scene runs for, and the other player, held where they are, keeps theirs (#50: the
+  gambler's introduction loads Precursor Basin, and Fire Canyon went away under player 2 waiting at
+  its end, who fell once the scene let go). The fisherman's boat ride is such a scene: the rider's
+  pair changes, and at the ride's end the boat puts the other player next to the rider, whose levels
+  then become theirs too (`coop-wants-update`). A player who got into a level without crossing
   a boundary (respawned elsewhere, teleported) gets the levels whose boxes hold them as their pair
   (`coop-wants-update`, once per frame). A pair the player's own crossing set stays while it holds
   one of those levels (the boundary named the levels needed there; a teleport, seen by
@@ -238,7 +243,13 @@ the same behaviour as the existing PC "force actors" option, without changing th
 
 - `target-death`: if the other player is in play, skip the world freeze, the streamed death movie and
   `initialize! 'dead`; go to `target-coop-respawn` (hidden, no collision, waits `respawn-delay`, then
-  respawns at the other player's last safe ground with full health). If both are down, the original
+  respawns at the other player's last safe ground with full health). The hidden body stays where it
+  died (`target-no-move-post`: with gravity it fell through the ground and its camera followed it,
+  #164). On the move `coop-respawn-place-camera` puts the player's camera combiner where the other
+  player's camera is relative to them (at a checkpoint: its camera; after a vehicle death: the old
+  offset), then the camera starts over (`cam-fixed`, `cam-string`, `teleport`, as a checkpoint
+  continue does). The respawn gives the game's invulnerability after a hit (`hit-invulnerable-timeout`,
+  3 s). If both are down, the original
   single checkpoint reload runs once. If co-op is stopped while a player waits to respawn, that
   player finishes the original death (checkpoint reload).
 - A death on a zoomer or flut flut is noted (`coop-racer-note-death`) so the respawn puts the player
@@ -298,6 +309,25 @@ the same behaviour as the existing PC "force actors" option, without changing th
   the chamber to the player at the button and puts the other player next to them; while the chamber
   holds its rider in place during the ride, the other one is held 1.5 m beside
   (`coop-carry-other-player`). Its door at the top stays open while either player is near.
+- The elevator between Rock Village and Lost Precursor City (`sunken-elevator`): no button calls it
+  back, so a player left behind at either end had no way to follow. When it starts, the other player
+  is put onto it (`coop-put-onto-platform`), in both directions (#52).
+- Lost Precursor City's platform puzzle (`qbert-plat-master`) resets when the player falls into the
+  water or walks out of its bounds. It watched only the nearest player, so the partner waiting at the
+  entrance (out of bounds) reset it whenever the hopping player moved farther from its middle. Each
+  player within 40 m of it is now watched with their own two flags (player 2's in
+  `*coop-qbert-p2-flags*`, `coop-for-each-player-context`) (#52).
+- The slide tubes (`slide-control`, `target-tube.gc`) put only the nearest player into tube mode, and
+  one rider at a time: a player going in while the other stood nearer, or while the other rode, stood
+  in the tube without sliding. Either player goes in now (`slide-control-coop-enter`, measured from the
+  tube's start), two can ride at once, and each rider's place along the path (`pos`, where the tube's
+  search for the rider's point starts) is their own (`*coop-tube-pos*`); the tube stays ridden while
+  either player is in it (#52).
+- A hazard that rises over the last checkpoint (the helix's dark eco, `helix-water`) reports its
+  surface every frame while it rises (`coop-flood-at`). A player who dies meanwhile comes back next to
+  the other player, not at a checkpoint below it (`coop-checkpoint-flooded?`): in single player the
+  death resets the helix, in co-op the other player climbs on and the dark eco stays, so the
+  checkpoint at the bottom killed the respawned player again and again (#52).
 - A lightning mole's dive scene freezes the nearest player and wakes `*target*` at its end; the mole
   moves into the hole meanwhile, so the other player can become the nearer one. The dive pins the
   mole to the frozen player (`lightning-mole-dive`), so the end wakes the same player.
@@ -312,6 +342,23 @@ the same behaviour as the existing PC "force actors" option, without changing th
   temple door (`maindoor`) and precursor bridge (`precurbridge`, `jungle-obs.gc`) check their blue eco
   the same way: the door opens for any player within 15 m carrying it, the bridge rises for any player
   on its activation spot carrying it.
+- Precursor Basin's dark eco plants (`dark-plant`, `rolling-obs.gc`) die for any player within 4 m
+  carrying green eco from the vent (`coop-powerup-player-near`): before, a partner without eco
+  standing nearer kept the plant alive under the rider who had it (#51).
+- Precursor Basin's gorge race hides and disables the cell and orb counters while it runs and turns
+  them back on afterwards. Each player has their own counters (`*hud-parts*`) and the race's code
+  runs for the nearer player, who can change during the race, so it sends these events to both
+  players' counters (`gorge-hud-event`): before, the player nearer to the start line when the race
+  began kept disabled counters after it (#51).
+- Blue eco launchers (`launcher`, `generic-obs.gc`) turn on while any player within their active distance
+  carries blue eco, checked per player (`coop-for-each-player-context`), and launch each player on the pad
+  who carries it; a partner without eco on an active pad isn't launched. Before, a partner without eco
+  standing on the pad nearer its middle kept it off for the player with eco (#56: Spider Cave's tunnel exit).
+- Spider Cave's dark crystals (`dark-crystal.gc`): the blast hurts every player within its radius (7 m, no
+  wall between) and shakes every player's camera; before, only the nearest player (#56).
+- Snowy Mountain's snowballs (`snow-ball-roller`, `snow-ball.gc`) wait 0.5 s after a hit before they hit again, now per
+  player (player 2's in the roller's unused `state-time`): before, a snowball rolling into both players hit the first one
+  and only pushed the other aside (#57).
 - The Citadel's blue eco chain platforms (`citb-chain-plat`, `citb-plat.gc`) rise and stay up while
   any player within their 70 m carries blue eco (`coop-powerup-player-near`): before, a partner
   without eco standing nearer, or riding one, let it sink (#59).
