@@ -1352,6 +1352,7 @@
    (buffer        uint8 2048) ;; the level's vis-buffer: player 2's vis string loads go here
    (vis-string    uint32 8) ;; current-vis-string of each vis-info
    (vis-waiting   uint32 8) ;; waiting-for-iop-to-ee flag of each vis-info
+   (vis-use       uint32 8) ;; the "use this vis" flag (bit 31) of each vis-info: the level's own or the adjacent one's (#58)
    (bsp           bsp-header) ;; the level this state belongs to
    (name          symbol)
    (leaf          uint16)
@@ -1385,11 +1386,13 @@
     (let ((info (-> lev vis-info i)))
       (when info
         (let ((s (-> info current-vis-string))
-              (w (logand (-> info flags) #x40000000))) ;; waiting-for-iop-to-ee
+              (w (logand (-> info flags) #x40000000)) ;; waiting-for-iop-to-ee
+              (u (logand (-> info flags) #x80000000))) ;; use this vis
           (set! (-> info current-vis-string) (-> vv vis-string i))
-          (set! (-> info flags) (logior (logand (-> info flags) (lognot #x40000000)) (-> vv vis-waiting i)))
+          (set! (-> info flags) (logior (logand (-> info flags) (lognot #xc0000000)) (-> vv vis-waiting i) (-> vv vis-use i)))
           (set! (-> vv vis-string i) s)
-          (set! (-> vv vis-waiting i) w)))))
+          (set! (-> vv vis-waiting i) w)
+          (set! (-> vv vis-use i) u)))))
   (let ((leaf (-> lev bsp current-leaf-idx))
         (all (-> lev all-visible?))
         (inside (-> lev inside-boxes?)))
@@ -1399,6 +1402,32 @@
     (set! (-> vv leaf) leaf)
     (set! (-> vv all-visible?) all)
     (set! (-> vv inside-boxes?) inside))
+  (none))
+
+(defun coop-view-vis-choose ()
+  "Which vis each level uses in player 2's view, its own or the adjacent level's, chosen for player 2's
+   camera the way level-group update chooses it for player 1's (the vis-info flag bit 31). Before #58
+   player 2's view used player 1's choice: with player 1 at Lava Tube's start (inside lavatube's and
+   village3's boxes) lavatube took village3's vis, and player 2 further in the tube saw no background."
+  (let ((inside-any #f))
+    (dotimes (i (-> *level* length))
+      (if (and (= (-> (level-slot i) status) 'active) (-> *coop-view-vis* slot i inside-boxes?)) (set! inside-any #t)))
+    ;; outside every level's boxes the choice is kept, as level-group update keeps it
+    (when inside-any
+      (dotimes (i (-> *level* length))
+        (let ((lev (level-slot i))
+              (vv (-> *coop-view-vis* slot i))
+              (other-inside #f))
+          (when (= (-> lev status) 'active)
+            (dotimes (j (-> *level* length))
+              (if (and (!= j i) (= (-> (level-slot j) status) 'active) (-> *coop-view-vis* slot j inside-boxes?)) (set! other-inside #t)))
+            (let ((use (cond
+                         ((= (-> lev display?) 'display-self) (-> lev vis-self-index))
+                         ((and (-> vv inside-boxes?) (not other-inside)) (-> lev vis-self-index))
+                         (other-inside (-> lev vis-adj-index))
+                         (else -1))))
+              (dotimes (k 8)
+                (set! (-> vv vis-use k) (if (and (= k use) (-> lev vis-info k)) #x80000000 0)))))))))
   (none))
 
 (defun coop-view-vis-enter ()
@@ -1417,10 +1446,16 @@
           (quad-copy! (the pointer (-> vv vis-bits)) (-> lev bsp all-visible-list) (/ (+ (-> lev bsp visible-list-length) 15) 16))
           (dotimes (j 8)
             (set! (-> vv vis-string j) (the uint -1))
-            (set! (-> vv vis-waiting j) 0))
+            (set! (-> vv vis-waiting j) 0)
+            (set! (-> vv vis-use j) 0))
           (set! (-> vv leaf) 0)
           (set! (-> vv all-visible?) #t))
-        (set! (-> vv inside-boxes?) (point-in-boxes? lev (-> *math-camera* trans)))
+        (set! (-> vv inside-boxes?) (point-in-boxes? lev (-> *math-camera* trans))))))
+  (coop-view-vis-choose)
+  (dotimes (i (-> *level* length))
+    (let ((lev (level-slot i))
+          (vv (-> *coop-view-vis* slot i)))
+      (when (= (-> lev status) 'active)
         (coop-view-vis-trade lev vv)
         (set! (-> vv in?) #t))))
   (update-visible *math-camera*)
