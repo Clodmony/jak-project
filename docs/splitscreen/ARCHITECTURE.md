@@ -356,6 +356,9 @@ the same behaviour as the existing PC "force actors" option, without changing th
   standing on the pad nearer its middle kept it off for the player with eco (#56: Spider Cave's tunnel exit).
 - Spider Cave's dark crystals (`dark-crystal.gc`): the blast hurts every player within its radius (7 m, no
   wall between) and shakes every player's camera; before, only the nearest player (#56).
+- Snowy Mountain's snowballs (`snow-ball-roller`, `snow-ball.gc`) wait 0.5 s after a hit before they hit again, now per
+  player (player 2's in the roller's unused `state-time`): before, a snowball rolling into both players hit the first one
+  and only pushed the other aside (#57).
 - The Citadel's blue eco chain platforms (`citb-chain-plat`, `citb-plat.gc`) rise and stay up while
   any player within their 70 m carries blue eco (`coop-powerup-player-near`): before, a partner
   without eco standing nearer, or riding one, let it sink (#59).
